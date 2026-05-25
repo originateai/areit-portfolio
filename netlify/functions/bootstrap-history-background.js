@@ -1,4 +1,4 @@
-// netlify/functions/bootstrap-history.js
+// netlify/functions/bootstrap-history-background.js
 // ONE-TIME function — loads 2 years of historical price data via EODHD
 // Trigger: https://areit.netlify.app/.netlify/functions/bootstrap-history
 // Optional params: ?universe=REIT or ?ticker=BHP
