@@ -80,8 +80,8 @@ td.r{text-align:right;font-family:'DM Mono',monospace;font-size:11px}
     <a data-page="reit-manager">⬡ REIT Manager</a>
     <a data-page="universe">◈ Stock Universe</a>
     <div class="nav-sec">Operations</div>
-    <a data-page="ig-connect">⚡ IG Markets</a>
-    <a data-page="bootstrap">⟳ Bootstrap History</a>
+    
+    <a data-page="bootstrap">⟳ ⟳ Bootstrap History (EODHD)</a>
     <a data-page="run-scan">☀ Run Morning Scan</a>
     <div class="nav-sec">Settings</div>
     <a data-page="conviction">$ Conviction Sizing</a>
@@ -185,10 +185,6 @@ td.r{text-align:right;font-family:'DM Mono',monospace;font-size:11px}
       <tbody id="universe-tbody"><tr><td colspan="8" style="padding:16px;text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
     </table>
   </div>
-
-  <!-- IG MARKETS -->
-  <div id="pg-ig-connect" class="page">
-    <div class="ph"><h1>IG Markets</h1><p>API connection · Live prices · Order execution · Account sync</p></div>
 
     <div class="ig-status" id="ig-connection-status">
       <div class="dot dot-amber" id="ig-dot"></div>
@@ -500,65 +496,7 @@ async function toggleStockActive(ticker, currently) {
   loadUniverse();
 }
 
-// ── IG MARKETS ────────────────────────────────────────────────────────────────
-async function checkIGStatus() {
-  const dot  = document.getElementById('ig-dot');
-  const text = document.getElementById('ig-status-text');
-  const mode = document.getElementById('ig-mode-label');
-  if (!dot) return;
 
-  // Just check if env vars are set via env function
-  try {
-    const res = await fetch('/.netlify/functions/env');
-    const env = await res.json();
-    const hasIG = env.IG_API_KEY || false;
-    // We can't expose IG_API_KEY through env function (security) 
-    // so just show configured status
-    dot.className = 'dot dot-amber';
-    text.textContent = 'IG API configured — click Test Connection to verify';
-    if (mode) mode.textContent = 'Demo (IG_DEMO=true until verified)';
-  } catch(e) {
-    dot.className = 'dot dot-red';
-    text.textContent = 'Could not check status';
-  }
-}
-
-async function testIG() {
-  showStatus('ig-test-result', 'Testing IG connection...', 'info');
-  try {
-    const res  = await fetch('/.netlify/functions/ig-sync');
-    const data = await res.json();
-    if (data.error) {
-      showStatus('ig-test-result', `✗ Connection failed: ${data.error}`, 'err');
-      document.getElementById('ig-dot').className = 'dot dot-red';
-      document.getElementById('ig-status-text').textContent = 'Connection failed';
-    } else {
-      showStatus('ig-test-result',
-        `✓ Connected — ${data.accounts} account(s) · ${data.ig_positions} open positions · ${data.prices_updated} prices updated`, 'ok');
-      document.getElementById('ig-dot').className = 'dot dot-green';
-      document.getElementById('ig-status-text').textContent = 'Connected to IG Markets';
-      document.getElementById('ig-account-info').innerHTML = `
-        <strong>Accounts:</strong> ${data.accounts}<br>
-        <strong>Open positions:</strong> ${data.ig_positions}<br>
-        <strong>Prices updated:</strong> ${data.prices_updated}
-      `;
-    }
-  } catch(e) {
-    showStatus('ig-test-result', `Error: ${e.message}`, 'err');
-  }
-}
-
-async function syncIG() {
-  showStatus('ig-sync-result', 'Syncing from IG...', 'info');
-  try {
-    const res  = await fetch('/.netlify/functions/ig-sync');
-    const data = await res.json();
-    if (data.error) { showStatus('ig-sync-result', `Error: ${data.error}`, 'err'); return; }
-    showStatus('ig-sync-result', `✓ Sync complete — ${data.prices_updated} prices updated, ${data.ig_positions} positions synced`, 'ok');
-  } catch(e) {
-    showStatus('ig-sync-result', `Error: ${e.message}`, 'err');
-  }
-}
 
 // ── BOOTSTRAP ─────────────────────────────────────────────────────────────────
 async function runBootstrap() {
