@@ -1,98 +1,127 @@
 // netlify/functions/bootstrap-history-background.js
-// ONE-TIME function — loads 2 years of historical price data via EODHD
-// Trigger: https://areit.netlify.app/.netlify/functions/bootstrap-history
-// Optional params: ?universe=REIT or ?ticker=BHP
-// Takes 5-10 minutes for full universe (much faster than Yahoo Finance)
+// Netlify Background Function — runs for up to 15 minutes
+// Loads 2 years of EODHD historical price data for all active stocks
+// Trigger via POST: https://areit.netlify.app/.netlify/functions/bootstrap-history-background
 
-const { getSupabase }    = require('./_shared.js');
-const { getHistorical }  = require('./eodhd-client.js');
+const { createClient } = require('@supabase/supabase-js');
+
+const BASE = 'https://eodhd.com/api';
+const KEY  = () => process.env.EODHD_API_KEY;
+
+function getDB() {
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+}
+
+async function getHistorical(ticker, from, to) {
+  try {
+    const epic = `${ticker}.AU`;
+    const url  = new URL(`${BASE}/eod/${epic}`);
+    url.searchParams.set('api_token', KEY());
+    url.searchParams.set('fmt',    'json');
+    url.searchParams.set('from',   from);
+    url.searchParams.set('to',     to);
+    url.searchParams.set('period', 'd');
+
+    const res  = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .filter(d => d.adjusted_close > 0 || d.close > 0)
+      .map((d, i, arr) => {
+        const close = parseFloat(d.adjusted_close || d.close);
+        const prev  = i > 0 ? parseFloat(arr[i-1].adjusted_close || arr[i-1].close) : close;
+        return {
+          ticker,
+          market_date: d.date,
+          open:        parseFloat(d.open   || close),
+          high:        parseFloat(d.high   || close),
+          low:         parseFloat(d.low    || close),
+          close,
+          volume:      parseInt(d.volume   || 0),
+          change_pct:  prev > 0 ? parseFloat(((close - prev) / prev).toFixed(6)) : 0,
+          fetched_at:  new Date().toISOString()
+        };
+      });
+  } catch(e) {
+    console.error(`EODHD history error ${ticker}:`, e.message);
+    return [];
+  }
+}
 
 exports.handler = async (event) => {
-  const db     = getSupabase();
+  const db     = getDB();
   const params = event.queryStringParameters || {};
   const filterUni = params.universe || null;
   const filterTkr = params.ticker   || null;
+  const fromDate  = params.from || new Date(Date.now() - 2*365*24*60*60*1000).toISOString().split('T')[0];
+  const toDate    = params.to   || new Date().toISOString().split('T')[0];
 
-  // Default: 2 years of history
-  const fromDate = params.from || new Date(Date.now() - 2*365*24*60*60*1000).toISOString().split('T')[0];
-  const toDate   = params.to   || new Date().toISOString().split('T')[0];
-
-  console.log(`Bootstrap (EODHD) starting — from: ${fromDate}, universe: ${filterUni||'ALL'}, ticker: ${filterTkr||'ALL'}`);
+  console.log(`Bootstrap starting — from:${fromDate} to:${toDate} universe:${filterUni||'ALL'} ticker:${filterTkr||'ALL'}`);
 
   try {
-    let query = db.from('stocks').select('ticker,universe,is_reit,name').eq('active', true);
+    // Load stock list
+    let query = db.from('stocks').select('ticker,universe,name').eq('active', true);
     if (filterUni) query = query.eq('universe', filterUni);
     if (filterTkr) query = query.eq('ticker', filterTkr);
+    const { data: stocks, error: stockErr } = await query;
 
-    const { data: stocks } = await query;
-    if (!stocks?.length) return { statusCode: 200, body: 'No stocks found' };
+    if (stockErr) throw new Error(`DB error: ${stockErr.message}`);
+    if (!stocks?.length) return { statusCode: 200, body: JSON.stringify({ message: 'No stocks found' }) };
 
-    console.log(`Loading history for ${stocks.length} stocks`);
+    const toProcess = stocks.filter(s => s.ticker !== 'GSBG37');
+    console.log(`Processing ${toProcess.length} stocks`);
 
     let loaded = 0, failed = 0, skipped = 0;
 
-    for (const stock of stocks) {
-      if (stock.ticker === 'GSBG37') { skipped++; continue; }
-
+    for (const stock of toProcess) {
       try {
-        const prices = await getHistorical(stock.ticker, fromDate, toDate);
+        const rows = await getHistorical(stock.ticker, fromDate, toDate);
 
-        if (!prices?.length) {
-          console.log(`No history for ${stock.ticker}`);
+        if (!rows.length) {
+          console.log(`No data: ${stock.ticker}`);
           failed++;
           continue;
         }
 
-        // Calculate change_pct
-        const rows = prices.map((p, i) => ({
-          ticker:      stock.ticker,
-          market_date: p.date,
-          open:        p.open,
-          high:        p.high,
-          low:         p.low,
-          close:       p.close,
-          volume:      p.volume,
-          change_pct:  i > 0 && prices[i-1].close > 0
-            ? parseFloat(((p.close - prices[i-1].close) / prices[i-1].close).toFixed(6))
-            : 0,
-          fetched_at: new Date().toISOString()
-        }));
-
-        // Upsert in batches of 100
+        // Upsert in batches of 100 rows
         for (let i = 0; i < rows.length; i += 100) {
-          await db.from('prices').upsert(
-            rows.slice(i, i + 100),
-            { onConflict: 'ticker,market_date' }
-          );
+          const { error } = await db
+            .from('prices')
+            .upsert(rows.slice(i, i + 100), { onConflict: 'ticker,market_date' });
+          if (error) console.error(`Upsert error ${stock.ticker}:`, error.message);
         }
 
         loaded++;
-        if (loaded % 20 === 0) console.log(`Progress: ${loaded}/${stocks.length}`);
+        if (loaded % 10 === 0) {
+          console.log(`Progress: ${loaded}/${toProcess.length} — last: ${stock.ticker} (${rows.length} days)`);
+        }
 
       } catch(e) {
-        console.error(`Error loading ${stock.ticker}:`, e.message);
+        console.error(`Failed ${stock.ticker}:`, e.message);
         failed++;
       }
 
-      // Small delay between stocks
+      // 250ms between each stock — stays within EODHD rate limits
       await new Promise(r => setTimeout(r, 250));
     }
 
     const result = {
-      total:   stocks.length,
+      total:    toProcess.length,
       loaded,
       failed,
       skipped,
-      from:    fromDate,
-      to:      toDate,
-      message: `Bootstrap complete — ${loaded} stocks loaded with ${fromDate} to ${toDate} history.`
+      from:     fromDate,
+      to:       toDate,
+      message:  `Bootstrap complete — ${loaded}/${toProcess.length} stocks loaded with history from ${fromDate} to ${toDate}`
     };
 
     console.log(result.message);
     return { statusCode: 200, body: JSON.stringify(result) };
 
   } catch(err) {
-    console.error('Bootstrap failed:', err);
+    console.error('Bootstrap failed:', err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
