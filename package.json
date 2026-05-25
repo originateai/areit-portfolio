@@ -1,8 +1,7 @@
 {
   "name": "areit-portfolio",
   "version": "1.0.0",
-  "description": "ASX REIT Income Portfolio + Morning Scan Algo",
-  "type": "module",
+  "description": "ASX Trading Platform",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "resend": "^3.2.0"
