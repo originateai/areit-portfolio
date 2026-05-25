@@ -1,10 +1,6 @@
-// netlify/functions/_shared.js
-// Shared utilities used by all functions
-
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
-// ── CLIENTS ───────────────────────────────────────────────────────────────────
 export function getSupabase() {
   return createClient(
     process.env.SUPABASE_URL,
@@ -16,7 +12,6 @@ export function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
 
-// ── CONSTANTS ─────────────────────────────────────────────────────────────────
 export const ALERT_EMAIL  = process.env.ALERT_EMAIL  || 'James.storey@outlook.com.au';
 export const FROM_EMAIL   = process.env.FROM_EMAIL   || 'onboarding@resend.dev';
 export const BOND_YIELD   = 0.0507;
@@ -32,7 +27,6 @@ export const REIT_HOLDINGS = [
   { ticker: 'GSBG37', name: 'Govt Bond 2037',        nta: 100.0, dps: 4.75,  weight: 0.10 },
 ];
 
-// ── YAHOO FINANCE FETCH ───────────────────────────────────────────────────────
 export async function fetchYahoo(ticker, range = '5d') {
   try {
     const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}`;
@@ -42,15 +36,12 @@ export async function fetchYahoo(ticker, range = '5d') {
     const json = await res.json();
     const result = json?.chart?.result?.[0];
     if (!result) return null;
-
     const closes  = result.indicators.quote[0].close.filter(Boolean);
     const volumes = result.indicators.quote[0].volume || [];
     if (closes.length < 2) return null;
-
     const price  = closes[closes.length - 1];
     const prev   = closes[closes.length - 2];
     const volume = volumes[volumes.length - 1] || 0;
-
     return {
       ticker,
       price:     parseFloat(price.toFixed(4)),
@@ -66,7 +57,6 @@ export async function fetchYahoo(ticker, range = '5d') {
   }
 }
 
-// ── FRED API FETCH ────────────────────────────────────────────────────────────
 export async function fetchFRED(seriesId) {
   try {
     const key = process.env.FRED_API_KEY;
@@ -82,7 +72,6 @@ export async function fetchFRED(seriesId) {
   }
 }
 
-// ── EMAIL SEND ────────────────────────────────────────────────────────────────
 export async function sendEmail(subject, html) {
   const resend = getResend();
   const { data, error } = await resend.emails.send({
@@ -99,7 +88,6 @@ export async function sendEmail(subject, html) {
   return data;
 }
 
-// ── EMAIL STYLES ──────────────────────────────────────────────────────────────
 export const emailStyles = `
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f2ec; margin: 0; padding: 20px; }
   .wrap { max-width: 680px; margin: 0 auto; }
@@ -132,7 +120,6 @@ export const emailStyles = `
   .signal-sub { font-size: 11px; color: #6b6660; margin: 0; }
 `;
 
-// ── FORMAT HELPERS ────────────────────────────────────────────────────────────
 export function pct(val, decimals = 2) {
   if (val === null || val === undefined) return '--';
   return (val > 0 ? '+' : '') + (val * 100).toFixed(decimals) + '%';
