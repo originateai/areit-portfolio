@@ -37,6 +37,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);m
 .kv.teal{color:var(--teal)}.kv.gold{color:var(--gold)}.kv.red{color:var(--red)}.kv.green{color:var(--green)}
 .kn{font-size:10px;color:var(--muted);margin-top:2px}
 .kc.dk .kn{color:rgba(255,255,255,0.28)}
+#signal-drawer.open{transform:translateX(0) !important}
+#drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:199;opacity:0;pointer-events:none;transition:opacity 0.25s}
+#drawer-overlay.open{opacity:1;pointer-events:all}
+tbody tr.clickable{cursor:pointer}
+tbody tr.clickable:hover{background:#e8f2fb !important;border-left:3px solid var(--teal)}
+tbody tr.clickable:hover .tkr{background:var(--teal);color:white}
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead tr{border-bottom:2px solid var(--ink)}
 th{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--muted);padding:6px 7px;text-align:left;font-weight:400;white-space:nowrap}
@@ -1181,12 +1187,7 @@ document.addEventListener("DOMContentLoaded", function() { wireNav(); init(); })
   </div>
   <div id="drawer-content"></div>
 </div>
-<style>
-  #signal-drawer.open { transform: translateX(0); }
-  #signal-drawer.open ~ #drawer-overlay,
-  #drawer-overlay.open { opacity: 1; pointer-events: all; }
-  tbody tr.clickable { cursor: pointer; }
-</style>
+
 
 </body>
 </html>
