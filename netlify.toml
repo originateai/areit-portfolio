@@ -4,10 +4,13 @@
 
 [functions]
   node_bundler = "esbuild"
-  included_files = ["netlify/functions/**"]
 
 [context.production]
   environment = { NODE_VERSION = "18" }
+
+# Increase timeout for all functions to 26 minutes (Netlify Pro)
+[functions."*"]
+  timeout = 1560
 
 # Morning briefing — 8:00am AEST = 10:00pm UTC previous day
 [[scheduled_functions]]
