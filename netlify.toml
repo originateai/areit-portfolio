@@ -1,0 +1,25 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["netlify/functions/**"]
+
+[context.production]
+  environment = { NODE_VERSION = "18" }
+
+# Morning briefing — 8:00am AEST = 10:00pm UTC previous day
+[[scheduled_functions]]
+  name = "morning-scan"
+  cron = "0 22 * * 0-4"
+
+# Fetch closing prices — 4:00pm AEST = 6:00am UTC
+[[scheduled_functions]]
+  name = "fetch-prices"
+  cron = "0 6 * * 1-5"
+
+# Check yield triggers — 4:05pm AEST = 6:05am UTC
+[[scheduled_functions]]
+  name = "yield-triggers"
+  cron = "5 6 * * 1-5"
