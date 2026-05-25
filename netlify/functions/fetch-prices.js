@@ -1,3 +1,4 @@
+const { schedule } = require('@netlify/functions');
 // netlify/functions/fetch-prices.js
 // Scheduled: 4:00pm AEST (6:00am UTC) Mon-Fri
 // Fetches EOD prices for ALL active stocks via EODHD bulk API
@@ -7,7 +8,7 @@
 const { getSupabase, sendEmail }  = require('./_shared.js');
 const { getBulkPrices }           = require('./eodhd-client.js');
 
-exports.handler = async () => {
+const handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   console.log(`Fetch prices (EODHD) starting: ${today}`);
@@ -195,3 +196,5 @@ exports.handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
+
+exports.handler = schedule('0 6 * * 1-5', handler);

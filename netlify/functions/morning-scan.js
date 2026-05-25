@@ -1,3 +1,4 @@
+const { schedule } = require('@netlify/functions');
 // netlify/functions/morning-scan.js
 // Scheduled: 7:00am AEST (9:00pm UTC prev day) Mon-Fri
 // 2-step architecture:
@@ -164,7 +165,10 @@ function buildEmail(data) {
   const sigEmoji  = signal==='RISK_ON'?'🟢':signal==='RISK_OFF'?'🔴':'⚪';
   const reitTrig  = reitResults.filter(r=>r.yield_trigger_fired);
   const exc       = equityTrades.filter(t=>t.total_score>=6);
-  const bpsMove   = Math.round((market.us10yrChange||0)*10000);
+  // Cap at ±20bps — anything larger is a data error
+  // US 10yr change is a proxy for AUS 10yr direction
+  const rawBps    = Math.round((market.us10yrChange||0)*10000);
+  const bpsMove   = Math.max(-20, Math.min(20, rawBps));
   const reitMove  = (-bpsMove*0.0015*100).toFixed(1);
 
   const subject = `${sigEmoji} ASX 7am — ${signal.replace('_',' ')} ${score>0?'+':''}${score}`
@@ -394,7 +398,7 @@ function buildEmail(data) {
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
-exports.handler = async () => {
+const handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   console.log(`Morning scan starting: ${today}`);
@@ -405,18 +409,24 @@ exports.handler = async () => {
     // 1. US + Asian market data (Yahoo Finance — free, reliable for indices)
     const [sp500, nasdaq, dow, vixData, audData, us10yrData,
            nikkeiData, shanghaiData, futuresData,
-           ironOreData, goldData, oilData, copperData] = await Promise.all([
+           ironOreData, goldData, oilData, copperData, gsbgData] = await Promise.all([
       fetchYahoo('^GSPC', '5d'), fetchYahoo('^IXIC', '5d'),
       fetchYahoo('^DJI',  '5d'), fetchYahoo('^VIX',  '5d'),
       fetchYahoo('AUDUSD=X', '5d'), fetchYahoo('^TNX', '5d'),
       fetchYahoo('^N225',    '5d'),
       fetchYahoo('000001.SS','5d'),
       fetchYahoo('^AXJO',   '5d'),
-      fetchYahoo('GC=F', '5d'),   // Gold (iron ore no Yahoo ticker)
-      fetchYahoo('GC=F', '5d'),
-      fetchYahoo('CL=F', '5d'),
-      fetchYahoo('HG=F', '5d'),
+      fetchYahoo('GC=F',  '5d'),  // Gold futures
+      fetchYahoo('GC=F',  '5d'),  // Gold (duplicate — iron ore has no free ticker)
+      fetchYahoo('CL=F',  '5d'),  // WTI oil
+      fetchYahoo('HG=F',  '5d'),  // Copper
+      fetchYahoo('GSBG37.AX', '5d'), // AUS govt bond — proxy for AUS 10yr
     ]);
+    
+    // Use GSBG37 price change as AUS 10yr direction proxy
+    // Bond price moves inverse to yield — price up = yield down
+    const gsbgChange = gsbgData?.change || 0;
+    const aus10yrChangeEst = -gsbgChange * 0.5; // rough inverse proxy, capped
 
     // 2. FRED bond data
     const [realYield, breakeven] = await Promise.all([
@@ -434,7 +444,7 @@ exports.handler = async () => {
       dowChange:     dow?.change    || 0,
       vix, us10yr, aus10yr,
       us10yrChange:  us10yrData?.change || 0,
-      aus10yrChange: 0,
+      aus10yrChange: Math.max(-0.002, Math.min(0.002, aus10yrChangeEst)), // capped ±20bps
       yieldCurve:    us10yr - 0.0474,
       aud, audChange: audData?.change || 0,
       realYield, breakeven,
@@ -615,3 +625,5 @@ exports.handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
+
+exports.handler = schedule('0 21 * * 0-4', handler);
