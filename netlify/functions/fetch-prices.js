@@ -1,11 +1,9 @@
 // netlify/functions/fetch-prices.js
-// Scheduled: 4:00pm AEST (6:00am UTC) Mon–Fri
-// 1. Fetches ASX closing prices for all watchlist + REIT stocks
-// 2. Saves to prices table in Supabase
-// 3. Marks all open paper trades to market
-// 4. Closes trades that hit stop or target
+// Scheduled: 4:00pm AEST (6:00am UTC) Mon-Fri
+// Fetches closing prices for all stocks
+// Marks model trades to market — stops and targets
 
-import { getSupabase, fetchYahoo } from './_shared.js';
+import { getSupabase, fetchYahoo, sendEmail } from './_shared.js';
 
 export const handler = async () => {
   const db    = getSupabase();
@@ -13,95 +11,114 @@ export const handler = async () => {
   console.log(`Fetch prices starting: ${today}`);
 
   try {
-    // Get all tickers to fetch
-    const [{ data: watchlist }, { data: holdings }] = await Promise.all([
-      db.from('watchlist').select('ticker').eq('active', true),
-      db.from('reit_holdings').select('ticker')
-    ]);
+    const { data: stocks } = await db.from('stocks').select('ticker,universe,is_reit').eq('active', true);
+    if (!stocks?.length) return { statusCode: 200, body: 'No stocks' };
 
-    const tickers = [...new Set([
-      ...(watchlist || []).map(w => w.ticker),
-      ...(holdings  || []).map(h => h.ticker).filter(t => t !== 'GSBG37')
-    ])];
-
+    const tickers = stocks.filter(s => s.ticker !== 'GSBG37').map(s => s.ticker);
     console.log(`Fetching ${tickers.length} tickers`);
 
-    // Fetch all prices (with small delay to avoid rate limiting)
     const rows = [];
     for (const ticker of tickers) {
       const data = await fetchYahoo(ticker + '.AX', '2d');
       if (data?.price) {
         rows.push({
           ticker,
-          price:       data.price,
+          market_date: today,
+          open:        data.open,
+          high:        data.high,
+          low:         data.low,
+          close:       data.price,
           volume:      data.volume,
           change_pct:  data.changePct,
-          market_date: today,
           fetched_at:  new Date().toISOString()
         });
       }
-      // Small delay between requests
       await new Promise(r => setTimeout(r, 200));
     }
 
-    // Save prices to Supabase
     if (rows.length > 0) {
-      const { error } = await db.from('prices').insert(rows);
-      if (error) console.error('Price insert error:', error.message);
+      await db.from('prices').upsert(rows, { onConflict: 'ticker,market_date' });
     }
     console.log(`Saved ${rows.length} prices`);
 
-    // Build price lookup map
+    // Price lookup
     const priceMap = {};
-    rows.forEach(r => { priceMap[r.ticker] = r.price; });
+    rows.forEach(r => { priceMap[r.ticker] = r.close; });
 
-    // Mark open paper trades to market
-    const { data: openTrades } = await db
-      .from('play_trades')
-      .select('*')
-      .eq('status', 'OPEN')
-      .eq('is_paper', true);
-
+    // Mark open model trades to market
+    const { data: openTrades } = await db.from('model_trades').select('*').eq('status', 'OPEN');
     let closed = 0, stopped = 0, targeted = 0;
+    const alerts = [];
 
     if (openTrades?.length) {
       for (const trade of openTrades) {
         const currentPrice = priceMap[trade.ticker];
         if (!currentPrice) continue;
 
-        const pnl    = (currentPrice - trade.entry_price) * trade.units;
-        const pnlPct = (currentPrice - trade.entry_price) / trade.entry_price;
+        const pnl     = (currentPrice - trade.entry_price) * trade.units;
+        const pnlPct  = (currentPrice - trade.entry_price) / trade.entry_price;
+        const entry   = new Date(trade.created_at);
+        const holdDays = Math.floor((new Date() - entry) / 86400000);
 
         let status = 'CLOSED', exitPrice = currentPrice;
 
         if (currentPrice <= trade.stop_price) {
           status = 'STOPPED'; exitPrice = trade.stop_price; stopped++;
+          alerts.push({ alert_type: 'stop_hit', ticker: trade.ticker, universe: trade.universe,
+            message: `${trade.ticker} STOP HIT — $${exitPrice.toFixed(3)} — P&L: ${pnl>=0?'+':''}$${pnl.toFixed(0)}`,
+            data: { price: exitPrice, pnl, pnlPct } });
         } else if (currentPrice >= trade.target_price) {
           status = 'TARGETED'; exitPrice = trade.target_price; targeted++;
+          alerts.push({ alert_type: 'target_hit', ticker: trade.ticker, universe: trade.universe,
+            message: `${trade.ticker} TARGET HIT 🎯 — $${exitPrice.toFixed(3)} — P&L: +$${pnl.toFixed(0)}`,
+            data: { price: exitPrice, pnl, pnlPct } });
         } else {
           closed++;
         }
 
-        await db.from('play_trades').update({
-          status,
-          exit_price: exitPrice,
-          exit_date:  today,
-          pnl:        parseFloat(pnl.toFixed(2)),
-          pnl_pct:    parseFloat(pnlPct.toFixed(6))
+        await db.from('model_trades').update({
+          status, exit_price: exitPrice, exit_date: today,
+          pnl: parseFloat(pnl.toFixed(2)), pnl_pct: parseFloat(pnlPct.toFixed(6)),
+          hold_days: holdDays
         }).eq('id', trade.id);
       }
     }
 
-    console.log(`Trades — closed: ${closed}, stopped: ${stopped}, targeted: ${targeted}`);
+    // Update real portfolio current prices
+    const { data: realHoldings } = await db.from('reit_income_holdings').select('*');
+    if (realHoldings?.length) {
+      for (const h of realHoldings) {
+        const price = priceMap[h.ticker];
+        if (!price) continue;
+        const value = h.units_held * price;
+        const upnl  = value - h.total_cost;
+        const annualIncome = h.units_held * (h.dps_fy26 || 0);
+        await db.from('reit_income_holdings').update({
+          current_price: price,
+          current_value: parseFloat(value.toFixed(2)),
+          unrealised_pnl: parseFloat(upnl.toFixed(2)),
+          annual_income: parseFloat(annualIncome.toFixed(2)),
+          yield_on_market: h.dps_fy26 ? parseFloat((h.dps_fy26 / price).toFixed(6)) : null,
+          updated_at: new Date().toISOString()
+        }).eq('ticker', h.ticker);
+      }
+    }
+
+    // Save stop/target alerts
+    if (alerts.length > 0) {
+      await db.from('alerts').insert(alerts.map(a => ({ ...a, sent: false })));
+      // Send immediate email for stops/targets
+      const alertHtml = alerts.map(a =>
+        `<p style="font-family:sans-serif;margin:8px 0"><strong>${a.ticker}</strong> — ${a.message}</p>`
+      ).join('');
+      await sendEmail(`⚡ Trade Alert — ${alerts.map(a=>a.ticker).join(', ')}`,
+        `<div style="font-family:sans-serif;padding:20px"><h2>Trade Alerts</h2>${alertHtml}<p style="color:#6b6660;font-size:11px">Log into CommSec to action any real positions.</p></div>`
+      );
+    }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({
-        prices_saved: rows.length,
-        trades_closed: closed,
-        trades_stopped: stopped,
-        trades_targeted: targeted
-      })
+      body: JSON.stringify({ prices_saved: rows.length, stopped, targeted, closed })
     };
 
   } catch (err) {
