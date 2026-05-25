@@ -1,15 +1,16 @@
 // netlify/functions/fetch-prices.js
 // Scheduled: 4:00pm AEST (6:00am UTC) Mon-Fri
-// Fetches closing price + volume for ALL active stocks
-// Saves to prices table — used by morning scan for pre-screening
-// Also marks open model trades to market
+// Fetches EOD prices for ALL active stocks via EODHD bulk API
+// Processes in batches of 50 — no rate limiting issues
+// Marks model trades to market, updates REIT holdings
 
-const { getSupabase, fetchYahoo, sendEmail } = require('./_shared.js');
+const { getSupabase, sendEmail }  = require('./_shared.js');
+const { getBulkPrices }           = require('./eodhd-client.js');
 
 exports.handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
-  console.log(`Fetch prices starting: ${today}`);
+  console.log(`Fetch prices (EODHD) starting: ${today}`);
 
   try {
     // Get all active stocks
@@ -21,49 +22,54 @@ exports.handler = async () => {
 
     if (!stocks?.length) return { statusCode: 200, body: 'No stocks' };
 
-    console.log(`Fetching prices for ${stocks.length} stocks`);
+    const tickers = stocks.map(s => s.ticker);
+    console.log(`Fetching prices for ${tickers.length} stocks via EODHD`);
 
-    const rows = [];
+    // Process in batches of 50
+    const batchSize = 50;
+    const rows      = [];
     let fetched = 0, failed = 0;
 
-    for (const stock of stocks) {
-      try {
-        const data = await fetchYahoo(stock.ticker + '.AX', '2d');
-        if (data?.price) {
+    for (let i = 0; i < tickers.length; i += batchSize) {
+      const batch     = tickers.slice(i, i + batchSize);
+      const priceMap  = await getBulkPrices(batch);
+
+      batch.forEach(ticker => {
+        const p = priceMap[ticker];
+        if (p && p.close > 0) {
           rows.push({
-            ticker:      stock.ticker,
+            ticker,
             market_date: today,
-            open:        data.open   || data.price,
-            high:        data.high   || data.price,
-            low:         data.low    || data.price,
-            close:       data.price,
-            volume:      data.volume || 0,
-            change_pct:  data.changePct || 0,
+            open:        p.open  || p.close,
+            high:        p.high  || p.close,
+            low:         p.low   || p.close,
+            close:       p.close,
+            volume:      p.volume || 0,
+            change_pct:  p.changePct || 0,
             fetched_at:  new Date().toISOString()
           });
           fetched++;
         } else {
           failed++;
         }
-      } catch (e) {
-        failed++;
+      });
+
+      // Small delay between batches
+      if (i + batchSize < tickers.length) {
+        await new Promise(r => setTimeout(r, 500));
       }
-      // Rate limiting — 200ms between requests
-      await new Promise(r => setTimeout(r, 200));
     }
 
-    // Upsert prices in batches of 100
-    const batchSize = 100;
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const batch = rows.slice(i, i + batchSize);
+    // Upsert all prices
+    for (let i = 0; i < rows.length; i += 100) {
       const { error } = await db.from('prices')
-        .upsert(batch, { onConflict: 'ticker,market_date' });
+        .upsert(rows.slice(i, i + 100), { onConflict: 'ticker,market_date' });
       if (error) console.error('Price upsert error:', error.message);
     }
 
     console.log(`Prices saved: ${fetched}, failed: ${failed}`);
 
-    // Build price lookup map
+    // Build lookup map
     const priceMap = {};
     rows.forEach(r => { priceMap[r.ticker] = r; });
 
@@ -81,27 +87,26 @@ exports.handler = async () => {
         const pd = priceMap[trade.ticker];
         if (!pd) continue;
 
-        const currentPrice = pd.close;
-        const pnl     = (currentPrice - trade.entry_price) * trade.units;
-        const pnlPct  = (currentPrice - trade.entry_price) / trade.entry_price;
-        const entry   = new Date(trade.created_at);
-        const holdDays = Math.floor((new Date() - entry) / 86400000);
+        const cur      = pd.close;
+        const pnl      = (cur - trade.entry_price) * trade.units;
+        const pnlPct   = (cur - trade.entry_price) / trade.entry_price;
+        const holdDays = Math.floor((new Date() - new Date(trade.created_at)) / 86400000);
 
-        let status = 'CLOSED', exitPrice = currentPrice;
+        let status = 'CLOSED', exitPrice = cur;
 
-        if (currentPrice <= trade.stop_price) {
+        if (cur <= trade.stop_price) {
           status = 'STOPPED'; exitPrice = trade.stop_price; stopped++;
           tradeAlerts.push({
             alert_type: 'stop_hit', ticker: trade.ticker, universe: trade.universe,
             message: `${trade.ticker} STOP HIT — $${exitPrice.toFixed(3)} — P&L: ${pnl>=0?'+':''}$${pnl.toFixed(0)}`,
-            data: { price: exitPrice, pnl, pnlPct }
+            data: { price: exitPrice, pnl, pnlPct }, sent: false
           });
-        } else if (currentPrice >= trade.target_price) {
+        } else if (cur >= trade.target_price) {
           status = 'TARGETED'; exitPrice = trade.target_price; targeted++;
           tradeAlerts.push({
             alert_type: 'target_hit', ticker: trade.ticker, universe: trade.universe,
             message: `${trade.ticker} TARGET HIT 🎯 — $${exitPrice.toFixed(3)} — P&L: +$${pnl.toFixed(0)}`,
-            data: { price: exitPrice, pnl, pnlPct }
+            data: { price: exitPrice, pnl, pnlPct }, sent: false
           });
         } else {
           closed++;
@@ -116,7 +121,7 @@ exports.handler = async () => {
       }
     }
 
-    // Update REIT income holdings current prices
+    // Update REIT income holdings
     const { data: reitHoldings } = await db
       .from('reit_income_holdings')
       .select('*')
@@ -130,62 +135,62 @@ exports.handler = async () => {
         const value = h.units_held * price;
         const upnl  = value - (h.total_cost || 0);
         await db.from('reit_income_holdings').update({
-          current_price:  price,
-          current_value:  parseFloat(value.toFixed(2)),
-          unrealised_pnl: parseFloat(upnl.toFixed(2)),
-          yield_on_market: h.dps_fy26 ? parseFloat((h.dps_fy26 / price).toFixed(6)) : null,
-          annual_income:   h.dps_fy26 ? parseFloat((h.units_held * h.dps_fy26).toFixed(2)) : null,
-          updated_at:     new Date().toISOString()
+          current_price:   price,
+          current_value:   parseFloat(value.toFixed(2)),
+          unrealised_pnl:  parseFloat(upnl.toFixed(2)),
+          yield_on_market: h.dps_fy26 ? parseFloat((h.dps_fy26/price).toFixed(6)) : null,
+          annual_income:   h.dps_fy26 ? parseFloat((h.units_held*h.dps_fy26).toFixed(2)) : null,
+          updated_at:      new Date().toISOString()
         }).eq('ticker', h.ticker);
       }
     }
 
     // Send stop/target alerts
     if (tradeAlerts.length > 0) {
-      await db.from('alerts').insert(tradeAlerts.map(a => ({ ...a, sent: false })));
-      const alertHtml = `
+      await db.from('alerts').insert(tradeAlerts);
+      const html = `
         <div style="font-family:sans-serif;max-width:600px;padding:20px">
-          <h2 style="color:#0e1117">⚡ Trade Alerts — ${today}</h2>
-          ${tradeAlerts.map(a => `
+          <h2>⚡ Trade Alerts — ${today}</h2>
+          ${tradeAlerts.map(a=>`
             <div style="padding:12px;margin:8px 0;background:${a.alert_type==='target_hit'?'#eef6ee':'#fdf8ee'};border-left:3px solid ${a.alert_type==='target_hit'?'#2d5a2d':'#7a5500'}">
               <strong>${a.ticker}</strong> — ${a.message}
             </div>`).join('')}
-          <p style="font-size:11px;color:#6b6660;margin-top:16px">Log into CommSec if you have real positions to action.</p>
+          <p style="font-size:11px;color:#6b6660">Log into CommSec to action any real positions.</p>
         </div>`;
-      await sendEmail(`⚡ Trade Alerts — ${tradeAlerts.map(a=>a.ticker).join(', ')}`, alertHtml);
+      await sendEmail(`⚡ Trade Alerts — ${tradeAlerts.map(a=>a.ticker).join(', ')}`, html);
     }
 
-    // Save daily performance snapshot
+    // Save performance snapshot
     const { data: allTrades } = await db.from('model_trades').select('pnl,status,amount');
-    const totalPnl    = (allTrades||[]).filter(t=>t.pnl!=null).reduce((s,t)=>s+parseFloat(t.pnl),0);
-    const invested    = (allTrades||[]).filter(t=>t.status==='OPEN').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const closedTrades = (allTrades||[]).filter(t=>t.status!=='OPEN' && t.pnl!=null);
-    const wins        = closedTrades.filter(t=>parseFloat(t.pnl)>0);
+    const totPnl   = (allTrades||[]).filter(t=>t.pnl!=null).reduce((s,t)=>s+parseFloat(t.pnl),0);
+    const invested = (allTrades||[]).filter(t=>t.status==='OPEN').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const closed2  = (allTrades||[]).filter(t=>t.status!=='OPEN'&&t.pnl!=null);
+    const wins     = closed2.filter(t=>parseFloat(t.pnl)>0);
 
     await db.from('performance').upsert({
       snap_date:         today,
       model_capital:     50000,
       model_invested:    invested,
       model_cash:        50000 - invested,
-      model_value:       50000 + totalPnl,
-      model_pnl:         parseFloat(totalPnl.toFixed(2)),
-      model_pnl_pct:     parseFloat((totalPnl/50000).toFixed(6)),
+      model_value:       50000 + totPnl,
+      model_pnl:         parseFloat(totPnl.toFixed(2)),
+      model_pnl_pct:     parseFloat((totPnl/50000).toFixed(6)),
       model_trades_open: (allTrades||[]).filter(t=>t.status==='OPEN').length,
-      model_win_rate:    closedTrades.length ? parseFloat((wins.length/closedTrades.length).toFixed(4)) : null
+      model_win_rate:    closed2.length ? parseFloat((wins.length/closed2.length).toFixed(4)) : null
     }, { onConflict: 'snap_date' });
 
     return {
       statusCode: 200,
       body: JSON.stringify({
-        prices_saved: fetched,
-        prices_failed: failed,
-        trades_stopped: stopped,
+        prices_saved:    fetched,
+        prices_failed:   failed,
+        trades_stopped:  stopped,
         trades_targeted: targeted,
-        trades_closed: closed
+        trades_closed:   closed
       })
     };
 
-  } catch (err) {
+  } catch(err) {
     console.error('fetch-prices failed:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }

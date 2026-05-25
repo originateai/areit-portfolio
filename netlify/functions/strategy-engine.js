@@ -352,20 +352,55 @@ function calcBollinger(closes, period = 20, stdDev = 2) {
 
 // ── FULL STOCK ANALYSIS ───────────────────────────────────────────────────────
 
-async function analyseStock(stock, macroScore, settings) {
+async function analyseStock(stock, macroScore, settings, livePrice = null) {
   try {
     const ticker = stock.ticker;
     const asx    = stock.universe === 'REIT' ? ticker + '.AX' : ticker + '.AX';
 
-    // Fetch 200+ days for full indicator calculation
-    const data = await fetchYahoo(asx, '300d');
-    if (!data?.closes || data.closes.length < 20) return null;
+    // Use live price from EODHD if provided, then get history from DB or Yahoo
+    let closes, opens, highs, lows, volumes;
 
-    const closes  = data.closes.filter(Boolean);
-    const opens   = data.opens?.filter(Boolean);
-    const highs   = data.highs?.filter(Boolean);
-    const lows    = data.lows?.filter(Boolean);
-    const volumes = data.volumes?.filter(v => v !== null);
+    // Try to get historical data from prices table in Supabase first
+    // This avoids Yahoo Finance calls when we have EODHD data
+    try {
+      const { createClient } = require('@supabase/supabase-js');
+      const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+      const { data: priceRows } = await db.from('prices')
+        .select('close,open,high,low,volume')
+        .eq('ticker', stock.ticker)
+        .order('market_date', { ascending: false })
+        .limit(250);
+
+      if (priceRows && priceRows.length >= 20) {
+        // Reverse to get chronological order
+        const sorted = priceRows.reverse();
+        closes  = sorted.map(p => parseFloat(p.close));
+        opens   = sorted.map(p => parseFloat(p.open  || p.close));
+        highs   = sorted.map(p => parseFloat(p.high  || p.close));
+        lows    = sorted.map(p => parseFloat(p.low   || p.close));
+        volumes = sorted.map(p => parseInt(p.volume  || 0));
+        // Override last close with live price if provided
+        if (livePrice && livePrice > 0) {
+          closes[closes.length - 1] = livePrice;
+        }
+      } else {
+        throw new Error('Not enough DB data, falling back to Yahoo');
+      }
+    } catch(dbErr) {
+      // Fallback to Yahoo Finance
+      const data = await fetchYahoo(asx, '300d');
+      if (!data?.closes || data.closes.length < 20) return null;
+      closes  = data.closes.filter(Boolean);
+      opens   = data.opens?.filter(Boolean);
+      highs   = data.highs?.filter(Boolean);
+      lows    = data.lows?.filter(Boolean);
+      volumes = data.volumes?.filter(v => v !== null);
+      if (livePrice && livePrice > 0) {
+        closes[closes.length - 1] = livePrice;
+      }
+    }
+
+    if (!closes || closes.length < 20) return null;
 
     const indicators = calculateIndicators(closes, volumes, highs, lows, opens);
     if (!indicators) return null;
