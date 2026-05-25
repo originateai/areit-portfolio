@@ -1331,14 +1331,6 @@ function buildFullChart(prices, trade) {
   </div>`;
 }
 
-  const closes = prices.map(p => parseFloat(p.close));
-  const highs  = prices.map(p => parseFloat(p.high  || p.close));
-  const lows   = prices.map(p => parseFloat(p.low   || p.close));
-  const vols   = prices.map(p => parseInt(p.volume  || 0));
-
-  const minP = Math.min(...lows)   * 0.998;
-
-
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function() { wireNav(); init(); });
 </script>
