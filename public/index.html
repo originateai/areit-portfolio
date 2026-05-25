@@ -95,21 +95,21 @@ tfoot td.r{text-align:right}
   <div class="logo">ASX Trading Platform<span>James Storey · Live</span></div>
   <nav class="nav">
     <div class="nav-sec">Trading</div>
-    <a class="active" onclick="go('model',this)">◈ Model Portfolio</a>
-    <a onclick="go('real',this)">$ Real Portfolio</a>
-    <a onclick="go('strategies',this)">⚡ Strategy Engine</a>
-    <a onclick="go('screener',this)">⬡ Stock Screener</a>
+    <a class="active" data-page="model">◈ Model Portfolio</a>
+    <a data-page="real">$ Real Portfolio</a>
+    <a data-page="strategies">⚡ Strategy Engine</a>
+    <a data-page="screener">⬡ Stock Screener</a>
     <div class="nav-sec">REIT Income</div>
-    <a onclick="go('reit',this)">⬡ REIT Holdings</a>
-    <a onclick="go('reit-trading',this)">~ REIT Signals</a>
-    <a onclick="go('income',this)">$ Income Tracker</a>
+    <a data-page="reit">⬡ REIT Holdings</a>
+    <a data-page="reit-trading">~ REIT Signals</a>
+    <a data-page="income">$ Income Tracker</a>
     <div class="nav-sec">Signals</div>
-    <a onclick="go('morning',this)">☀ Morning Scan</a>
-    <a onclick="go('bond',this)">~ Bond Market</a>
+    <a data-page="morning">☀ Morning Scan</a>
+    <a data-page="bond">~ Bond Market</a>
     <div class="nav-sec">Admin</div>
-    <a onclick="go('enter-trade',this)">+ Record Trade</a>
-    <a onclick="go('settings',this)">⚙ Settings</a>
-    <a onclick="go('alerts',this)">◎ Alerts</a>
+    <a data-page="enter-trade">+ Record Trade</a>
+    <a data-page="settings">⚙ Settings</a>
+    <a data-page="alerts">◎ Alerts</a>
   </nav>
   <div class="sf"><span class="live"></span>Live · Yahoo Finance · FRED<br>8:00am · 4:00pm AEST</div>
 </div>
@@ -357,8 +357,9 @@ async function init() {
 function go(page, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
-  document.getElementById('pg-' + page).classList.add('active');
-  el.classList.add('active');
+  const pg = document.getElementById('pg-' + page);
+  if (pg) pg.classList.add('active');
+  if (el) el.classList.add('active');
   const fns = {
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: ()=>{}, reit: loadREIT, 'reit-trading': loadREITSignals,
@@ -366,6 +367,15 @@ function go(page, el) {
     'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
   };
   fns[page]?.();
+}
+
+function wireNav() {
+  document.querySelectorAll('.nav a[data-page]').forEach(a => {
+    a.addEventListener('click', function(e) {
+      e.preventDefault();
+      go(this.dataset.page, this);
+    });
+  });
 }
 
 function switchTab(group, tab, el) {
@@ -549,7 +559,7 @@ async function loadStrategies() {
       <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.stocks?.name||''}</td>
       <td class="r">${a.close?f.$(a.close,3):'--'}</td>
       <td><span class="badge ${sc}">${a.total_score||0}/6</span>${dots(a.total_score||0)}</td>
-      <td style="text-align:center;color:${a.layer1_macro?'var(--green)':'var(--rule)';font-weight:600">${a.layer1_macro?'✓':'·'}</td>
+      <td style="text-align:center;color:${a.layer1_macro?'var(--green)':'var(--rule)'};font-weight:600">${a.layer1_macro?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer2_trend?'var(--green)':'var(--rule)'};font-weight:600">${a.layer2_trend?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer3_momentum?'var(--green)':'var(--rule)'};font-weight:600">${a.layer3_momentum?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer4_reversion?'var(--green)':'var(--rule)'};font-weight:600">${a.layer4_reversion?'✓':'·'}</td>
@@ -908,7 +918,7 @@ async function loadAlerts() {
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
-init();
+document.addEventListener("DOMContentLoaded", function() { wireNav(); init(); });
 </script>
 </body>
 </html>
