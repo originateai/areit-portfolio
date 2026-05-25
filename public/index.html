@@ -43,6 +43,10 @@ th{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.09em;text-tr
 th.r{text-align:right}
 tbody tr{border-bottom:1px solid var(--rule);transition:background 0.1s}
 tbody tr:hover{background:var(--cream)}
+tbody tr.clickable{cursor:pointer}
+tbody tr.clickable:hover{background:#e8f2fb;border-left:3px solid var(--teal)}
+tbody tr.clickable:hover .tkr{background:var(--teal);color:white}
+tbody tr.clickable:active{background:#d4e8f7}
 td{padding:9px 7px;vertical-align:middle;font-size:11.5px}
 td.r{text-align:right;font-family:'DM Mono',monospace;font-size:11px}
 tfoot tr{border-top:2px solid var(--ink);background:var(--cream)}
@@ -138,6 +142,7 @@ tfoot td.r{text-align:right}
         <th>Date</th><th>Ticker</th><th>Company</th><th class="r">Entry</th>
         <th class="r">Stop</th><th class="r">Target</th><th class="r">Current</th>
         <th class="r">Size</th><th class="r">P&L</th><th>Score</th><th>Status</th>
+        <th style="color:var(--teal)">Detail →</th>
       </tr></thead>
       <tbody id="model-tbody"><tr><td colspan="11" class="empty">Loading model trades...</td></tr></tbody>
     </table>
@@ -468,6 +473,9 @@ async function loadModel() {
     const pnlPct = t.pnl_pct!=null ? parseFloat(t.pnl_pct) : null;
     const sc     = {OPEN:'b-open',CLOSED:'b-hold',TARGETED:'b-buy',STOPPED:'b-stop'}[t.status]||'b-hold';
     const tr     = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.title = 'Click to see full signal breakdown';
+    tr.addEventListener('click', () => openSignalDrawer(t.ticker));
     tr.innerHTML = `
       <td style="font-size:10px;color:var(--muted)">${t.trade_date}</td>
       <td><span class="tkr">${t.ticker}</span></td>
@@ -480,6 +488,7 @@ async function loadModel() {
       <td class="r" style="color:${pnl==null?'var(--muted)':f.clr(pnl)}">${pnl==null?'--':(pnl>=0?'+':'')+f.$(pnl,0)}</td>
       <td>${dots(t.total_score||0)}</td>
       <td><span class="badge ${sc}">${t.status}</span></td>
+      <td style="color:var(--teal);font-size:14px;text-align:center">→</td>
     `;
     tbody.appendChild(tr);
   });
@@ -552,8 +561,11 @@ async function loadStrategies() {
   data.forEach(a => {
     const sc  = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod'}[a.conviction]||'b-hold';
     const tr  = document.createElement('tr');
+    tr.className = 'clickable';
     if (a.total_score>=6) tr.style.background='#f0f7f8';
     if (a.total_score===5) tr.style.background='#f5fff5';
+    tr.title = 'Click to see full signal breakdown';
+    tr.addEventListener('click', () => openSignalDrawer(a.ticker));
     tr.innerHTML = `
       <td><span class="tkr">${a.ticker}</span></td>
       <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.stocks?.name||''}</td>
@@ -917,8 +929,264 @@ async function loadAlerts() {
   `).join('');
 }
 
+// ── SIGNAL DETAIL DRAWER ──────────────────────────────────────────────────────
+async function openSignalDrawer(ticker) {
+  if (!db) return;
+
+  // Show drawer
+  const drawer = document.getElementById('signal-drawer');
+  const overlay = document.getElementById('drawer-overlay');
+  const content = document.getElementById('drawer-content');
+  drawer.classList.add('open');
+  overlay.classList.add('open');
+  content.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading...</div>';
+
+  // Fetch all data in parallel
+  const [tradeRes, analysisRes, pricesRes, stockRes] = await Promise.all([
+    db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).single(),
+    db.from('daily_analysis').select('*').eq('ticker', ticker).order('analysis_date',{ascending:false}).limit(1).single(),
+    db.from('prices').select('market_date,open,high,low,close,volume').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
+    db.from('stocks').select('*').eq('ticker', ticker).single()
+  ]);
+
+  const trade    = tradeRes.data;
+  const analysis = analysisRes.data;
+  const prices   = (pricesRes.data || []).reverse();
+  const stock    = stockRes.data;
+
+  const layers = [
+    { name: 'Layer 1 — Macro',      val: analysis?.layer1_macro,     desc: 'US overnight S&P, Nasdaq, VIX, AUD, yield curve' },
+    { name: 'Layer 2 — Trend',      val: analysis?.layer2_trend,     desc: '200DMA, 50DMA, golden cross / death cross' },
+    { name: 'Layer 3 — Momentum',   val: analysis?.layer3_momentum,  desc: '20DMA, ROC 20-day, MACD signal' },
+    { name: 'Layer 4 — Reversion',  val: analysis?.layer4_reversion, desc: 'RSI <45, Bollinger lower band, % from 20DMA' },
+    { name: 'Layer 5 — Volume',     val: analysis?.layer5_volume,    desc: 'Volume spike >1.5x 20-day average' },
+    { name: 'Layer 6 — Candle',     val: analysis?.layer6_candle,    desc: analysis?.candle_pattern || 'Hammer, engulfing, morning star, doji' },
+  ];
+
+  const score = analysis?.total_score || trade?.total_score || 0;
+  const conv  = analysis?.conviction  || trade?.conviction  || '--';
+  const price = prices[prices.length-1]?.close || trade?.entry_price;
+
+  // Build candlestick chart data
+  const chartHtml = prices.length > 5 ? buildMiniChart(prices, trade) : '<div style="padding:20px;color:var(--muted);font-size:12px">Not enough price history yet — bootstrap running</div>';
+
+  content.innerHTML = `
+    <div style="padding:20px 22px">
+
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--teal)">${ticker}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px">${stock?.name || trade?.company_name || ''}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:700">${price?'$'+parseFloat(price).toFixed(3):'--'}</div>
+          <span style="display:inline-block;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;font-family:'DM Mono',monospace;margin-top:4px;
+            background:${conv==='EXCEPTIONAL'?'var(--teal)':conv==='STRONG'?'#eef6ee':'#fdf8ee'};
+            color:${conv==='EXCEPTIONAL'?'#fff':conv==='STRONG'?'var(--green)':'var(--amber)'}">
+            ${conv} ${score}/6
+          </span>
+        </div>
+      </div>
+
+      <!-- Price Chart -->
+      <div style="margin-bottom:18px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:8px">Price — Last 60 days</div>
+        ${chartHtml}
+      </div>
+
+      <!-- Key metrics -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+        ${[
+          ['RSI 14', analysis?.rsi14 ? parseFloat(analysis.rsi14).toFixed(0) : '--', analysis?.rsi14<35?'var(--green)':analysis?.rsi14>70?'var(--red)':'var(--ink)'],
+          ['Vol ×', analysis?.vol_ratio ? parseFloat(analysis.vol_ratio).toFixed(1)+'×' : '--', analysis?.vol_ratio>1.5?'var(--teal)':'var(--ink)'],
+          ['20DMA', analysis?.ma20 ? '$'+parseFloat(analysis.ma20).toFixed(3) : '--', 'var(--ink)'],
+          ['50DMA', analysis?.ma50 ? '$'+parseFloat(analysis.ma50).toFixed(3) : '--', 'var(--ink)'],
+          ['200DMA',analysis?.ma200 ? '$'+parseFloat(analysis.ma200).toFixed(3) : '--', 'var(--ink)'],
+          ['BB Pos', analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%' : '--', 'var(--ink)'],
+        ].map(([l,v,c]) => `
+          <div style="background:var(--cream);border-radius:3px;padding:9px 10px">
+            <div style="font-family:'DM Mono',monospace;font-size:8.5px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">${l}</div>
+            <div style="font-family:'Playfair Display',serif;font-size:17px;font-weight:600;color:${c}">${v}</div>
+          </div>`).join('')}
+      </div>
+
+      <!-- 6 Layers -->
+      <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:8px">6-Layer Breakdown</div>
+      <div style="margin-bottom:16px">
+        ${layers.map(l => `
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule)">
+            <div style="width:18px;height:18px;border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+              background:${l.val?'var(--teal)':'var(--rule)'};color:white;font-size:10px;font-weight:700">
+              ${l.val?'✓':'✗'}
+            </div>
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:${l.val?600:400};color:${l.val?'var(--ink)':'var(--muted)'}">${l.name}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:1px">${l.desc}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Why signals -->
+      <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:8px">Signal Reasons</div>
+      <div style="background:var(--cream);border-radius:3px;padding:12px 14px;margin-bottom:16px;font-size:12px;line-height:1.8;color:var(--ink)">
+        ${(analysis?.signal_reasons || trade?.signal_reasons || ['No reasons recorded']).map(r => `<div>→ ${r}</div>`).join('')}
+      </div>
+
+      <!-- Trade levels -->
+      ${trade ? `
+        <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:8px">Trade Levels</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+          <div style="background:var(--cream);border-radius:3px;padding:9px 10px">
+            <div style="font-size:8.5px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;margin-bottom:3px">Entry</div>
+            <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600">${trade.entry_price?'$'+parseFloat(trade.entry_price).toFixed(3):'--'}</div>
+          </div>
+          <div style="background:#fcebeb;border-radius:3px;padding:9px 10px">
+            <div style="font-size:8.5px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;margin-bottom:3px">Stop −1.5%</div>
+            <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--red)">${trade.stop_price?'$'+parseFloat(trade.stop_price).toFixed(3):'--'}</div>
+          </div>
+          <div style="background:#eef6ee;border-radius:3px;padding:9px 10px">
+            <div style="font-size:8.5px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;margin-bottom:3px">Target +3%</div>
+            <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--green)">${trade.target_price?'$'+parseFloat(trade.target_price).toFixed(3):'--'}</div>
+          </div>
+        </div>` : ''}
+
+      <!-- Candle pattern -->
+      ${analysis?.candle_pattern ? `
+        <div style="background:var(--cream);border:1px solid var(--rule);border-left:3px solid var(--amber);border-radius:0 3px 3px 0;padding:10px 14px;font-size:12px;color:var(--amber);font-weight:600">
+          🕯 Candlestick: ${analysis.candle_pattern}
+        </div>` : ''}
+
+    </div>`;
+}
+
+function buildMiniChart(prices, trade) {
+  // SVG candlestick chart
+  const w = 340, h = 140, padL = 45, padR = 10, padT = 10, padB = 25;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+
+  const closes = prices.map(p => parseFloat(p.close));
+  const highs  = prices.map(p => parseFloat(p.high  || p.close));
+  const lows   = prices.map(p => parseFloat(p.low   || p.close));
+  const vols   = prices.map(p => parseInt(p.volume  || 0));
+
+  const minP = Math.min(...lows)   * 0.998;
+  const maxP = Math.max(...highs)  * 1.002;
+  const maxV = Math.max(...vols)   || 1;
+
+  const px  = i => padL + (i / (prices.length-1)) * chartW;
+  const py  = v => padT + chartH - ((v - minP) / (maxP - minP)) * chartH;
+  const pvy = v => 20 + 18 - (v / maxV) * 18; // volume panel height 18px
+
+  // Moving averages
+  const ma20  = closes.slice(-20);  const ma20v  = ma20.length  === 20  ? ma20.reduce((a,b)=>a+b,0)/20  : null;
+  const ma50  = closes.slice(-50);  const ma50v  = ma50.length  >= 50   ? ma50.slice(-50).reduce((a,b)=>a+b,0)/50  : null;
+  const ma200 = closes.slice(-200); const ma200v = ma200.length >= 200  ? ma200.slice(-200).reduce((a,b)=>a+b,0)/200 : null;
+
+  // Build MA lines (simplified — use last value as horizontal reference)
+  const maLines = [
+    ma20v  ? `<line x1="${padL}" y1="${py(ma20v)}"  x2="${w-padR}" y2="${py(ma20v)}"  stroke="#1a5f6e" stroke-width="1" stroke-dasharray="3,3" opacity="0.7"/>` : '',
+    ma50v  ? `<line x1="${padL}" y1="${py(ma50v)}"  x2="${w-padR}" y2="${py(ma50v)}"  stroke="#b8943f" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>` : '',
+    ma200v ? `<line x1="${padL}" y1="${py(ma200v)}" x2="${w-padR}" y2="${py(ma200v)}" stroke="#8b2e2e" stroke-width="1" stroke-dasharray="5,5" opacity="0.5"/>` : '',
+  ].join('');
+
+  // Trade levels
+  const tradeLines = trade ? [
+    trade.entry_price ? `<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="#1a1a1a" stroke-width="1.5" opacity="0.8"/>` : '',
+    trade.stop_price  ? `<line x1="${padL}" y1="${py(parseFloat(trade.stop_price))}"  x2="${w-padR}" y2="${py(parseFloat(trade.stop_price))}"  stroke="#8b2e2e" stroke-width="1" stroke-dasharray="4,3"/>` : '',
+    trade.target_price? `<line x1="${padL}" y1="${py(parseFloat(trade.target_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.target_price))}" stroke="#2d5a2d" stroke-width="1" stroke-dasharray="4,3"/>` : '',
+  ].join('') : '';
+
+  // Candlesticks
+  const candleW = Math.max(2, Math.floor(chartW / prices.length * 0.7));
+  const candles = prices.map((p, i) => {
+    const o  = parseFloat(p.open  || p.close);
+    const c  = parseFloat(p.close);
+    const hi = parseFloat(p.high  || p.close);
+    const lo = parseFloat(p.low   || p.close);
+    const x  = px(i);
+    const bull = c >= o;
+    const col  = bull ? '#2d5a2d' : '#8b2e2e';
+    const bodyT = py(Math.max(o, c));
+    const bodyB = py(Math.min(o, c));
+    const bodyH = Math.max(1, bodyB - bodyT);
+    return `
+      <line x1="${x}" y1="${py(hi)}" x2="${x}" y2="${py(lo)}" stroke="${col}" stroke-width="1" opacity="0.8"/>
+      <rect x="${x-candleW/2}" y="${bodyT}" width="${candleW}" height="${bodyH}" fill="${bull?'none':col}" stroke="${col}" stroke-width="1" ${bull?`fill="none"`:`fill="${col}"`}/>`;
+  }).join('');
+
+  // Volume bars (below chart)
+  const volBars = prices.map((p, i) => {
+    const v   = parseInt(p.volume || 0);
+    const c   = parseFloat(p.close);
+    const o   = parseFloat(p.open || p.close);
+    const col = c >= o ? '#2d5a2d' : '#8b2e2e';
+    const barH = (v / maxV) * 18;
+    return `<rect x="${px(i)-candleW/2}" y="${h-padB-barH}" width="${candleW}" height="${barH}" fill="${col}" opacity="0.4"/>`;
+  }).join('');
+
+  // Price labels
+  const priceLabels = [minP, (minP+maxP)/2, maxP].map(v =>
+    `<text x="${padL-4}" y="${py(v)+3}" text-anchor="end" font-size="9" fill="#888" font-family="monospace">$${v.toFixed(2)}</text>`
+  ).join('');
+
+  // Legend
+  const legend = [
+    ma20v  ? `<rect x="${padL}" y="${h-8}" width="14" height="2" fill="#1a5f6e" opacity="0.7"/><text x="${padL+17}" y="${h-4}" font-size="8" fill="#888">20DMA</text>` : '',
+    ma50v  ? `<rect x="${padL+55}" y="${h-8}" width="14" height="2" fill="#b8943f" opacity="0.6"/><text x="${padL+72}" y="${h-4}" font-size="8" fill="#888">50DMA</text>` : '',
+    trade?.entry_price ? `<rect x="${padL+110}" y="${h-8}" width="14" height="2" fill="#1a1a1a"/><text x="${padL+127}" y="${h-4}" font-size="8" fill="#888">Entry</text>` : '',
+  ].filter(Boolean).join('');
+
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background:var(--cream);border-radius:4px">
+    <rect width="${w}" height="${h}" fill="#f5f2ec" rx="4"/>
+    <!-- Grid lines -->
+    ${[0.25,0.5,0.75].map(r => `<line x1="${padL}" y1="${padT + chartH*r}" x2="${w-padR}" y2="${padT + chartH*r}" stroke="#c8c2b4" stroke-width="0.5" opacity="0.5"/>`).join('')}
+    <!-- Volume -->
+    ${volBars}
+    <!-- MA lines -->
+    ${maLines}
+    <!-- Trade levels -->
+    ${tradeLines}
+    <!-- Candles -->
+    ${candles}
+    <!-- Price labels -->
+    ${priceLabels}
+    <!-- Legend -->
+    ${legend}
+  </svg>`;
+}
+
+function closeDrawer() {
+  document.getElementById('signal-drawer').classList.remove('open');
+  document.getElementById('drawer-overlay').classList.remove('open');
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function() { wireNav(); init(); });
 </script>
+
+<!-- SIGNAL DETAIL DRAWER -->
+<div id="drawer-overlay" onclick="closeDrawer()" style="
+  position:fixed;inset:0;background:rgba(0,0,0,0.3);
+  z-index:199;opacity:0;pointer-events:none;transition:opacity 0.25s"></div>
+<div id="signal-drawer" style="
+  position:fixed;right:0;top:0;bottom:0;width:440px;
+  background:var(--paper);border-left:1px solid var(--rule);
+  z-index:200;transform:translateX(100%);transition:transform 0.25s ease;
+  overflow-y:auto;box-shadow:-4px 0 24px rgba(0,0,0,0.15)">
+  <div style="position:sticky;top:0;background:var(--ink);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;z-index:1">
+    <span style="font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.4)">Signal Detail — click outside to close</span>
+    <button onclick="closeDrawer()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:22px;cursor:pointer;line-height:1;padding:2px 8px;border-radius:3px">×</button>
+  </div>
+  <div id="drawer-content"></div>
+</div>
+<style>
+  #signal-drawer.open { transform: translateX(0); }
+  #signal-drawer.open ~ #drawer-overlay,
+  #drawer-overlay.open { opacity: 1; pointer-events: all; }
+  tbody tr.clickable { cursor: pointer; }
+</style>
+
 </body>
 </html>
