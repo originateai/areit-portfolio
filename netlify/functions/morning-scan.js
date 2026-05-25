@@ -54,25 +54,32 @@ function buildEmail(market, macro, equityTrades, reitTrades, reitTriggers) {
   const vixAlert = vix > VIX_TRIGGER;
 
   const tradeRow = (t) => `
-    <tr>
-      <td class="mono" style="font-weight:600;color:#1a5f6e">${t.ticker}</td>
-      <td style="font-size:11px">${t.name}<br><span style="color:#6b6660;font-size:10px">${t.signal_reasons?.slice(0,2).join(' · ')}</span></td>
-      <td class="mono">${dollar(t.price,3)}</td>
-      <td><span class="badge badge-${t.conviction?.toLowerCase()}">${t.conviction} ${t.total_score}/6</span></td>
-      <td class="mono" style="color:#8b2e2e">${dollar(t.stop_price,3)}</td>
-      <td class="mono" style="color:#2d5a2d">${dollar(t.target_price,3)}</td>
-      <td class="mono">$${(t.position_size||0).toLocaleString()}<br><span style="color:#6b6660;font-size:10px">${t.units||0} units</span></td>
+    <tr style="border-bottom:1px solid #ede9e0">
+      <td style="padding:10px 8px;font-family:monospace;font-weight:600;color:#1a5f6e;font-size:13px">${t.ticker}</td>
+      <td style="padding:10px 8px;font-size:11px;max-width:180px">${t.name}<br><span style="color:#6b6660;font-size:10px">${t.signal_reasons?.slice(0,2).join(' · ')}</span></td>
+      <td style="padding:10px 8px;font-family:monospace;text-align:right;font-size:12px">${dollar(t.price,3)}</td>
+      <td style="padding:10px 8px"><span style="font-family:monospace;font-size:9px;padding:3px 7px;border-radius:3px;font-weight:600;background:${t.conviction==='EXCEPTIONAL'?'#1a5f6e':t.conviction==='STRONG'?'#eef6ee':'#fdf8ee'};color:${t.conviction==='EXCEPTIONAL'?'#fff':t.conviction==='STRONG'?'#2d5a2d':'#7a5500'}">${t.conviction} ${t.total_score}/6</span></td>
+      <td style="padding:10px 8px;font-family:monospace;text-align:right;color:#8b2e2e;font-size:12px">${dollar(t.stop_price,3)}</td>
+      <td style="padding:10px 8px;font-family:monospace;text-align:right;color:#2d5a2d;font-size:12px">${dollar(t.target_price,3)}</td>
+      <td style="padding:10px 8px;font-family:monospace;text-align:right;font-size:12px">$${(t.position_size||0).toLocaleString()}<br><span style="color:#6b6660;font-size:10px">${t.units||0} units</span></td>
     </tr>`;
 
-  const reitRow = (r) => `
+  const reitRow = (r) => {
+    const disc = r.nta && r.price ? (r.price - r.nta) / r.nta : null;
+    const discStr = disc !== null ? (disc*100).toFixed(1)+'%' : '--';
+    const discColor = disc !== null && disc < -0.1 ? '#2d5a2d' : disc !== null && disc < 0 ? '#1a5f6e' : '#8b2e2e';
+    return `
     <tr style="background:${r.yield_trigger_fired?'#f0f8f0':r.dps_yield>=0.075?'#fffbf0':'white'}">
-      <td class="mono" style="font-weight:600">${r.ticker}</td>
-      <td style="font-size:11px">${r.name}</td>
-      <td class="mono">${dollar(r.price,3)}</td>
-      <td class="mono ${r.dps_yield>=0.08?'positive':r.dps_yield>=0.07?'teal':''}" style="font-weight:${r.dps_yield>=0.07?600:400}">${r.dps_yield?pctRaw(r.dps_yield,1):'--'}</td>
-      <td><span class="badge badge-${r.conviction?.toLowerCase()}">${r.total_score}/6</span></td>
-      <td><span style="font-size:11px;${r.yield_trigger_fired?'color:#2d5a2d;font-weight:600':'color:#6b6660'}">${r.yield_trigger_fired?'🟢 BUY':r.dps_yield>=0.075?'⚠️ Close':'Watching'}</span></td>
+      <td style="padding:8px;font-family:monospace;font-weight:600;color:#1a5f6e">${r.ticker}</td>
+      <td style="padding:8px;font-size:11px;max-width:160px">${r.name}</td>
+      <td style="padding:8px;font-family:monospace;text-align:right">${dollar(r.price,3)}</td>
+      <td style="padding:8px;font-family:monospace;text-align:right;color:#6b6660">${r.nta?dollar(r.nta,2):'--'}</td>
+      <td style="padding:8px;font-family:monospace;text-align:right;color:${discColor};font-weight:600">${discStr}</td>
+      <td style="padding:8px;font-family:monospace;text-align:right;color:${r.dps_yield>=0.08?'#2d5a2d':r.dps_yield>=0.07?'#1a5f6e':'#333'};font-weight:${r.dps_yield>=0.07?600:400}">${r.dps_yield?pctRaw(r.dps_yield,1):'--'}</td>
+      <td style="padding:8px;text-align:center"><span style="font-family:monospace;font-size:9px;padding:2px 6px;border-radius:3px;background:${r.conviction==='EXCEPTIONAL'?'#1a5f6e':r.conviction==='STRONG'?'#eef6ee':'#fdf8ee'};color:${r.conviction==='EXCEPTIONAL'?'#fff':r.conviction==='STRONG'?'#2d5a2d':'#7a5500'}">${r.total_score||0}/6</span></td>
+      <td style="padding:8px;font-weight:600;font-size:11px;color:${r.yield_trigger_fired?'#2d5a2d':r.dps_yield>=0.075?'#7a5500':'#6b6660'}">${r.yield_trigger_fired?'🟢 BUY':r.dps_yield>=0.075?'⚠️ Close':'Watching'}</td>
     </tr>`;
+  };
 
   const subject = `${sigEmoji} ASX Morning — ${macro.signal} ${macro.score>0?'+':''}${macro.score} — ${new Date().toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'})}${reitTriggers.length?' 🚨 REIT TRIGGER':''}${equityTrades.some(t=>t.total_score>=6)?' 🔥 6/6 SIGNAL':''}`;
 
@@ -95,22 +102,56 @@ function buildEmail(market, macro, equityTrades, reitTrades, reitTriggers) {
 
   <div class="section">
     <div class="section-title">US Overnight</div>
-    <div class="metric-row">
-      <div class="metric"><div class="ml">S&P 500</div><div class="mv ${colorClass(sp500Change)}">${pct(sp500Change)}</div></div>
-      <div class="metric"><div class="ml">Nasdaq</div><div class="mv ${colorClass(nasdaqChange)}">${pct(nasdaqChange)}</div></div>
-      <div class="metric"><div class="ml">VIX</div><div class="mv" style="color:${vix<20?'#2d5a2d':vix<25?'#7a5500':'#8b2e2e'}">${vix.toFixed(1)}</div></div>
-      <div class="metric"><div class="ml">AUD/USD</div><div class="mv">${aud.toFixed(4)}</div></div>
-      <div class="metric"><div class="ml">AUD chg</div><div class="mv ${colorClass(audChange)}">${pct(audChange)}</div></div>
-    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
+      <tr>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:20%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">S&amp;P 500</div>
+          <div style="font-size:18px;font-weight:600;color:${sp500Change>=0?'#2d5a2d':'#8b2e2e'}">${pct(sp500Change)}</div>
+        </td>
+        <td style="width:4px"></td>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:20%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">Nasdaq</div>
+          <div style="font-size:18px;font-weight:600;color:${nasdaqChange>=0?'#2d5a2d':'#8b2e2e'}">${pct(nasdaqChange)}</div>
+        </td>
+        <td style="width:4px"></td>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:20%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">VIX</div>
+          <div style="font-size:18px;font-weight:600;color:${vix<20?'#2d5a2d':vix<25?'#7a5500':'#8b2e2e'}">${vix.toFixed(1)}</div>
+        </td>
+        <td style="width:4px"></td>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:20%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">AUD/USD</div>
+          <div style="font-size:18px;font-weight:600;color:#333">${aud.toFixed(4)}</div>
+        </td>
+        <td style="width:4px"></td>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:20%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">AUD chg</div>
+          <div style="font-size:18px;font-weight:600;color:${audChange>=0?'#2d5a2d':'#8b2e2e'}">${pct(audChange)}</div>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <div class="section">
     <div class="section-title">Bond Market</div>
-    <div class="metric-row">
-      <div class="metric"><div class="ml">US 10yr</div><div class="mv teal">${pctRaw(us10yr)}</div></div>
-      <div class="metric"><div class="ml">AUS 10yr</div><div class="mv teal">${pctRaw(aus10yr)}</div></div>
-      <div class="metric"><div class="ml">Yield curve</div><div class="mv ${colorClass(yieldCurve)}">${bps(yieldCurve)}</div></div>
-    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
+      <tr>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:33%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">US 10yr</div>
+          <div style="font-size:18px;font-weight:600;color:#1a5f6e">${pctRaw(us10yr)}</div>
+        </td>
+        <td style="width:4px"></td>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:33%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">AUS 10yr</div>
+          <div style="font-size:18px;font-weight:600;color:#1a5f6e">${pctRaw(aus10yr)}</div>
+        </td>
+        <td style="width:4px"></td>
+        <td style="padding:8px 12px;background:#f9f7f3;border-radius:4px;text-align:center;width:33%">
+          <div style="font-size:10px;color:#6b6660;margin-bottom:2px">Yield Curve</div>
+          <div style="font-size:18px;font-weight:600;color:${yieldCurve>0?'#2d5a2d':'#8b2e2e'}">${bps(yieldCurve)}</div>
+        </td>
+      </tr>
+    </table>
     <p style="font-size:11px;color:#6b6660;margin-top:8px">${yieldCurve>0.005?'📈 Steepening — growth signal.':yieldCurve<-0.002?'⚠️ Inverted — caution.':'→ Flat — neutral.'}</p>
   </div>
 
@@ -120,9 +161,13 @@ function buildEmail(market, macro, equityTrades, reitTrades, reitTriggers) {
       ? '<p style="color:#6b6660;font-size:12px">No trades today — macro too weak or no stocks passing 4+ layers.</p>'
       : `<table>
           <thead><tr>
-            <th>Ticker</th><th>Company / Why</th><th>Entry</th>
-            <th>Conviction</th><th style="color:#8b2e2e">Stop</th>
-            <th style="color:#2d5a2d">Target</th><th>Size</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase">Ticker</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase">Company / Why</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">Entry</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase">Conviction</th>
+            <th style="padding:6px 8px;font-size:10px;color:#8b2e2e;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">Stop −1.5%</th>
+            <th style="padding:6px 8px;font-size:10px;color:#2d5a2d;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">Target +3%</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">Size</th>
           </tr></thead>
           <tbody>${equityTrades.map(tradeRow).join('')}</tbody>
         </table>`}
@@ -135,8 +180,14 @@ function buildEmail(market, macro, equityTrades, reitTrades, reitTriggers) {
       ? '<p style="color:#6b6660;font-size:12px">No REIT signals today.</p>'
       : `<table>
           <thead><tr>
-            <th>Ticker</th><th>Name</th><th>Price</th>
-            <th>Yield</th><th>Score</th><th>Status</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase">Ticker</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase">Name</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">Price</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">NTA</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">Disc NTA</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:right">Yield</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase;text-align:center">Score</th>
+            <th style="padding:6px 8px;font-size:10px;color:#6b6660;font-weight:400;font-family:monospace;text-transform:uppercase">Status</th>
           </tr></thead>
           <tbody>${reitTrades.map(reitRow).join('')}</tbody>
         </table>`}
