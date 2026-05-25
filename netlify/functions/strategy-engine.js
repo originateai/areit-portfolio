@@ -2,11 +2,11 @@
 // The core algo brain — runs 6-layer analysis on every stock
 // Called by morning-scan and pre-screen functions
 
-import { fetchYahoo, BOND_YIELD } from './_shared.js';
+const { fetchYahoo, BOND_YIELD } = require('./_shared.js');
 
 // ── CANDLESTICK PATTERN DETECTION ─────────────────────────────────────────────
 
-export function detectCandlesticks(candles) {
+function detectCandlesticks(candles) {
   // candles = array of { open, high, low, close } last 3 days
   if (!candles || candles.length < 3) return { pattern: null, bullish: false, bearish: false };
 
@@ -101,7 +101,7 @@ export function detectCandlesticks(candles) {
 
 // ── CALCULATE ALL INDICATORS ──────────────────────────────────────────────────
 
-export function calculateIndicators(closes, volumes, highs, lows, opens) {
+function calculateIndicators(closes, volumes, highs, lows, opens) {
   const n = closes.length;
   if (n < 20) return null;
 
@@ -172,7 +172,7 @@ export function calculateIndicators(closes, volumes, highs, lows, opens) {
 
 // ── 6-LAYER SCORING ───────────────────────────────────────────────────────────
 
-export function scoreStock(indicators, macroScore, stock, currentYield) {
+function scoreStock(indicators, macroScore, stock, currentYield) {
   const reasons = [];
   let l1 = 0, l2 = 0, l3 = 0, l4 = 0, l5 = 0, l6 = 0;
 
@@ -288,7 +288,7 @@ export function scoreStock(indicators, macroScore, stock, currentYield) {
 
 // ── POSITION SIZE ─────────────────────────────────────────────────────────────
 
-export function getPositionSize(conviction, settings, isReit = false) {
+function getPositionSize(conviction, settings, isReit = false) {
   const prefix = isReit ? 'reit' : 'equity';
   const sizes = {
     EXCEPTIONAL: parseFloat(settings[`conviction_6_${prefix}`] || (isReit ? 4000 : 4000)),
@@ -352,7 +352,7 @@ function calcBollinger(closes, period = 20, stdDev = 2) {
 
 // ── FULL STOCK ANALYSIS ───────────────────────────────────────────────────────
 
-export async function analyseStock(stock, macroScore, settings) {
+async function analyseStock(stock, macroScore, settings) {
   try {
     const ticker = stock.ticker;
     const asx    = stock.universe === 'REIT' ? ticker + '.AX' : ticker + '.AX';
@@ -440,3 +440,6 @@ export async function analyseStock(stock, macroScore, settings) {
     return null;
   }
 }
+
+
+module.exports = { detectCandlesticks, calculateIndicators, scoreStock, getPositionSize, analyseStock };

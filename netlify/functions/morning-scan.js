@@ -6,11 +6,11 @@
 // 4. Sends morning briefing email with ranked trades
 // 5. Saves all analysis to Supabase
 
-import {
+const {
   getSupabase, fetchYahoo, fetchFRED, sendEmail, loadSettings,
   BOND_YIELD, VIX_TRIGGER, emailStyles, pct, pctRaw, bps, dollar, colorClass, scoreDots
-} from './_shared.js';
-import { analyseStock } from './strategy-engine.js';
+} = require('./_shared.js');
+const { analyseStock } = require('./strategy-engine.js');
 
 // ── MACRO SCORING ─────────────────────────────────────────────────────────────
 function scoreMacro({ sp500Change, nasdaqChange, vix, yieldCurve, audChange }) {
@@ -151,7 +151,7 @@ function buildEmail(market, macro, equityTrades, reitTrades, reitTriggers) {
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
-export const handler = async () => {
+exports.handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   console.log(`Morning scan v2 starting: ${today}`);

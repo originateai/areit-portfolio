@@ -2,9 +2,9 @@
 // Scheduled: 4:05pm AEST (6:05am UTC) Mon-Fri
 // Checks REIT yields against triggers and sends alert
 
-import { getSupabase, sendEmail, BOND_YIELD, YIELD_TARGET, emailStyles, pct, pctRaw, dollar, bps } from './_shared.js';
+const { getSupabase, sendEmail, BOND_YIELD, YIELD_TARGET, emailStyles, pct, pctRaw, dollar, bps } = require('./_shared.js');
 
-export const handler = async () => {
+exports.handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
 

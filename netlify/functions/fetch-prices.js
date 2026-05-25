@@ -3,9 +3,9 @@
 // Fetches closing prices for all stocks
 // Marks model trades to market — stops and targets
 
-import { getSupabase, fetchYahoo, sendEmail } from './_shared.js';
+const { getSupabase, fetchYahoo, sendEmail } = require('./_shared.js');
 
-export const handler = async () => {
+exports.handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   console.log(`Fetch prices starting: ${today}`);

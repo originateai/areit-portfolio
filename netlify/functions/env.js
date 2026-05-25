@@ -3,7 +3,7 @@
 // Only exposes the anon key (safe to be public)
 // Service key stays server-side only
 
-export const handler = async () => ({
+exports.handler = async () => ({
   statusCode: 200,
   headers: {
     'Content-Type':  'application/json',

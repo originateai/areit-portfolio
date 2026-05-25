@@ -1,34 +1,34 @@
 // netlify/functions/_shared.js
 // Shared utilities — updated with full OHLCV fetch and settings loader
 
-import { createClient } from '@supabase/supabase-js';
-import { Resend } from 'resend';
+const { createClient } = require('@supabase/supabase-js');
+const { Resend } = require('resend');
 
-export function getSupabase() {
+function getSupabase() {
   return createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY
   );
 }
 
-export function getResend() {
+function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
 
-export const ALERT_EMAIL  = process.env.ALERT_EMAIL  || 'James.storey@outlook.com.au';
-export const FROM_EMAIL   = process.env.FROM_EMAIL   || 'alerts@getkredit.ai';
-export const BOND_YIELD   = 0.0507;
-export const VIX_TRIGGER  = parseFloat(process.env.VIX_TRIGGER   || '25');
-export const YIELD_TARGET = parseFloat(process.env.YIELD_TRIGGER  || '0.08');
+const ALERT_EMAIL  = process.env.ALERT_EMAIL  || 'James.storey@outlook.com.au';
+const FROM_EMAIL   = process.env.FROM_EMAIL   || 'alerts@getkredit.ai';
+const BOND_YIELD   = 0.0507;
+const VIX_TRIGGER  = parseFloat(process.env.VIX_TRIGGER   || '25');
+const YIELD_TARGET = parseFloat(process.env.YIELD_TRIGGER  || '0.08');
 
-export async function loadSettings(db) {
+async function loadSettings(db) {
   const { data } = await db.from('settings').select('key,value');
   const settings = {};
   (data || []).forEach(s => { settings[s.key] = s.value; });
   return settings;
 }
 
-export async function fetchYahoo(ticker, range = '5d') {
+async function fetchYahoo(ticker, range = '5d') {
   try {
     const url  = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}`;
     const res  = await fetch(url, {
@@ -59,7 +59,7 @@ export async function fetchYahoo(ticker, range = '5d') {
   }
 }
 
-export async function fetchFRED(seriesId) {
+async function fetchFRED(seriesId) {
   try {
     const key = process.env.FRED_API_KEY;
     if (!key || key === 'pending') return null;
@@ -74,7 +74,7 @@ export async function fetchFRED(seriesId) {
   }
 }
 
-export async function sendEmail(subject, html) {
+async function sendEmail(subject, html) {
   const resend = getResend();
   const { data, error } = await resend.emails.send({
     from: `ASX Trading Platform <${FROM_EMAIL}>`,
@@ -86,7 +86,7 @@ export async function sendEmail(subject, html) {
   return data;
 }
 
-export const emailStyles = `
+const emailStyles = `
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f2ec; margin: 0; padding: 20px; }
   .wrap { max-width: 700px; margin: 0 auto; }
   .header { background: #0e1117; padding: 20px 24px; border-radius: 8px 8px 0 0; }
@@ -120,13 +120,16 @@ export const emailStyles = `
   .score-on { background: #1a5f6e; } .score-off { background: #c8c2b4; }
 `;
 
-export function pct(val, d=2)    { if (val==null) return '--'; return (val>0?'+':'')+(val*100).toFixed(d)+'%'; }
-export function pctRaw(val, d=2) { if (val==null) return '--'; return (val*100).toFixed(d)+'%'; }
-export function bps(val)         { if (val==null) return '--'; return (val>0?'+':'')+Math.round(val*10000)+'bps'; }
-export function dollar(val, d=2) { if (val==null) return '--'; return '$'+parseFloat(val).toFixed(d); }
-export function colorClass(val)  { return val>0?'positive':val<0?'negative':'neutral'; }
-export function scoreDots(score, max=6) {
+function pct(val, d=2)    { if (val==null) return '--'; return (val>0?'+':'')+(val*100).toFixed(d)+'%'; }
+function pctRaw(val, d=2) { if (val==null) return '--'; return (val*100).toFixed(d)+'%'; }
+function bps(val)         { if (val==null) return '--'; return (val>0?'+':'')+Math.round(val*10000)+'bps'; }
+function dollar(val, d=2) { if (val==null) return '--'; return '$'+parseFloat(val).toFixed(d); }
+function colorClass(val)  { return val>0?'positive':val<0?'negative':'neutral'; }
+function scoreDots(score, max=6) {
   const dots = [];
   for (let i=0; i<max; i++) dots.push(`<div class="score-dot ${i<score?'score-on':'score-off'}">${i<score?'✓':''}</div>`);
   return `<div class="score-bar">${dots.join('')}</div>`;
 }
+
+
+module.exports = { getSupabase, getResend, ALERT_EMAIL, FROM_EMAIL, BOND_YIELD, VIX_TRIGGER, YIELD_TARGET, loadSettings, fetchYahoo, fetchFRED, sendEmail, emailStyles, pct, pctRaw, bps, dollar, colorClass, scoreDots };
