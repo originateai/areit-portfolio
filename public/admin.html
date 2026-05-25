@@ -4,124 +4,365 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ASX Platform — Admin</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--ink:#0e1117;--paper:#f5f2ec;--cream:#ede9e0;--rule:#c8c2b4;--gold:#b8943f;--gold-lt:#d4b06a;--teal:#1a5f6e;--red:#8b2e2e;--green:#2d5a2d;--amber:#7a5500;--muted:#6b6660}
-body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);margin:0}
-.sidebar{position:fixed;left:0;top:0;bottom:0;width:200px;background:var(--ink);padding:16px 10px;z-index:100;display:flex;flex-direction:column;overflow-y:auto}
-.logo{font-family:'Playfair Display',serif;font-size:14px;color:var(--gold-lt);margin-bottom:6px}
-.logo-sub{font-size:9px;color:rgba(255,255,255,0.3);font-family:'DM Mono',monospace;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:24px}
-.nav-sec{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.2);margin:12px 0 4px 8px}
-.nav a{display:block;padding:6px 8px;color:rgba(255,255,255,0.45);text-decoration:none;font-size:11px;border-radius:3px;margin-bottom:1px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nav a:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.8)}
-.nav a.active{background:rgba(255,255,255,0.1);color:var(--gold-lt)}
-.back-link{display:block;margin-top:auto;padding:8px 10px;color:rgba(255,255,255,0.3);font-size:11px;text-decoration:none;font-family:'DM Mono',monospace}
-.back-link:hover{color:rgba(255,255,255,0.6)}
-.main{margin-left:200px;padding:28px 40px 60px;min-height:100vh}
-.page{display:none}.page.active{display:block}
-.ph{margin-bottom:18px;border-bottom:2px solid var(--ink);padding-bottom:12px}
-.ph h1{font-family:'Playfair Display',serif;font-size:21px;font-weight:700}
-.ph p{font-size:11px;color:var(--muted);margin-top:3px}
-.sl{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:18px 0 9px;display:flex;align-items:center;gap:10px}
-.sl::after{content:'';flex:1;height:1px;background:var(--rule)}
-.card{background:var(--paper);border:1px solid var(--rule);padding:16px 18px;border-radius:3px;margin-bottom:12px}
-.card h3{font-size:13px;font-weight:500;margin-bottom:6px}
-.card p{font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:12px}
-.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px}
-.fg label{display:block;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
-.fg input,.fg select,.fg textarea{width:100%;padding:8px 10px;border:1px solid var(--rule);border-radius:3px;background:var(--paper);color:var(--ink);font-size:12px;font-family:'DM Mono',monospace}
-.fg textarea{height:80px;resize:vertical;font-family:'DM Sans',sans-serif;font-size:12px}
-.btn{padding:9px 16px;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500;display:inline-flex;align-items:center;gap:6px}
-.btn-primary{background:var(--teal);color:#fff}
-.btn-primary:hover{background:#155364}
-.btn-secondary{background:var(--cream);color:var(--ink);border:1px solid var(--rule)}
-.btn-danger{background:#fcebeb;color:var(--red);border:1px solid #f5c6c6}
-.btn-green{background:#eef6ee;color:var(--green);border:1px solid #c6e6c6}
-.status{padding:10px 14px;border-radius:3px;font-size:12px;margin-top:10px;display:none}
-.status.ok{background:#eef6ee;color:var(--green);border-left:3px solid var(--green)}
-.status.err{background:#fcebeb;color:var(--red);border-left:3px solid var(--red)}
-.status.info{background:#e6f1fb;color:#185fa5;border-left:3px solid #185fa5}
-table{width:100%;border-collapse:collapse;font-size:12px}
-thead tr{border-bottom:2px solid var(--ink)}
-th{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--muted);padding:6px 7px;text-align:left;font-weight:400}
-th.r{text-align:right}
-tbody tr{border-bottom:1px solid var(--rule)}
-tbody tr:hover{background:var(--cream)}
-td{padding:9px 7px;font-size:11.5px}
-td.r{text-align:right;font-family:'DM Mono',monospace;font-size:11px}
-.tkr{font-family:'DM Mono',monospace;font-size:10.5px;font-weight:500;background:var(--cream);padding:2px 5px;border-radius:2px}
-.badge{font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:2px;font-weight:500}
-.b-reit{background:#e6f1fb;color:#185fa5}
-.b-mgr{background:#fdf8ee;color:#7a5500}
-.b-dev{background:#fcebeb;color:#8b2e2e}
-.upload-zone{border:2px dashed var(--rule);border-radius:4px;padding:24px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;transition:all 0.15s;margin-bottom:12px}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--teal);background:#f0f7f8;color:var(--teal)}
-.upload-zone input{display:none}
-.progress-bar{height:4px;background:var(--cream);border-radius:2px;margin-top:8px;overflow:hidden}
-.progress-fill{height:100%;background:var(--teal);width:0%;transition:width 0.3s}
-.ig-status{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--cream);border:1px solid var(--rule);border-radius:3px;font-size:12px;margin-bottom:12px}
-.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.dot-green{background:var(--green);animation:pulse 2s infinite}
-.dot-red{background:var(--red)}
-.dot-amber{background:var(--amber)}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink: #0e1117;
+  --paper: #f5f2ec;
+  --cream: #ede9e0;
+  --rule: #c8c2b4;
+  --gold: #b8943f;
+  --gold-lt: #d4b06a;
+  --teal: #1a5f6e;
+  --red: #8b2e2e;
+  --green: #2d5a2d;
+  --amber: #7a5500;
+  --muted: #6b6660;
+  --sidebar-w: 200px;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--ink);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  z-index: 100;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  padding: 0 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 16px;
+}
+.sidebar-logo h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: 15px;
+  color: var(--gold-lt);
+  font-weight: 600;
+}
+.sidebar-logo p {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: rgba(255,255,255,0.25);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+}
+.nav-section {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.2);
+  padding: 12px 16px 4px;
+}
+.nav-item {
+  display: block;
+  padding: 8px 16px;
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.1s;
+}
+.nav-item:hover { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.05); }
+.nav-item.active { color: var(--gold-lt); border-left-color: var(--gold); background: rgba(212,176,106,0.08); }
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.sidebar-footer a {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  text-decoration: none;
+  font-family: 'DM Mono', monospace;
+}
+.sidebar-footer a:hover { color: rgba(255,255,255,0.6); }
+
+/* ── MAIN ── */
+.main {
+  margin-left: var(--sidebar-w);
+  padding: 32px 40px 80px;
+  min-height: 100vh;
+}
+
+/* ── PAGES ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── PAGE HEADER ── */
+.page-header {
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--ink);
+}
+.page-header h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 24px;
+  font-weight: 700;
+}
+.page-header p {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── SECTION LABEL ── */
+.section-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 22px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+/* ── CARDS ── */
+.card {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 20px 22px;
+  margin-bottom: 14px;
+}
+.card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+.card p {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.card p:last-child { margin-bottom: 0; }
+
+/* ── FORMS ── */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.fg label {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.fg input,
+.fg select,
+.fg textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  outline: none;
+  transition: border-color 0.1s;
+}
+.fg input:focus, .fg select:focus { border-color: var(--teal); }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary   { background: var(--teal);  color: white; }
+.btn-secondary { background: var(--cream); color: var(--ink); border: 1px solid var(--rule); }
+.btn-green     { background: #eef6ee; color: var(--green); border: 1px solid #b8ddb8; }
+.btn-danger    { background: #fcebeb; color: var(--red);   border: 1px solid #f0b8b8; }
+.btn + .btn    { margin-left: 8px; }
+
+/* ── STATUS MESSAGES ── */
+.status {
+  display: none;
+  margin-top: 12px;
+  padding: 11px 14px;
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.status.ok   { display: block; background: #eef6ee; color: var(--green); border-left: 3px solid var(--green); }
+.status.err  { display: block; background: #fcebeb; color: var(--red);   border-left: 3px solid var(--red);   }
+.status.info { display: block; background: #e8f2fb; color: #185fa5;      border-left: 3px solid #185fa5;      }
+
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+  border: 2px dashed var(--rule);
+  border-radius: 4px;
+  padding: 22px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 10px;
+}
+.upload-zone:hover { border-color: var(--teal); color: var(--teal); background: #f0f7f8; }
+.upload-zone input { display: none; }
+
+/* ── TABLES ── */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead tr { border-bottom: 2px solid var(--ink); }
+th {
+  font-family: 'DM Mono', monospace;
+  font-size: 8.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  padding: 7px 8px;
+  text-align: left;
+  font-weight: 400;
+}
+th.r { text-align: right; }
+tbody tr { border-bottom: 1px solid var(--rule); }
+tbody tr:hover { background: var(--cream); }
+td { padding: 10px 8px; font-size: 12px; vertical-align: middle; }
+td.r { text-align: right; font-family: 'DM Mono', monospace; }
+
+/* ── BADGES ── */
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 500;
+}
+.b-reit { background: #e8f2fb; color: #185fa5; }
+.b-mgr  { background: #fdf8ee; color: var(--amber); }
+.b-dev  { background: #fcebeb; color: var(--red); }
+
+/* ── TICKER ── */
+.tkr {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--cream);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+/* ── WARNING CARD ── */
+.card-warn {
+  background: #fdf8ee;
+  border: 1px solid #c8c2b4;
+  border-left: 3px solid var(--amber);
+  border-radius: 4px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--amber);
+  line-height: 1.6;
+}
+.card-warn strong { display: block; margin-bottom: 4px; font-size: 14px; }
 </style>
 </head>
 <body>
 
 <!-- SIDEBAR -->
 <div class="sidebar">
-  <div class="logo">ASX Platform</div>
-  <div class="logo-sub">Admin Portal</div>
-  <nav class="nav">
-    <div class="nav-sec">Data</div>
-    <a class="active" data-page="upload">↑ Upload Data</a>
-    <a data-page="reit-manager">⬡ REIT Manager</a>
-    <a data-page="universe">◈ Stock Universe</a>
-    <div class="nav-sec">Operations</div>
-    
-    <a data-page="bootstrap">⟳ ⟳ Bootstrap History (EODHD)</a>
-    <a data-page="run-scan">☀ Run Morning Scan</a>
-    <div class="nav-sec">Settings</div>
-    <a data-page="conviction">$ Conviction Sizing</a>
-    <a data-page="monthly">📅 Monthly Routine</a>
-  </nav>
-  <a class="back-link" href="/">← Back to Dashboard</a>
+  <div class="sidebar-logo">
+    <h2>ASX Platform</h2>
+    <p>Admin Portal</p>
+  </div>
+
+  <div class="nav-section">Data</div>
+  <a class="nav-item active" data-page="upload">↑ Upload Data</a>
+  <a class="nav-item" data-page="reit-manager">⬡ REIT Manager</a>
+  <a class="nav-item" data-page="universe">◈ Stock Universe</a>
+
+  <div class="nav-section">Operations</div>
+  <a class="nav-item" data-page="bootstrap">⟳ Bootstrap History</a>
+  <a class="nav-item" data-page="run-scan">☀ Run Morning Scan</a>
+
+  <div class="nav-section">Settings</div>
+  <a class="nav-item" data-page="conviction">$ Conviction Sizing</a>
+  <a class="nav-item" data-page="monthly">📋 Monthly Routine</a>
+
+  <div class="sidebar-footer">
+    <a href="/">← Back to Dashboard</a>
+  </div>
 </div>
 
-<!-- MAIN -->
+<!-- MAIN CONTENT -->
 <div class="main">
 
   <!-- UPLOAD DATA -->
   <div id="pg-upload" class="page active">
-    <div class="ph"><h1>Upload Data</h1><p>Monthly data updates — ASX500 CSV and Moelis REIT research</p></div>
+    <div class="page-header">
+      <h1>Upload Data</h1>
+      <p>Monthly data updates — ASX500 CSV and Moelis REIT research</p>
+    </div>
 
+    <div class="section-label">ASX Universe</div>
     <div class="card">
       <h3>ASX Top 500 CSV</h3>
-      <p>Upload the monthly ASX listed companies CSV. The system will compare to the current universe, add new entrants and deactivate stocks that have dropped out.</p>
-      <div class="upload-zone" id="asx-drop" onclick="document.getElementById('asx-file').click()">
+      <p>Upload the monthly ASX listed companies CSV. Compares to current universe, adds new entrants and deactivates stocks that dropped out.</p>
+      <div class="upload-zone" onclick="document.getElementById('asx-file').click()">
         <input type="file" id="asx-file" accept=".csv" onchange="handleASXUpload(this.files[0])">
         📄 Drop ASX500 CSV here or click to browse
-        <div class="progress-bar"><div class="progress-fill" id="asx-progress"></div></div>
       </div>
       <div id="asx-status" class="status"></div>
     </div>
 
+    <div class="section-label">REIT Data</div>
     <div class="card">
       <h3>Moelis REIT Research</h3>
-      <p>Upload the Moelis workings Excel file. Updates NTA, DPS, gearing and yield triggers for all covered REITs. New REITs are automatically added to the universe.</p>
-      <div class="upload-zone" id="moelis-drop" onclick="document.getElementById('moelis-file').click()">
+      <p>Upload the Moelis workings Excel. Updates NTA, DPS, gearing and yield triggers for all covered REITs.</p>
+      <div class="upload-zone" onclick="document.getElementById('moelis-file').click()">
         <input type="file" id="moelis-file" accept=".xlsx,.xls" onchange="handleMoelisUpload(this.files[0])">
         📊 Drop Moelis Excel here or click to browse
-        <div class="progress-bar"><div class="progress-fill" id="moelis-progress"></div></div>
       </div>
       <div id="moelis-status" class="status"></div>
     </div>
 
     <div class="card">
-      <h3>Manual REIT Data Update</h3>
-      <p>Update a single REIT's data — useful after a company result or distribution announcement.</p>
+      <h3>Manual REIT Update</h3>
+      <p>Update a single REIT after a company result or distribution announcement.</p>
       <div class="form-grid">
         <div class="fg"><label>Ticker</label><input id="u-ticker" type="text" placeholder="GOZ" style="text-transform:uppercase"></div>
         <div class="fg"><label>NTA ($)</label><input id="u-nta" type="number" step="0.01" placeholder="3.10"></div>
@@ -132,13 +373,15 @@ td.r{text-align:right;font-family:'DM Mono',monospace;font-size:11px}
       <button class="btn btn-primary" onclick="updateREIT()">Update REIT</button>
       <div id="reit-update-status" class="status"></div>
     </div>
-    </div>
   </div>
 
   <!-- REIT MANAGER -->
   <div id="pg-reit-manager" class="page">
-    <div class="ph"><h1>REIT Manager</h1><p>View and edit all REIT data — NTA, DPS, yield triggers, classifications</p></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
+    <div class="page-header">
+      <h1>REIT Manager</h1>
+      <p>View and edit all Moelis REIT data — NTA, DPS, yield triggers, classifications</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
       <button class="btn btn-secondary" onclick="loadREITManager()">↻ Refresh</button>
       <button class="btn btn-primary" onclick="exportREITData()">↓ Export CSV</button>
     </div>
@@ -149,244 +392,263 @@ td.r{text-align:right;font-family:'DM Mono',monospace;font-size:11px}
         <th class="r">Gearing</th><th class="r">Yield Trig</th>
         <th class="r">Active</th><th>Actions</th>
       </tr></thead>
-      <tbody id="reit-mgr-tbody"><tr><td colspan="9" style="padding:16px;text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+      <tbody id="reit-mgr-tbody">
+        <tr><td colspan="9" style="padding:20px;text-align:center;color:var(--muted)">Loading...</td></tr>
+      </tbody>
     </table>
   </div>
 
   <!-- STOCK UNIVERSE -->
   <div id="pg-universe" class="page">
-    <div class="ph"><h1>Stock Universe</h1><p>All 500+ stocks · Activate/deactivate · Flag ETFs and unwanted stocks</p></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <input id="uni-search" type="text" placeholder="Search ticker or name..." style="padding:8px 12px;border:1px solid var(--rule);border-radius:3px;font-size:12px;width:200px;background:var(--paper)" oninput="filterUniverse()">
-      <select id="uni-sector" style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:var(--paper)" onchange="filterUniverse()">
+    <div class="page-header">
+      <h1>Stock Universe</h1>
+      <p>All active stocks · Activate or deactivate · Filter by sector</p>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+      <input id="uni-search" type="text" placeholder="Search ticker or name..."
+        style="padding:8px 12px;border:1px solid var(--rule);border-radius:3px;font-size:12px;width:200px;background:white"
+        oninput="filterUniverse()">
+      <select id="uni-sector"
+        style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white"
+        onchange="filterUniverse()">
         <option value="">All sectors</option>
         <option>Materials</option><option>Financials</option><option>Healthcare</option>
         <option>Technology</option><option>Consumer</option><option>Energy</option>
         <option>Industrials</option><option>Utilities</option><option>REIT</option>
       </select>
-      <select id="uni-status" style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:var(--paper)" onchange="filterUniverse()">
+      <select id="uni-status"
+        style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white"
+        onchange="filterUniverse()">
         <option value="">All</option>
         <option value="active">Active only</option>
         <option value="inactive">Inactive</option>
       </select>
-      <span id="uni-count" style="padding:8px;font-size:12px;color:var(--muted)"></span>
+      <span id="uni-count" style="font-size:12px;color:var(--muted)"></span>
     </div>
     <table>
       <thead><tr>
         <th>Ticker</th><th>Name</th><th>Sector</th><th>Universe</th>
-        <th class="r">Beta</th><th class="r">US Corr</th><th>Active</th><th>Actions</th>
+        <th class="r">Beta</th><th>Active</th><th>Toggle</th>
       </tr></thead>
-      <tbody id="universe-tbody"><tr><td colspan="8" style="padding:16px;text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+      <tbody id="universe-tbody">
+        <tr><td colspan="7" style="padding:20px;text-align:center;color:var(--muted)">Loading...</td></tr>
+      </tbody>
     </table>
-  </div>
-
-    </div>
-
-
-    <div class="card">
-      <h3>Sync Positions</h3>
-      <p>Pull your current open positions from IG and sync them to the real portfolio. Also updates live prices for all stocks.</p>
-    </div>
-
-    <div class="card">
-      <h3>Account Info</h3>
-    </div>
-
-    <div class="card">
-      <h3>Demo vs Live</h3>
-      <p style="margin-top:4px;font-size:11px;color:var(--muted)">To switch modes, change the <code>IG_DEMO</code> environment variable in Netlify. Set to <code>true</code> for demo, <code>false</code> for live.</p>
-    </div>
   </div>
 
   <!-- BOOTSTRAP HISTORY -->
   <div id="pg-bootstrap" class="page">
-    <div class="ph"><h1>Bootstrap Price History</h1><p>One-time load of 12 months historical data — required for accurate strategy signals</p></div>
+    <div class="page-header">
+      <h1>Bootstrap Price History</h1>
+      <p>One-time load of 2 years historical OHLCV data via EODHD — required for accurate strategy signals</p>
+    </div>
 
-    <div class="card" style="border-left:3px solid var(--amber)">
-      <h3>⚠️ Important — run this once</h3>
-      <p>The strategy engine needs at least 200 days of price history to calculate RSI, moving averages, Bollinger Bands and volume ratios accurately. Without this, signals are based on 1 day of data and are unreliable.</p>
-      <p style="margin-top:6px">This function pulls 12 months of daily OHLCV from EODHD (Yahoo Finance as fallback) for all active stocks. Takes 5-10 minutes. Run it once then never again — daily prices keep the database current.</p>
+    <div class="card-warn">
+      <strong>⚠️ Run this once</strong>
+      The strategy engine needs 200+ days of price history for RSI, moving averages, Bollinger Bands and volume ratios to be accurate. Without this, all signals are based on 1 day of data and are meaningless.
     </div>
 
     <div class="card">
-      <h3>Load Full History</h3>
-      <div class="form-grid">
-        <div class="fg"><label>Universe</label>
+      <h3>Load Full History (EODHD)</h3>
+      <p>Pulls 2 years of daily OHLCV for all active stocks. Runs as a background function — returns immediately but continues processing in the background. Check Netlify function logs for progress.</p>
+      <div class="form-grid" style="max-width:400px">
+        <div class="fg">
+          <label>Universe</label>
           <select id="boot-universe">
-            <option value="">All stocks (500+ ASX + 28 REITs)</option>
-            <option value="REIT">REITs only (28 stocks — faster)</option>
+            <option value="">All stocks (500+ ASX + REITs)</option>
+            <option value="REIT">REITs only (28 stocks)</option>
             <option value="ASX500">ASX500 only</option>
           </select>
         </div>
       </div>
       <button class="btn btn-primary" onclick="runBootstrap()">Load Historical Data</button>
-      <p style="font-size:11px;color:var(--muted);margin-top:8px">This runs in the background. Check Netlify function logs for progress. Your dashboard will have accurate data after it completes.</p>
       <div id="bootstrap-status" class="status"></div>
     </div>
 
     <div class="card">
       <h3>Load Single Stock</h3>
-      <p>Load history for one specific stock.</p>
-      <div style="display:flex;gap:8px">
-        <input id="boot-ticker" type="text" placeholder="BHP" style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;width:120px;text-transform:uppercase;background:var(--paper)">
-        <button class="btn btn-secondary" onclick="bootSingle()">Load</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="boot-ticker" type="text" placeholder="BHP"
+          style="padding:8px 12px;border:1px solid var(--rule);border-radius:3px;font-size:13px;font-family:'DM Mono',monospace;width:120px;text-transform:uppercase;background:white">
+        <button class="btn btn-secondary" onclick="bootSingle()">Load History</button>
       </div>
       <div id="boot-single-status" class="status"></div>
     </div>
   </div>
 
-  <!-- RUN MORNING SCAN -->
+  <!-- RUN SCANS -->
   <div id="pg-run-scan" class="page">
-    <div class="ph"><h1>Run Morning Scan</h1><p>Trigger manually — normally runs automatically at 8:00am AEST</p></div>
+    <div class="page-header">
+      <h1>Run Scans</h1>
+      <p>Trigger functions manually — they also run automatically on schedule</p>
+    </div>
 
     <div class="card">
       <h3>Morning Scan</h3>
-      <p>Runs US overnight data, bond market, strategy engine across ASX500 + REITs, sends briefing email to James.storey@outlook.com.au.</p>
-      <p style="margin-top:6px;font-size:11px;color:var(--muted)">Note: Today's scan may have already run. Running again will create duplicate model trades for today. Use for testing only.</p>
-      <button class="btn btn-primary" onclick="runScan('morning-scan')">Run Morning Scan</button>
+      <p>Runs at 7:00am AEST automatically. Fetches US overnight data, runs strategy engine across ASX500 + REITs, sends briefing email to James.storey@outlook.com.au</p>
+      <button class="btn btn-primary" onclick="runScan('morning-scan', 'scan-status')">▶ Run Morning Scan</button>
       <div id="scan-status" class="status"></div>
     </div>
 
     <div class="card">
       <h3>Fetch Prices</h3>
-      <p>Fetches closing prices for all active stocks. Normally runs at 4:00pm AEST.</p>
-      <button class="btn btn-secondary" onclick="runScan('fetch-prices')">Run Fetch Prices</button>
+      <p>Runs at 4:00pm AEST automatically. Fetches closing prices for all active stocks via EODHD.</p>
+      <button class="btn btn-secondary" onclick="runScan('fetch-prices', 'prices-status')">▶ Fetch Prices</button>
       <div id="prices-status" class="status"></div>
     </div>
 
     <div class="card">
       <h3>Yield Triggers</h3>
-      <p>Checks REIT yields against triggers. Normally runs at 4:05pm AEST.</p>
-      <button class="btn btn-secondary" onclick="runScan('yield-triggers')">Run Yield Triggers</button>
+      <p>Runs at 4:05pm AEST automatically. Checks REIT yields against triggers and sends alerts.</p>
+      <button class="btn btn-secondary" onclick="runScan('yield-triggers', 'triggers-status')">▶ Run Yield Triggers</button>
       <div id="triggers-status" class="status"></div>
     </div>
   </div>
 
   <!-- CONVICTION SIZING -->
   <div id="pg-conviction" class="page">
-    <div class="ph"><h1>Conviction Sizing</h1><p>Position sizes per conviction level · Applied to all future model trades</p></div>
-    <div id="conviction-content"><div style="padding:20px;color:var(--muted)">Loading settings...</div></div>
+    <div class="page-header">
+      <h1>Conviction Sizing</h1>
+      <p>Position sizes per conviction level — applied to all future model trades</p>
+    </div>
+    <div id="conviction-content">
+      <div style="padding:20px;color:var(--muted);font-size:13px">Loading settings...</div>
+    </div>
   </div>
 
   <!-- MONTHLY ROUTINE -->
   <div id="pg-monthly" class="page">
-    <div class="ph"><h1>Monthly Routine</h1><p>Checklist for monthly data maintenance</p></div>
-
-    <div class="card">
-      <h3>Monthly checklist</h3>
-      <div id="monthly-checklist" style="font-size:13px;line-height:2">
-        <div>☐ Upload new ASX500 CSV from asx.com.au</div>
-        <div>☐ Upload updated Moelis workings Excel</div>
-        <div>☐ Update NTA for REITs that have reported</div>
-        <div>☐ Log any distributions received this month</div>
-        <div>☐ Review model portfolio P&L — check win rate</div>
-        <div>☐ Review which strategy layers are firing most</div>
-        <div>☐ Adjust conviction sizing if needed</div>
-        <div>☐ Check for new REITs in Moelis coverage</div>
-      </div>
+    <div class="page-header">
+      <h1>Monthly Routine</h1>
+      <p>Data maintenance checklist — run at the start of each month</p>
     </div>
 
     <div class="card">
-      <h3>Log distribution received</h3>
+      <h3>Checklist</h3>
+      <div style="font-size:13px;line-height:2.2;color:var(--ink)">
+        <div>☐ &nbsp;Upload new ASX500 CSV from asx.com.au</div>
+        <div>☐ &nbsp;Upload updated Moelis workings Excel</div>
+        <div>☐ &nbsp;Update NTA for REITs that have reported</div>
+        <div>☐ &nbsp;Log any distributions received this month</div>
+        <div>☐ &nbsp;Review model portfolio P&amp;L — check win rate</div>
+        <div>☐ &nbsp;Review which strategy layers are firing most</div>
+        <div>☐ &nbsp;Adjust conviction sizing if needed</div>
+        <div>☐ &nbsp;Check for new REITs entering Moelis coverage</div>
+      </div>
+    </div>
+
+    <div class="section-label">Log Distribution</div>
+    <div class="card">
+      <h3>Record distribution received</h3>
       <div class="form-grid">
         <div class="fg"><label>Ticker</label><input id="dist-ticker" type="text" placeholder="HDN" style="text-transform:uppercase"></div>
         <div class="fg"><label>Ex-Date</label><input id="dist-exdate" type="date"></div>
         <div class="fg"><label>Pay Date</label><input id="dist-paydate" type="date"></div>
         <div class="fg"><label>$/unit</label><input id="dist-amount" type="number" step="0.0001" placeholder="0.0215"></div>
         <div class="fg"><label>Units held</label><input id="dist-units" type="number" placeholder="5000"></div>
-        <div class="fg"><label>Notes</label><input id="dist-notes" type="text" placeholder="Q3 FY26 distribution"></div>
+        <div class="fg"><label>Notes</label><input id="dist-notes" type="text" placeholder="Q3 FY26"></div>
       </div>
-      <button class="btn btn-primary" onclick="logDistribution()">Log distribution</button>
+      <button class="btn btn-primary" onclick="logDistribution()">Save Distribution</button>
       <div id="dist-status" class="status"></div>
     </div>
   </div>
 
-</div>
+</div><!-- /main -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
+'use strict';
+
 let db = null;
+let allStocks = [];
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
     const res = await fetch('/.netlify/functions/env');
+    if (!res.ok) throw new Error('env function returned ' + res.status);
     const env = await res.json();
+    if (!env.SUPABASE_URL || !env.SUPABASE_ANON) throw new Error('Missing Supabase credentials');
     db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
-    wireNav();
-    } catch(e) {
-    console.error('Init failed:', e);
+    console.log('DB connected');
+  } catch(e) {
+    console.error('Init failed:', e.message);
   }
+  wireNav();
 }
 
+// ── NAVIGATION ────────────────────────────────────────────────────────────────
 function wireNav() {
-  document.querySelectorAll('.nav a[data-page]').forEach(a => {
+  document.querySelectorAll('.nav-item[data-page]').forEach(a => {
     a.addEventListener('click', function(e) {
       e.preventDefault();
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav a').forEach(n => n.classList.remove('active'));
-      const pg = document.getElementById('pg-' + this.dataset.page);
-      if (pg) pg.classList.add('active');
-      this.classList.add('active');
-      const fns = {
-        'reit-manager': loadREITManager,
-        'universe':     loadUniverse,
-        'conviction':   loadConviction,
-          };
-      fns[this.dataset.page]?.();
+      navigateTo(this.dataset.page, this);
     });
   });
 }
 
-function showStatus(id, msg, type='ok') {
+function navigateTo(page, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const pg = document.getElementById('pg-' + page);
+  if (pg) pg.classList.add('active');
+  if (el) el.classList.add('active');
+  const loaders = {
+    'reit-manager': loadREITManager,
+    'universe':     loadUniverse,
+    'conviction':   loadConviction
+  };
+  if (loaders[page]) loaders[page]();
+}
+
+// ── STATUS ────────────────────────────────────────────────────────────────────
+function showStatus(id, msg, type) {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = msg;
-  el.className = `status ${type}`;
-  el.style.display = 'block';
+  el.className = 'status ' + type;
 }
 
 // ── REIT MANAGER ──────────────────────────────────────────────────────────────
 async function loadREITManager() {
   if (!db) return;
-  const { data } = await db.from('stocks').select('*').eq('universe','REIT').order('is_manager').order('is_developer').order('ticker');
+  const { data, error } = await db.from('stocks').select('*')
+    .eq('universe', 'REIT').order('is_manager').order('is_developer').order('ticker');
   const tbody = document.getElementById('reit-mgr-tbody');
-  tbody.innerHTML = '';
-  if (!data?.length) { tbody.innerHTML = '<tr><td colspan="9" style="padding:16px;text-align:center;color:var(--muted)">No REIT data</td></tr>'; return; }
-
-  data.forEach(s => {
+  if (error || !data?.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--muted)">No REIT data found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(s => {
     const type = s.is_manager ? 'mgr' : s.is_developer ? 'dev' : 'reit';
-    const typeLabel = s.is_manager ? 'Manager' : s.is_developer ? 'Developer' : 'REIT';
-    const tr = document.createElement('tr');
-    if (!s.active) tr.style.opacity = '0.4';
-    tr.innerHTML = `
+    const label = s.is_manager ? 'Manager' : s.is_developer ? 'Developer' : 'REIT';
+    return `<tr style="opacity:${s.active?1:0.45}">
       <td><span class="tkr">${s.ticker}</span></td>
-      <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</td>
-      <td><span class="badge b-${type}">${typeLabel}</span></td>
-      <td class="r">${s.nta?'$'+parseFloat(s.nta).toFixed(2):'--'}</td>
-      <td class="r">${s.dps_fy26?'$'+parseFloat(s.dps_fy26).toFixed(3):'--'}</td>
-      <td class="r">${s.gearing?(parseFloat(s.gearing)*100).toFixed(0)+'%':'--'}</td>
-      <td class="r">${s.yield_trigger?(parseFloat(s.yield_trigger)*100).toFixed(0)+'%':'--'}</td>
-      <td class="r" style="color:${s.active?'var(--green)':'var(--red)'}">${s.active?'✓':'✗'}</td>
-      <td>
-        <button class="btn btn-secondary" style="padding:3px 8px;font-size:10px" onclick="editREIT('${s.ticker}')">Edit</button>
-        <button class="btn ${s.active?'btn-danger':'btn-green'}" style="padding:3px 8px;font-size:10px;margin-left:4px" onclick="toggleActive('${s.ticker}',${s.active})">${s.active?'Deactivate':'Activate'}</button>
+      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||''}</td>
+      <td><span class="badge b-${type}">${label}</span></td>
+      <td class="r">${s.nta ? '$'+parseFloat(s.nta).toFixed(2) : '—'}</td>
+      <td class="r">${s.dps_fy26 ? '$'+parseFloat(s.dps_fy26).toFixed(3) : '—'}</td>
+      <td class="r">${s.gearing ? (parseFloat(s.gearing)*100).toFixed(0)+'%' : '—'}</td>
+      <td class="r">${s.yield_trigger ? (parseFloat(s.yield_trigger)*100).toFixed(0)+'%' : '—'}</td>
+      <td class="r" style="color:${s.active?'var(--green)':'var(--red)'}">${s.active ? '✓' : '✗'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-secondary" style="padding:3px 9px;font-size:10px" onclick="editREIT('${s.ticker}')">Edit</button>
+        <button class="btn ${s.active?'btn-danger':'btn-green'}" style="padding:3px 9px;font-size:10px;margin-left:4px" onclick="toggleActive('${s.ticker}',${s.active})">${s.active?'Deactivate':'Activate'}</button>
       </td>
-    `;
-    tbody.appendChild(tr);
-  });
+    </tr>`;
+  }).join('');
 }
 
-async function toggleActive(ticker, currentlyActive) {
+async function toggleActive(ticker, current) {
   if (!db) return;
-  await db.from('stocks').update({ active: !currentlyActive }).eq('ticker', ticker);
+  await db.from('stocks').update({ active: !current }).eq('ticker', ticker);
   loadREITManager();
 }
 
 function editREIT(ticker) {
   document.getElementById('u-ticker').value = ticker;
-  document.querySelector('.nav a[data-page="upload"]').click();
-  setTimeout(() => document.getElementById('u-ticker').focus(), 100);
+  navigateTo('upload', document.querySelector('.nav-item[data-page="upload"]'));
+  setTimeout(() => document.getElementById('u-nta').focus(), 200);
 }
 
 async function updateREIT() {
@@ -396,25 +658,31 @@ async function updateREIT() {
   const dps     = document.getElementById('u-dps').value;
   const gearing = document.getElementById('u-gearing').value;
   const trigger = document.getElementById('u-trigger').value;
-  if (!ticker) { showStatus('reit-update-status','Please enter a ticker','err'); return; }
-
-  const updates = {};
+  if (!ticker) { showStatus('reit-update-status', 'Please enter a ticker', 'err'); return; }
+  const updates = { updated_at: new Date().toISOString() };
   if (nta)     updates.nta           = parseFloat(nta);
   if (dps)     updates.dps_fy26      = parseFloat(dps);
   if (gearing) updates.gearing       = parseFloat(gearing);
   if (trigger) updates.yield_trigger = parseFloat(trigger);
-  updates.updated_at = new Date().toISOString();
-
   const { error } = await db.from('stocks').update(updates).eq('ticker', ticker);
-  if (error) { showStatus('reit-update-status', `Error: ${error.message}`, 'err'); return; }
-  showStatus('reit-update-status', `✓ ${ticker} updated successfully`, 'ok');
+  if (error) { showStatus('reit-update-status', 'Error: ' + error.message, 'err'); return; }
+  showStatus('reit-update-status', '✓ ' + ticker + ' updated', 'ok');
   ['u-ticker','u-nta','u-dps','u-gearing','u-trigger'].forEach(id => document.getElementById(id).value = '');
 }
 
+async function exportREITData() {
+  if (!db) return;
+  const { data } = await db.from('stocks').select('*').eq('universe','REIT').order('ticker');
+  if (!data?.length) return;
+  const h = ['ticker','name','is_reit','is_manager','is_developer','nta','dps_fy26','gearing','yield_trigger','active'];
+  const csv = [h.join(','), ...data.map(r => h.map(k => r[k]??'').join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'reit-universe-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+}
 
-
-// ── UNIVERSE MANAGER ──────────────────────────────────────────────────────────
-let allStocks = [];
+// ── STOCK UNIVERSE ────────────────────────────────────────────────────────────
 async function loadUniverse() {
   if (!db) return;
   const { data } = await db.from('stocks').select('*').order('ticker');
@@ -426,91 +694,77 @@ function filterUniverse() {
   const search = document.getElementById('uni-search').value.toLowerCase();
   const sector = document.getElementById('uni-sector').value;
   const status = document.getElementById('uni-status').value;
-  let filtered = allStocks.filter(s => {
+  const filtered = allStocks.filter(s => {
     if (search && !s.ticker.toLowerCase().includes(search) && !s.name?.toLowerCase().includes(search)) return false;
     if (sector && s.sector !== sector) return false;
     if (status === 'active'   && !s.active) return false;
-    if (status === 'inactive' && s.active)  return false;
+    if (status === 'inactive' &&  s.active) return false;
     return true;
   });
   renderUniverse(filtered);
 }
 
 function renderUniverse(stocks) {
-  document.getElementById('uni-count').textContent = `${stocks.length} stocks`;
+  document.getElementById('uni-count').textContent = stocks.length + ' stocks';
   const tbody = document.getElementById('universe-tbody');
-  tbody.innerHTML = '';
-  stocks.slice(0, 200).forEach(s => {
-    const tr = document.createElement('tr');
-    if (!s.active) tr.style.opacity = '0.4';
-    tr.innerHTML = `
+  const visible = stocks.slice(0, 200);
+  tbody.innerHTML = visible.map(s => `
+    <tr style="opacity:${s.active?1:0.45}">
       <td><span class="tkr">${s.ticker}</span></td>
       <td style="font-size:11px">${s.name||''}</td>
       <td style="font-size:11px;color:var(--muted)">${s.sector||''}</td>
-      <td style="font-size:10px;font-family:'DM Mono',monospace">${s.universe||''}</td>
-      <td class="r">${s.beta?parseFloat(s.beta).toFixed(2):'--'}</td>
-      <td class="r">${s.us_corr?parseFloat(s.us_corr).toFixed(2):'--'}</td>
-      <td style="color:${s.active?'var(--green)':'var(--red)'}">${s.active?'Active':'Inactive'}</td>
-      <td><button class="btn ${s.active?'btn-danger':'btn-green'}" style="padding:2px 8px;font-size:10px" onclick="toggleStockActive('${s.ticker}',${s.active})">${s.active?'Off':'On'}</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-  if (stocks.length > 200) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="8" style="padding:10px;text-align:center;color:var(--muted);font-size:11px">Showing 200 of ${stocks.length} — use search to filter</td>`;
-    tbody.appendChild(tr);
-  }
+      <td style="font-family:'DM Mono',monospace;font-size:10px">${s.universe||''}</td>
+      <td class="r">${s.beta ? parseFloat(s.beta).toFixed(2) : '—'}</td>
+      <td style="color:${s.active?'var(--green)':'var(--red)'}">${s.active ? 'Active' : 'Inactive'}</td>
+      <td><button class="btn ${s.active?'btn-danger':'btn-green'}" style="padding:3px 9px;font-size:10px" onclick="toggleStockActive('${s.ticker}',${s.active})">${s.active?'Off':'On'}</button></td>
+    </tr>`).join('') + (stocks.length > 200 ? `<tr><td colspan="7" style="padding:10px;text-align:center;color:var(--muted);font-size:11px">Showing 200 of ${stocks.length} — use search to filter</td></tr>` : '');
 }
 
-async function toggleStockActive(ticker, currently) {
+async function toggleStockActive(ticker, current) {
   if (!db) return;
-  await db.from('stocks').update({ active: !currently }).eq('ticker', ticker);
+  await db.from('stocks').update({ active: !current }).eq('ticker', ticker);
   loadUniverse();
 }
-
-
 
 // ── BOOTSTRAP ─────────────────────────────────────────────────────────────────
 async function runBootstrap() {
   const universe = document.getElementById('boot-universe').value;
-  const url      = `/.netlify/functions/bootstrap-history${universe ? '?universe='+universe : ''}`;
-  showStatus('bootstrap-status',
-    'Bootstrap started — this runs in the background and takes 30-45 minutes. You can close this page. Check Netlify function logs for progress.', 'info');
+  const url = '/.netlify/functions/bootstrap-history-background' + (universe ? '?universe=' + universe : '');
+  showStatus('bootstrap-status', 'Bootstrap started — runs in background. Check Netlify function logs for progress. Takes 5-15 minutes for full universe.', 'info');
   try {
-    fetch(url).then(r => r.json()).then(data => {
-      if (data.error) { showStatus('bootstrap-status', `Error: ${data.error}`, 'err'); return; }
-      showStatus('bootstrap-status', `✓ ${data.message}`, 'ok');
-    });
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.error) { showStatus('bootstrap-status', 'Error: ' + data.error, 'err'); return; }
+    showStatus('bootstrap-status', '✓ ' + (data.message || 'Bootstrap running in background'), 'ok');
   } catch(e) {
-    showStatus('bootstrap-status', `Error: ${e.message}`, 'err');
+    showStatus('bootstrap-status', 'Started — function running in background (browser timeout is normal)', 'info');
   }
 }
 
 async function bootSingle() {
   const ticker = document.getElementById('boot-ticker').value.toUpperCase().trim();
   if (!ticker) return;
-  showStatus('boot-single-status', `Loading history for ${ticker}...`, 'info');
+  showStatus('boot-single-status', 'Loading history for ' + ticker + '...', 'info');
   try {
-    const res  = await fetch(`/.netlify/functions/bootstrap-history?ticker=${ticker}`);
+    const res  = await fetch('/.netlify/functions/bootstrap-history-background?ticker=' + ticker);
     const data = await res.json();
-    if (data.error) { showStatus('boot-single-status', `Error: ${data.error}`, 'err'); return; }
-    showStatus('boot-single-status', `✓ ${data.message}`, 'ok');
+    if (data.error) { showStatus('boot-single-status', 'Error: ' + data.error, 'err'); return; }
+    showStatus('boot-single-status', '✓ ' + (data.message || ticker + ' loaded'), 'ok');
   } catch(e) {
-    showStatus('boot-single-status', `Error: ${e.message}`, 'err');
+    showStatus('boot-single-status', 'Error: ' + e.message, 'err');
   }
 }
 
 // ── RUN SCANS ─────────────────────────────────────────────────────────────────
-async function runScan(fn) {
-  const statusId = fn === 'morning-scan' ? 'scan-status' : fn === 'fetch-prices' ? 'prices-status' : 'triggers-status';
-  showStatus(statusId, `Running ${fn}...`, 'info');
+async function runScan(fn, statusId) {
+  showStatus(statusId, 'Running ' + fn + '...', 'info');
   try {
-    const res  = await fetch(`/.netlify/functions/${fn}`);
+    const res  = await fetch('/.netlify/functions/' + fn);
     const data = await res.json();
-    if (data.error) { showStatus(statusId, `Error: ${data.error}`, 'err'); return; }
-    showStatus(statusId, `✓ Complete — ${JSON.stringify(data)}`, 'ok');
+    if (data.error) { showStatus(statusId, 'Error: ' + data.error, 'err'); return; }
+    showStatus(statusId, '✓ Complete — ' + JSON.stringify(data), 'ok');
   } catch(e) {
-    showStatus(statusId, `Error: ${e.message}`, 'err');
+    showStatus(statusId, 'Error: ' + e.message, 'err');
   }
 }
 
@@ -519,24 +773,19 @@ async function loadConviction() {
   if (!db) return;
   const { data } = await db.from('settings').select('*').order('category').order('key');
   const el = document.getElementById('conviction-content');
-  if (!data?.length) { el.innerHTML = '<div style="padding:20px;color:var(--muted)">No settings</div>'; return; }
-
+  if (!data?.length) { el.innerHTML = '<div style="padding:16px;color:var(--muted)">No settings found</div>'; return; }
   const cats = {};
-  data.forEach(s => { if(!cats[s.category]) cats[s.category]=[]; cats[s.category].push(s); });
-
-  let html = '';
-  Object.entries(cats).forEach(([cat, items]) => {
-    html += `<div class="sl" style="text-transform:capitalize">${cat}</div><div class="form-grid">`;
-    items.forEach(s => {
-      html += `<div class="fg"><label>${s.label||s.key}</label>
-        <input type="text" value="${s.value}" 
-          onchange="saveSetting('${s.key}',this.value)" 
-          onblur="saveSetting('${s.key}',this.value)">
-      </div>`;
-    });
-    html += '</div>';
-  });
-  el.innerHTML = html;
+  data.forEach(s => { if (!cats[s.category]) cats[s.category] = []; cats[s.category].push(s); });
+  el.innerHTML = Object.entries(cats).map(([cat, items]) => `
+    <div class="section-label" style="text-transform:capitalize">${cat}</div>
+    <div class="card">
+      <div class="form-grid">${items.map(s => `
+        <div class="fg">
+          <label>${s.label || s.key}</label>
+          <input type="text" value="${s.value}" onchange="saveSetting('${s.key}', this.value)">
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
 }
 
 async function saveSetting(key, value) {
@@ -547,52 +796,42 @@ async function saveSetting(key, value) {
 // ── DISTRIBUTION ──────────────────────────────────────────────────────────────
 async function logDistribution() {
   if (!db) return;
-  const ticker = document.getElementById('dist-ticker').value.toUpperCase().trim();
-  const exdate = document.getElementById('dist-exdate').value;
-  const paydate= document.getElementById('dist-paydate').value;
-  const amount = parseFloat(document.getElementById('dist-amount').value);
-  const units  = parseFloat(document.getElementById('dist-units').value);
-  const notes  = document.getElementById('dist-notes').value;
-
-  if (!ticker||!exdate||!amount||!units) {
-    showStatus('dist-status','Please fill ticker, ex-date, amount and units','err');
+  const ticker  = document.getElementById('dist-ticker').value.toUpperCase().trim();
+  const exdate  = document.getElementById('dist-exdate').value;
+  const paydate = document.getElementById('dist-paydate').value;
+  const amount  = parseFloat(document.getElementById('dist-amount').value);
+  const units   = parseFloat(document.getElementById('dist-units').value);
+  const notes   = document.getElementById('dist-notes').value;
+  if (!ticker || !exdate || !amount || !units) {
+    showStatus('dist-status', 'Please fill ticker, ex-date, amount and units', 'err');
     return;
   }
-
   const { error } = await db.from('distributions').insert({
-    ticker, ex_date: exdate, pay_date: paydate||null,
+    ticker, ex_date: exdate, pay_date: paydate || null,
     amount_per_unit: amount, units_held: units,
-    total_received: parseFloat((amount*units).toFixed(2)), notes
+    total_received: parseFloat((amount * units).toFixed(2)), notes
   });
-
-  if (error) { showStatus('dist-status',`Error: ${error.message}`,'err'); return; }
-  showStatus('dist-status',`✓ ${ticker} distribution logged — $${(amount*units).toFixed(2)} total`,'ok');
+  if (error) { showStatus('dist-status', 'Error: ' + error.message, 'err'); return; }
+  showStatus('dist-status', '✓ ' + ticker + ' distribution logged — $' + (amount * units).toFixed(2) + ' total', 'ok');
   ['dist-ticker','dist-exdate','dist-paydate','dist-amount','dist-units','dist-notes'].forEach(id => {
     document.getElementById(id).value = '';
   });
 }
 
 // ── FILE UPLOADS ──────────────────────────────────────────────────────────────
-// These send files to a Netlify function for server-side processing
 async function handleASXUpload(file) {
-  if (!file) return;
-  showStatus('asx-status', `Processing ${file.name}...`, 'info');
-  document.getElementById('asx-progress').style.width = '30%';
-
+  if (!file || !db) return;
+  showStatus('asx-status', 'Processing ' + file.name + '...', 'info');
   try {
-    const text = await file.text();
-    const lines = text.split('\n').filter(l => l.trim() && !l.startsWith('ASX'));
+    const text  = await file.text();
+    const lines = text.split('\n').filter(l => l.trim());
     let updated = 0, added = 0;
-
     for (const line of lines.slice(1, 501)) {
-      const parts = line.split(',');
-      if (parts.length < 5) continue;
-      const ticker = parts[0]?.trim();
+      const parts  = line.split(',');
+      const ticker = parts[0]?.trim().replace(/"/g,'');
       const name   = parts[1]?.trim().replace(/"/g,'');
-      const sector = parts[2]?.trim();
-      if (!ticker || ticker.length > 10) continue;
-
-      const { data: existing } = await db.from('stocks').select('id').eq('ticker', ticker).single().catch(() => ({ data: null }));
+      if (!ticker || ticker.length > 10 || !ticker.match(/^[A-Z0-9]+$/)) continue;
+      const { data: existing } = await db.from('stocks').select('id').eq('ticker', ticker).maybeSingle();
       if (existing) {
         await db.from('stocks').update({ name, active: true }).eq('ticker', ticker);
         updated++;
@@ -601,32 +840,15 @@ async function handleASXUpload(file) {
         added++;
       }
     }
-
-    document.getElementById('asx-progress').style.width = '100%';
-    showStatus('asx-status', `✓ Done — ${updated} updated, ${added} new stocks added`, 'ok');
+    showStatus('asx-status', '✓ Done — ' + updated + ' updated, ' + added + ' new stocks added', 'ok');
   } catch(e) {
-    showStatus('asx-status', `Error: ${e.message}`, 'err');
+    showStatus('asx-status', 'Error: ' + e.message, 'err');
   }
 }
 
-async function handleMoelisUpload(file) {
+function handleMoelisUpload(file) {
   if (!file) return;
-  showStatus('moelis-status', `${file.name} uploaded. To process this file, use the Supabase SQL Editor with the moelis_patch_v2.sql generated by Claude. Upload the Excel to Claude and it will generate the SQL automatically.`, 'info');
-  // Full Excel parsing requires server-side — we handle via Claude + SQL workflow
-}
-
-// ── EXPORT ────────────────────────────────────────────────────────────────────
-async function exportREITData() {
-  if (!db) return;
-  const { data } = await db.from('stocks').select('*').eq('universe','REIT').order('ticker');
-  if (!data?.length) return;
-  const headers = ['ticker','name','is_reit','is_manager','is_developer','nta','dps_fy26','gearing','yield_trigger','active'];
-  const csv = [headers.join(','), ...data.map(r => headers.map(h => r[h]??'').join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `reit-universe-${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
+  showStatus('moelis-status', file.name + ' received. Upload this file to Claude and it will generate the SQL patch automatically. Then run it in Supabase SQL Editor.', 'info');
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
