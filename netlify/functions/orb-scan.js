@@ -248,7 +248,7 @@ ${watching.length > 0 ? `
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 exports.handler = schedule('30 0 * * 1-5', async () => {
   const db   = getSupabase();
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date(Date.now() + 10*60*60*1000).toISOString().split('T')[0]; // AEST
   const dateStr = new Date().toLocaleDateString('en-AU', {
     weekday: 'short', day: 'numeric', month: 'short'
   });

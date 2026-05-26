@@ -68,7 +68,7 @@ function getDB() {
 async function fetchEODHDIndicators(ticker, preloadedPrices=null) {
   const db = getDB();
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date(Date.now() + 10*60*60*1000).toISOString().split('T')[0]; // AEST
 
     // 1. Check if fetch-indicators already ran today — use DB data if available
     const { data: existing } = await db.from('daily_analysis')

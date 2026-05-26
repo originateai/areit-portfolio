@@ -9,7 +9,7 @@ const {
   getSupabase, fetchYahoo, fetchFRED, sendEmail, loadSettings,
   BOND_YIELD, VIX_TRIGGER
 } = require('./_shared.js');
-const { analyseStock }   = require('./strategy-engine.js');
+const { analyseStock, scoreStock, getPositionSize } = require('./strategy-engine.js');
 const { getBulkPrices }  = require('./eodhd-client.js');
 
 // ── FETCH HEADLINES ───────────────────────────────────────────────────────────
@@ -840,7 +840,7 @@ const run = async () => {
 
     const priceHistoryMap = {};
     const BATCH = 25; // 25 tickers per query
-    const cutoffDate = new Date(Date.now() - 260*24*60*60*1000).toISOString().split('T')[0];
+    const cutoffDate = new Date(Date.now() - 25*24*60*60*1000).toISOString().split('T')[0]; // 25 days for vol ratio only
 
     // Run batches in parallel groups of 4
     const batches = [];
@@ -868,26 +868,130 @@ const run = async () => {
     }
     console.log(`Price history loaded for ${Object.keys(priceHistoryMap).length} tickers`);
 
-    // 8b. Run analysis using pre-loaded price data
-    const equityResults = [];
-    for (const stock of stocksToAnalyse) {
-      const lp = livePrices[stock.ticker]?.close;
-      const r  = await analyseStock(stock, macro.score, settings, lp, priceHistoryMap[stock.ticker]);
-      if (r && r.total_score >= 5) equityResults.push(r);
-    }
+    // 8b. Read pre-calculated indicators from daily_analysis (populated by fetch-indicators at 6:50am)
+    const { data: todayIndicators } = await db.from('daily_analysis')
+      .select('*').eq('analysis_date', today).not('rsi14', 'is', null);
 
-    const reitResults = [];
-    for (const stock of (reitStocks||[]).filter(s => s.ticker !== 'GSBG37')) {
-      const lp = livePrices[stock.ticker]?.close;
-      const r  = await analyseStock(stock, macro.score, settings, lp, priceHistoryMap[stock.ticker]);
-      if (r) reitResults.push(r);
+    const analysisMap = {};
+    (todayIndicators||[]).forEach(a => { analysisMap[a.ticker] = a; });
+    console.log(`Loaded ${Object.keys(analysisMap).length} pre-calculated indicators`);
+
+    // Build stock metadata map
+    const stockMeta = {};
+    [...(equityStocks||[]), ...(reitStocks||[])].forEach(s => { stockMeta[s.ticker] = s; });
+
+    // Score all stocks in memory — no per-stock DB/API calls
+    const equityResults = [];
+    const reitResults   = [];
+
+    for (const ticker of Object.keys(analysisMap)) {
+      const a     = analysisMap[ticker];
+      const stock = stockMeta[ticker];
+      if (!stock) continue;
+
+      const lp    = livePrices[ticker];
+      const price = lp?.close || parseFloat(a.close) || 0;
+      if (!price) continue;
+
+      // Volume ratio from recent price history
+      const ph       = priceHistoryMap[ticker] || [];
+      const vols     = ph.map(r => parseInt(r.volume||0));
+      const todayV   = vols[vols.length-1] || 0;
+      const avgV     = vols.slice(-21,-1).reduce((s,v)=>s+v,0) / Math.max(vols.slice(-21,-1).length,1) || 1;
+      const volRatio = todayV / avgV;
+
+      // Current yield for REITs
+      const currentYield = stock.dps_fy26 && price ? stock.dps_fy26 / price : null;
+
+      // Candle detection from pre-calculated flags
+      const candles = {
+        bullish:  a.candle_hammer || a.candle_engulfing_bull || a.candle_morning_star || false,
+        hammer:   a.candle_hammer || false,
+        pattern:  a.candle_pattern || 'None',
+        bullishEngulfing: a.candle_engulfing_bull || false,
+      };
+
+      // Score using pre-calculated indicators from daily_analysis
+      const scoring = scoreStock(
+        {
+          price,
+          rsi14:       a.rsi14,
+          ma20:        a.ma20,
+          ma50:        a.ma50,
+          ma200:       a.ma200,
+          bb_lower:    a.bb_lower,
+          bb_upper:    a.bb_upper,
+          bb_position: a.bb_position,
+          macd:        a.macd,
+          macd_signal: a.macd_signal,
+          roc20:       a.roc20,
+          adx:         a.adx,
+          atr:         a.atr,
+          open:        price, high: price, low: price,
+        },
+        macro.score, stock, currentYield, volRatio, candles
+      );
+
+      // ATR-based dynamic stop
+      const stopPct   = parseFloat(settings.stop_loss_pct || '2.0') / 100;
+      const targetPct = parseFloat(settings.target_pct    || '5.0') / 100;
+      const atrStop   = a.atr && price ? parseFloat((a.atr * 1.5 / price).toFixed(6)) : null;
+      const dynStop   = atrStop && atrStop > 0.005 && atrStop < 0.08 ? atrStop : stopPct;
+
+      const posSize  = scoring.total >= 5 ? getPositionSize(scoring.conviction, settings, stock.is_reit) : 0;
+      const units    = posSize && price ? Math.floor(posSize / price) : 0;
+
+      const result = {
+        ticker,
+        name:              stock.name,
+        price,
+        total_score:       scoring.total,
+        signal:            scoring.signal,
+        conviction:        scoring.conviction,
+        signal_reasons:    scoring.reasons,
+        layer1_macro:      scoring.l1,
+        layer2_trend:      scoring.l2,
+        layer3_momentum:   scoring.l3,
+        layer4_reversion:  scoring.l4,
+        layer5_volume:     scoring.l5,
+        layer6_candle:     scoring.l6,
+        layer7_ml:         scoring.l7,
+        rsi14:             a.rsi14,
+        vol_ratio:         parseFloat(volRatio.toFixed(2)),
+        bb_position:       a.bb_position,
+        pct_from_ma20:     a.pct_from_ma20,
+        pct_from_ma200:    a.pct_from_ma200,
+        above_ma20:        a.above_ma20,
+        above_ma200:       a.above_ma200,
+        golden_cross:      a.golden_cross,
+        candle_pattern:    a.candle_pattern,
+        candle_hammer:     a.candle_hammer,
+        candle_engulfing_bull: a.candle_engulfing_bull,
+        candle_doji:       a.candle_doji,
+        dps_yield:         currentYield,
+        yield_trigger_fired: stock.is_reit && currentYield >= (stock.yield_trigger || 0.08),
+        stop_price:        price ? parseFloat((price * (1 - dynStop)).toFixed(3)) : null,
+        target_price:      price ? parseFloat((price * (1 + targetPct)).toFixed(3)) : null,
+        position_size:     posSize,
+        units,
+        ma20:  a.ma20, ma50: a.ma50, ma200: a.ma200,
+        nta:   stock.nta,   gearing:   stock.gearing,
+        wale:  stock.wale,  occupancy: stock.occupancy,
+        cap_rate: stock.cap_rate,
+      };
+
+      if (stock.is_reit || stock.is_manager) {
+        reitResults.push(result);
+      } else if (scoring.total >= 5) {
+        equityResults.push(result);
+      }
     }
 
     const topEquities  = equityResults.sort((a,b) => b.total_score - a.total_score).slice(0,6);
     const reitTriggers = reitResults.filter(r => r.yield_trigger_fired).map(r => r.ticker);
-    console.log(`Analysis complete — equities:${topEquities.length} reits:${reitResults.length} triggers:${reitTriggers.length}`);
+    console.log(`Analysis complete — equities:${equityResults.length} scored, top:${topEquities.length} reits:${reitResults.length} triggers:${reitTriggers.length}`);
 
-    // 8b. Breakout scanner — runs across all 400 equity stocks
+    // 8c. Breakout scanner
     const breakoutResults = await scanBreakouts(db, equityStocks||[], livePrices, macro.score);
     const topBreakouts = breakoutResults.slice(0, 6);
     console.log(`Breakouts found: ${breakoutResults.length}, top: ${topBreakouts.length}`);
