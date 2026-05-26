@@ -1768,7 +1768,7 @@ async function openSignalDrawer(ticker) {
     { l:'20 DMA',   v: analysis?.ma20  ? '$'+parseFloat(analysis.ma20).toFixed(3)  : '--',   c: 'var(--ink)', dark: false },
     { l:'50 DMA',   v: analysis?.ma50  ? '$'+parseFloat(analysis.ma50).toFixed(3)  : '--',   c: 'var(--ink)', dark: false },
     { l:'200 DMA',  v: analysis?.ma200 ? '$'+parseFloat(analysis.ma200).toFixed(3) : '--',   c: 'var(--ink)', dark: false },
-    { l:'BB Pos',   v: analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%':'--', c: 'var(--ink)', dark: false },
+    { l:'BB Pos',   v: analysis?.bb_position != null ? (()=>{ const v=parseFloat(analysis.bb_position)*100; return (v<-200?'<-200':v>200?'>200':v.toFixed(0))+'%'; })():'--', c: analysis?.bb_position<0?'var(--red)':analysis?.bb_position>1?'var(--green)':'var(--ink)', dark: false },
     { l:'Conviction',v: conv + ' ' + score+'/7',  c: convFg, dark: conv==='EXCEPTIONAL' },
     { l:'Candle',   v: candleTooltip(analysis?.candle_pattern) || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false, html: true },
     ...(stock?.is_reit ? [
@@ -1831,9 +1831,9 @@ async function openSignalDrawer(ticker) {
   const techItems = [
     ['RSI 14',        analysis?.rsi14 ? parseFloat(analysis.rsi14).toFixed(1) : '--',
       'Relative Strength Index. Under 30 = oversold (buy signal). Over 70 = overbought (sell signal). We look for RSI under 45.'],
-    ['ROC 20',        analysis?.roc20 ? (parseFloat(analysis.roc20)*100).toFixed(1)+'%' : '--',
+    ['ROC 20',        (()=>{ if(prices&&prices.length>=21){ const c=prices; const roc=(parseFloat(c[c.length-1].close)-parseFloat(c[c.length-21].close))/parseFloat(c[c.length-21].close); return (roc>=0?'+':'')+( roc*100).toFixed(1)+'%'; } return analysis?.roc20?(parseFloat(analysis.roc20)*100).toFixed(1)+'%':'--'; })(),
       'Rate of Change over 20 days. Positive = stock is accelerating upward. Negative = losing momentum.'],
-    ['BB Position',   analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%' : '--',
+    ['BB Position',   analysis?.bb_position != null ? (()=>{ const v=parseFloat(analysis.bb_position)*100; return (v<-200?'Below bands':v>200?'Above bands':v.toFixed(0)+'%'); })() : '--',
       'Bollinger Band position. 0% = at lower band (oversold). 100% = at upper band (overbought). We look for under 30%.'],
     ['% from 20DMA',  analysis?.pct_from_ma20 ? (parseFloat(analysis.pct_from_ma20)*100).toFixed(1)+'%' : '--',
       'How far price is from the 20-day moving average. Negative = below the MA, potential mean reversion opportunity.'],
