@@ -7,19 +7,3 @@
 
 [context.production]
   environment = { NODE_VERSION = "18" }
-
-[[scheduled_functions]]
-  name = "morning-scan"
-  cron = "0 21 * * 0-4"
-
-[[scheduled_functions]]
-  name = "orb-scan"
-  cron = "15 0 * * 1-5"
-
-[[scheduled_functions]]
-  name = "fetch-prices"
-  cron = "0 6 * * 1-5"
-
-[[scheduled_functions]]
-  name = "yield-triggers"
-  cron = "5 6 * * 1-5"
