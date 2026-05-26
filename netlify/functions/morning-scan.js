@@ -1,4 +1,3 @@
-const { schedule } = require('@netlify/functions');
 // netlify/functions/morning-scan.js
 // Scheduled: 7:00am AEST (9:00pm UTC prev day) Mon-Fri
 // 2-step architecture:
@@ -398,7 +397,7 @@ function buildEmail(data) {
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
-const handler = async () => {
+exports.handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   console.log(`Morning scan starting: ${today}`);
@@ -625,5 +624,3 @@ const handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
-
-exports.handler = schedule('0 21 * * 0-4', handler);

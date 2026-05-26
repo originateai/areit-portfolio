@@ -1,11 +1,10 @@
-const { schedule } = require('@netlify/functions');
 // netlify/functions/yield-triggers.js
 // Scheduled: 4:05pm AEST (6:05am UTC) Mon-Fri
 // Checks REIT yields against triggers and sends alert
 
 const { getSupabase, sendEmail, BOND_YIELD, YIELD_TARGET, emailStyles, pct, pctRaw, dollar, bps } = require('./_shared.js');
 
-const handler = async () => {
+exports.handler = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
 
@@ -91,5 +90,3 @@ const handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
-
-exports.handler = schedule('5 6 * * 1-5', handler);

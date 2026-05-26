@@ -1,4 +1,3 @@
-const { schedule } = require('@netlify/functions');
 // netlify/functions/orb-scan.js
 // Opening Range Breakout scan — runs at 10:15am AEST (12:15am UTC)
 // Scheduled: 0 0 * * 1-5 (12:15am UTC = 10:15am AEST)
@@ -246,7 +245,7 @@ ${watching.length > 0 ? `
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
-const handler = async () => {
+exports.handler = async () => {
   const db   = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   const dateStr = new Date().toLocaleDateString('en-AU', {
@@ -391,5 +390,3 @@ const handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
-
-exports.handler = schedule('15 0 * * 1-5', handler);
