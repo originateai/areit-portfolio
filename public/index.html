@@ -306,11 +306,37 @@ tfoot td.r{text-align:right}
   <!-- REIT TRADING SIGNALS -->
   <div id="pg-reit-trading" class="page">
     <div class="ph"><h1>REIT Strategy Signals</h1><p>All Moelis-covered pure landlords · 6-layer strategy + yield triggers · No managers, no developers</p></div>
-    <div class="sl">REIT universe — today's scores</div>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <select id="reit-sort" onchange="loadREITSignals()"
+        style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
+        <option value="yield">Yield (highest)</option>
+        <option value="discount">Discount to NTA (deepest)</option>
+        <option value="score">Strategy score</option>
+        <option value="ticker">Ticker A-Z</option>
+        <option value="sector">Sector</option>
+      </select>
+      <select id="reit-filter" onchange="loadREITSignals()"
+        style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
+        <option value="">All pure landlords</option>
+        <option value="Retail REIT">Retail</option>
+        <option value="Office REIT">Office</option>
+        <option value="Industrial REIT">Industrial</option>
+        <option value="Healthcare REIT">Healthcare</option>
+        <option value="Diversified REIT">Diversified</option>
+        <option value="Specialty REIT">Specialty</option>
+        <option value="Agricultural REIT">Agricultural</option>
+      </select>
+      <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px">
+        <input type="checkbox" id="reit-triggers-only" onchange="loadREITSignals()">
+        Triggers only (8%+)
+      </label>
+    </div>
+
     <table>
       <thead><tr>
         <th>Ticker</th><th>Name</th><th>Sector</th><th class="r">Price</th>
-        <th class="r">NTA</th><th class="r">Disc</th><th class="r">Yield</th>
+        <th class="r">NTA</th><th class="r">Disc NTA</th><th class="r">Yield</th>
         <th class="r">8% Target</th><th>Score</th><th>Status</th>
       </tr></thead>
       <tbody id="reit-signals-tbody"><tr><td colspan="10" class="empty">Loading REIT signals...</td></tr></tbody>
@@ -1025,40 +1051,82 @@ async function loadREIT() {
 // ── REIT SIGNALS ──────────────────────────────────────────────────────────────
 async function loadREITSignals() {
   if (!db) return;
-  const { data: stocks } = await db.from('stocks').select('*').eq('is_reit',true).eq('active',true).eq('is_manager',false);
-  const tickers = (stocks||[]).filter(s=>s.ticker!=='GSBG37').map(s=>s.ticker);
+
+  const sortBy      = document.getElementById('reit-sort')?.value     || 'yield';
+  const filterSect  = document.getElementById('reit-filter')?.value   || '';
+  const triggersOnly = document.getElementById('reit-triggers-only')?.checked || false;
+
+  const { data: stocks } = await db.from('stocks')
+    .select('*').eq('is_reit', true).eq('active', true)
+    .eq('is_manager', false).eq('is_developer', false);
+
+  const tickers = (stocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => s.ticker);
   const prices  = await getPrices(tickers);
 
-  const { data: analysis } = await db.from('daily_analysis').select('*').in('ticker',tickers).order('analysis_date',{ascending:false});
+  const { data: analysis } = await db.from('daily_analysis')
+    .select('*').in('ticker', tickers).order('analysis_date', { ascending: false });
   const analysisMap = {};
-  (analysis||[]).forEach(a => { if(!analysisMap[a.ticker]) analysisMap[a.ticker] = a; });
+  (analysis||[]).forEach(a => { if (!analysisMap[a.ticker]) analysisMap[a.ticker] = a; });
 
   const tbody = document.getElementById('reit-signals-tbody');
   tbody.innerHTML = '';
 
-  (stocks||[]).filter(s=>s.ticker!=='GSBG37').forEach(s => {
-    const pd  = prices[s.ticker];
-    const a   = analysisMap[s.ticker];
-    const p   = pd?.price;
-    const y   = s.dps_fy26 && p ? s.dps_fy26 / p : null;
-    const t8  = s.dps_fy26 ? s.dps_fy26 / 0.08 : null;
+  // Build enriched list
+  let reitList = (stocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => {
+    const pd   = prices[s.ticker];
+    const a    = analysisMap[s.ticker];
+    const p    = pd?.price;
+    const y    = s.dps_fy26 && p ? s.dps_fy26 / p : null;
+    const t8   = s.dps_fy26 ? s.dps_fy26 / 0.08 : null;
     const disc = s.nta && p ? (p - s.nta) / s.nta : null;
-    const fired = y && y >= (s.yield_trigger||0.08);
-    const close = !fired && t8 && p && (t8-p)/p > -0.12;
-    const tr  = document.createElement('tr');
-    if (fired) tr.style.background='#f0f8f0';
-    if (close) tr.style.background='#fffbf0';
+    const fired = y && y >= (s.yield_trigger || 0.08);
+    const close = !fired && t8 && p && (t8 - p) / p > -0.12;
+    return { s, a, p, y, t8, disc, fired, close };
+  });
+
+  // Filter
+  if (filterSect)    reitList = reitList.filter(r => r.s.sector === filterSect);
+  if (triggersOnly)  reitList = reitList.filter(r => r.fired);
+
+  // Sort
+  reitList.sort((a, b) => {
+    switch(sortBy) {
+      case 'yield':    return (b.y||0) - (a.y||0);
+      case 'discount': return (a.disc||0) - (b.disc||0); // most negative = biggest discount
+      case 'score':    return (b.a?.total_score||0) - (a.a?.total_score||0);
+      case 'ticker':   return a.s.ticker.localeCompare(b.s.ticker);
+      case 'sector':   return (a.s.sector||'').localeCompare(b.s.sector||'');
+      default:         return (b.y||0) - (a.y||0);
+    }
+  });
+
+  // Update count
+  const countEl = document.getElementById('reit-count');
+  if (countEl) countEl.textContent = `${reitList.length} REITs`;
+
+  reitList.forEach(({ s, a, p, y, t8, disc, fired, close }) => {
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.addEventListener('click', () => openSignalDrawer(s.ticker));
+    if (fired) tr.style.background = '#f0f8f0';
+    if (close) tr.style.background = '#fffbf0';
     tr.innerHTML = `
       <td><span class="tkr">${s.ticker}</span></td>
       <td style="font-size:11px">${s.name}</td>
-      <td style="font-size:10px;color:var(--muted)">${s.subsector||''}</td>
-      <td class="r">${p?f.$(p,3):'--'}</td>
-      <td class="r">${s.nta?f.$(s.nta,2):'--'}</td>
-      <td class="r" style="color:${disc==null?'var(--muted)':disc<0?'var(--teal)':'var(--red)'}">${disc!=null?(disc*100).toFixed(1)+'%':'--'}</td>
-      <td class="r" style="color:${y>=0.08?'var(--green)':y>=0.07?'var(--teal)':'var(--muted)'};font-weight:${y>=0.07?600:400}">${y?(y*100).toFixed(1)+'%':'--'}</td>
-      <td class="r">${t8?f.$(t8,3):'--'}</td>
-      <td>${a?`<span class="badge ${a.conviction==='EXCEPTIONAL'?'b-exc':a.conviction==='STRONG'?'b-str':'b-mod'}">${a.total_score||0}/6</span>${dots(a.total_score||0)}`:'<span style="font-size:10px;color:var(--muted)">Pending scan</span>'}</td>
-      <td><span style="font-size:11px;font-weight:${fired?600:400};color:${fired?'var(--green)':close?'var(--amber)':'var(--muted)'}">${fired?'🟢 BUY':close?'⚠️ Close':'Watching'}</span></td>
+      <td style="font-size:10px;color:var(--muted)">${s.sector||''}</td>
+      <td class="r">${p ? f.$(p,3) : '--'}</td>
+      <td class="r">${s.nta ? f.$(s.nta,2) : '--'}</td>
+      <td class="r" style="color:${disc==null?'var(--muted)':disc<-0.1?'var(--green)':disc<0?'var(--teal)':'var(--red)'}">
+        ${disc != null ? (disc*100).toFixed(1)+'%' : '--'}
+      </td>
+      <td class="r" style="color:${y>=0.08?'var(--green)':y>=0.07?'var(--teal)':'var(--muted)'};font-weight:${y>=0.07?600:400}">
+        ${y ? (y*100).toFixed(1)+'%' : '--'}
+      </td>
+      <td class="r">${t8 ? f.$(t8,3) : '--'}</td>
+      <td>${a ? `<span class="badge ${a.conviction==='EXCEPTIONAL'?'b-exc':a.conviction==='STRONG'?'b-str':'b-mod'}">${a.total_score||0}/6</span>${dots(a.total_score||0)}` : '<span style="font-size:10px;color:var(--muted)">Pending</span>'}</td>
+      <td><span style="font-size:11px;font-weight:${fired?600:400};color:${fired?'var(--green)':close?'var(--amber)':'var(--muted)'}">
+        ${fired ? '🟢 BUY' : close ? '⚠️ Close' : 'Watching'}
+      </span></td>
     `;
     tbody.appendChild(tr);
   });
