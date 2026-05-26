@@ -858,11 +858,14 @@ async function handleResearchUpload(file) {
   showStatus('research-status', `Reading ${file.name}...`, 'info');
   document.getElementById('research-preview').style.display = 'none';
 
-  const isPDF   = file.type === 'application/pdf';
-  const isExcel = file.name.match(/\.(xlsx|xls)$/i);
+  const isPDF   = file.type === 'application/pdf' || file.name.match(/\.pdf$/i);
+  const isExcel = file.name.match(/\.(xlsx|xls|xlsm|xlsb)$/i) ||
+                  file.type.includes('spreadsheet') ||
+                  file.type.includes('excel') ||
+                  file.type.includes('ms-excel');
 
   if (!isPDF && !isExcel) {
-    showStatus('research-status', 'Only PDF and Excel files are supported', 'err');
+    showStatus('research-status', `Unsupported file: ${file.name} (${file.type || 'unknown type'}). Use PDF or Excel.`, 'err');
     return;
   }
 
