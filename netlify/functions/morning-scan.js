@@ -716,14 +716,6 @@ const run = async () => {
   console.log(`Morning scan starting: ${today}`);
 
   try {
-    // Idempotency check — skip if already ran today
-    const { data: existing } = await db.from('morning_signals')
-      .select('signal_date').eq('signal_date', today).maybeSingle();
-    if (existing) {
-      console.log(`Morning scan already ran today (${today}) — skipping duplicate`);
-      return { statusCode: 200, body: JSON.stringify({ message: 'Already ran today', date: today }) };
-    }
-
     const settings = await loadSettings(db);
 
     // 1. US + Asian market data (Yahoo Finance — free, reliable for indices)
@@ -818,21 +810,19 @@ const run = async () => {
       .eq('is_manager', false)
       .eq('is_developer', false);
 
-    // 6. Pre-screen equities from DB — no API calls
+    // 6. Pre-screen equities from DB — cross-sectional ranking
     let candidateTickers = await preScreenFromDB(db, macro.score);
     let stocksToAnalyse;
 
     if (candidateTickers && candidateTickers.length > 0) {
-      // Use pre-screened candidates
+      // Use pre-screened top 40 by cross-sectional ranking
       const candSet = new Set(candidateTickers);
       stocksToAnalyse = (equityStocks||[]).filter(s => candSet.has(s.ticker));
-      console.log(`Using ${stocksToAnalyse.length} pre-screened candidates`);
+      console.log(`Using ${stocksToAnalyse.length} pre-screened candidates from cross-sectional ranking`);
     } else {
-      // Fallback: rotating batch of 50 from top 400
-      const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0)) / 86400000);
-      const start     = (dayOfYear * 50) % (equityStocks||[]).length;
-      stocksToAnalyse = [...(equityStocks||[]).slice(start), ...(equityStocks||[]).slice(0,start)].slice(0,50);
-      console.log(`Using rotating batch of ${stocksToAnalyse.length} stocks`);
+      // No pre-screen data yet — run full universe
+      stocksToAnalyse = equityStocks || [];
+      console.log(`Running full universe: ${stocksToAnalyse.length} stocks`);
     }
 
     // 7. Get bulk live prices from EODHD (one API call for all)
@@ -841,24 +831,38 @@ const run = async () => {
     const livePrices   = await getBulkPrices(allTickers);
     console.log(`Live prices fetched: ${Object.keys(livePrices).length}`);
 
-    // 8. Load price history in parallel batches of 10 tickers
+    // 8. Pre-load ALL price history in parallel batches — full universe
     const allAnalysisTickers = [
       ...stocksToAnalyse.map(s => s.ticker),
       ...(reitStocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => s.ticker)
     ];
 
     const priceHistoryMap = {};
-    const BATCH = 10;
+    const BATCH = 25; // 25 tickers per query
+    const cutoffDate = new Date(Date.now() - 260*24*60*60*1000).toISOString().split('T')[0];
+
+    // Run batches in parallel groups of 4
+    const batches = [];
     for (let i = 0; i < allAnalysisTickers.length; i += BATCH) {
-      const batch = allAnalysisTickers.slice(i, i + BATCH);
-      const { data } = await db.from('prices')
-        .select('ticker,market_date,open,high,low,close,adjusted_close,volume')
-        .in('ticker', batch)
-        .gte('market_date', new Date(Date.now() - 260*24*60*60*1000).toISOString().split('T')[0])
-        .order('market_date', { ascending: true });
-      (data||[]).forEach(p => {
-        if (!priceHistoryMap[p.ticker]) priceHistoryMap[p.ticker] = [];
-        priceHistoryMap[p.ticker].push(p);
+      batches.push(allAnalysisTickers.slice(i, i + BATCH));
+    }
+
+    // Process 4 batches at a time in parallel
+    const PARALLEL = 4;
+    for (let i = 0; i < batches.length; i += PARALLEL) {
+      const group = batches.slice(i, i + PARALLEL);
+      const results = await Promise.all(group.map(batch =>
+        db.from('prices')
+          .select('ticker,market_date,open,high,low,close,adjusted_close,volume')
+          .in('ticker', batch)
+          .gte('market_date', cutoffDate)
+          .order('market_date', { ascending: true })
+      ));
+      results.forEach(({ data }) => {
+        (data||[]).forEach(p => {
+          if (!priceHistoryMap[p.ticker]) priceHistoryMap[p.ticker] = [];
+          priceHistoryMap[p.ticker].push(p);
+        });
       });
     }
     console.log(`Price history loaded for ${Object.keys(priceHistoryMap).length} tickers`);
