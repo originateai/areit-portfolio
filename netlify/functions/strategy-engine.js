@@ -66,15 +66,19 @@ function getDB() {
 // ── CALCULATE INDICATORS FROM SUPABASE PRICES ────────────────────────────────
 // Uses adjusted_close for RSI (matches EODHD), raw close for SMAs
 // Consistent with training data — no EODHD API calls needed
-async function fetchEODHDIndicators(ticker) {
+async function fetchEODHDIndicators(ticker, preloadedPrices=null) {
   const db = getDB();
   try {
-    // Load 250 days of price history — enough for SMA200 + RSI warm-up
-    const { data: prices } = await db.from('prices')
-      .select('market_date,open,high,low,close,adjusted_close,volume')
-      .eq('ticker', ticker)
-      .order('market_date', { ascending: false })
-      .limit(260);
+    // Use pre-loaded prices if available, otherwise fetch from DB
+    let prices = preloadedPrices;
+    if (!prices || prices.length < 30) {
+      const { data } = await db.from('prices')
+        .select('market_date,open,high,low,close,adjusted_close,volume')
+        .eq('ticker', ticker)
+        .order('market_date', { ascending: false })
+        .limit(260);
+      prices = data;
+    }
 
     if (!prices || prices.length < 30) return null;
 
@@ -375,11 +379,11 @@ function getPositionSize(conviction, settings, isReit=false) {
 }
 
 // ── MAIN ANALYSE FUNCTION ─────────────────────────────────────────────────────
-async function analyseStock(stock, macroScore, settings, livePrice=null) {
+async function analyseStock(stock, macroScore, settings, livePrice=null, preloadedPrices=null) {
   const db = getDB();
   try {
     // 1. Get EODHD indicators (ground truth, adjusted prices)
-    const indicators = await fetchEODHDIndicators(stock.ticker);
+    const indicators = await fetchEODHDIndicators(stock.ticker, preloadedPrices);
     if (!indicators || !indicators.ma20) {
       console.log(`No EODHD indicators for ${stock.ticker}`);
       return null;

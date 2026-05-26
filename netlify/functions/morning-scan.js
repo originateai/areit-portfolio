@@ -823,21 +823,41 @@ const run = async () => {
     const livePrices   = await getBulkPrices(allTickers);
     console.log(`Live prices fetched: ${Object.keys(livePrices).length}`);
 
-    // 8. Run 6-layer analysis
+    // 8. Load price history in parallel batches of 10 tickers
+    const allAnalysisTickers = [
+      ...stocksToAnalyse.map(s => s.ticker),
+      ...(reitStocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => s.ticker)
+    ];
+
+    const priceHistoryMap = {};
+    const BATCH = 10;
+    for (let i = 0; i < allAnalysisTickers.length; i += BATCH) {
+      const batch = allAnalysisTickers.slice(i, i + BATCH);
+      const { data } = await db.from('prices')
+        .select('ticker,market_date,open,high,low,close,adjusted_close,volume')
+        .in('ticker', batch)
+        .gte('market_date', new Date(Date.now() - 260*24*60*60*1000).toISOString().split('T')[0])
+        .order('market_date', { ascending: true });
+      (data||[]).forEach(p => {
+        if (!priceHistoryMap[p.ticker]) priceHistoryMap[p.ticker] = [];
+        priceHistoryMap[p.ticker].push(p);
+      });
+    }
+    console.log(`Price history loaded for ${Object.keys(priceHistoryMap).length} tickers`);
+
+    // 8b. Run analysis using pre-loaded price data
     const equityResults = [];
     for (const stock of stocksToAnalyse) {
       const lp = livePrices[stock.ticker]?.close;
-      const r  = await analyseStock(stock, macro.score, settings, lp);
+      const r  = await analyseStock(stock, macro.score, settings, lp, priceHistoryMap[stock.ticker]);
       if (r && r.total_score >= 5) equityResults.push(r);
-      await new Promise(res => setTimeout(res, 80));
     }
 
     const reitResults = [];
     for (const stock of (reitStocks||[]).filter(s => s.ticker !== 'GSBG37')) {
       const lp = livePrices[stock.ticker]?.close;
-      const r  = await analyseStock(stock, macro.score, settings, lp);
+      const r  = await analyseStock(stock, macro.score, settings, lp, priceHistoryMap[stock.ticker]);
       if (r) reitResults.push(r);
-      await new Promise(res => setTimeout(res, 80));
     }
 
     const topEquities  = equityResults.sort((a,b) => b.total_score - a.total_score).slice(0,6);
