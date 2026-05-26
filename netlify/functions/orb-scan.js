@@ -200,8 +200,8 @@ function buildORBEmail(breakouts, watching, date) {
     </div>`;
 
   const subject = hasSignals
-    ? `⚡ ORB 10:15am — ${breakouts.filter(b=>b.direction==='LONG').length} breakout${breakouts.filter(b=>b.direction==='LONG').length!==1?'s':''}, ${breakouts.filter(b=>b.direction==='BREAKDOWN').length} breakdown${breakouts.filter(b=>b.direction==='BREAKDOWN').length!==1?'s':''} · ${date}`
-    : `○ ORB 10:15am — No clean breakouts · ${date}`;
+    ? `⚡ Breakout 10:30am — ${breakouts.filter(b=>b.direction==='LONG').length} breakout${breakouts.filter(b=>b.direction==='LONG').length!==1?'s':''}, ${breakouts.filter(b=>b.direction==='BREAKDOWN').length} breakdown${breakouts.filter(b=>b.direction==='BREAKDOWN').length!==1?'s':''} · ${date}`
+    : `○ Breakout 10:30am — No clean breakouts · ${date}`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -209,7 +209,7 @@ function buildORBEmail(breakouts, watching, date) {
 <body><div class="wrap">
 
 <div class="hdr">
-  <h1>⚡ Opening Range Breakout — 10:15am AEST</h1>
+  <h1>🚀 Breakout Confirmation — 10:30am AEST</h1>
   <p>${date} · ASX open 15-minute range analysis · Top ${breakouts.length + watching.length} overnight signals</p>
 </div>
 
@@ -217,7 +217,7 @@ ${hasSignals ? `
 <div class="sec">
   <div class="sec-title">Active breakouts — act now at market</div>
   ${breakouts.map(breakoutCard).join('')}
-  <p style="font-size:11px;color:#aaa;margin-top:8px">Enter at market · Stop below OR low (long) or above OR high (short) · Target 1-2× range width</p>
+  <p style="font-size:11px;color:#aaa;margin-top:8px">⏰ Enter at 10:45am if price still above breakout level · Stop below OR low · Target 1-2× range width</p>
 </div>` : `
 <div class="sec">
   <p style="color:#888;font-size:14px;padding:8px 0">No clean breakouts from the opening range yet. Top overnight signals are consolidating inside the range — wait for a clean break.</p>
@@ -238,7 +238,7 @@ ${watching.length > 0 ? `
 </div>` : ''}
 
 <div class="ftr">
-  Not financial advice · Intraday data: EODHD · Place trades via Stake · Log in dashboard
+  Not financial advice · Intraday data: EODHD · Place trades via CommSec · ⏰ Enter at 10:45am if breakout confirmed
 </div>
 </div></body></html>`;
 
@@ -246,7 +246,7 @@ ${watching.length > 0 ? `
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
-exports.handler = schedule('15 0 * * 1-5', async () => {
+exports.handler = schedule('30 0 * * 1-5', async () => {
   const db   = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   const dateStr = new Date().toLocaleDateString('en-AU', {
@@ -263,14 +263,25 @@ exports.handler = schedule('15 0 * * 1-5', async () => {
       .eq('signal_date', today)
       .single();
 
-    // Get all stocks that scored 4+ overnight
-    const { data: analysis } = await db
+    // Get overnight breakout candidates — both 52W breakouts and high-score mean reversion
+    const { data: breakoutCandidates } = await db
       .from('daily_analysis')
-      .select('ticker, total_score, conviction, signal_reasons')
+      .select('ticker, total_score, conviction, signal_reasons, signal')
       .eq('analysis_date', today)
-      .gte('total_score', 4)
+      .eq('signal', 'BREAKOUT')
       .order('total_score', { ascending: false })
-      .limit(30);
+      .limit(10);
+
+    const { data: mRevCandidates } = await db
+      .from('daily_analysis')
+      .select('ticker, total_score, conviction, signal_reasons, signal')
+      .eq('analysis_date', today)
+      .gte('total_score', 5)
+      .neq('signal', 'BREAKOUT')
+      .order('total_score', { ascending: false })
+      .limit(20);
+
+    const analysis = [...(breakoutCandidates||[]), ...(mRevCandidates||[])];
 
     if (!analysis?.length) {
       console.log('No overnight signals — skipping ORB scan');
