@@ -145,7 +145,7 @@ function calcIndicators(ticker, priceRows, today) {
 // ── MAIN ─────────────────────────────────────────────────────────────────────
 const run = async () => {
   const db    = getSupabase();
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date(Date.now() + 10*60*60*1000).toISOString().split('T')[0];
   const cutoff = new Date(Date.now() - 260*24*60*60*1000).toISOString().split('T')[0];
   console.log(`Fetch indicators starting: ${today}`);
 

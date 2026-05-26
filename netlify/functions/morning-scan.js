@@ -712,7 +712,8 @@ ${(reitHeadlines?.length || rateNews?.length)?`
 const { schedule } = require('@netlify/functions');
 const run = async () => {
   const db    = getSupabase();
-  const today = new Date().toISOString().split('T')[0];
+  // Use AEST (UTC+10) date — Netlify runs in UTC
+  const today = new Date(Date.now() + 10*60*60*1000).toISOString().split('T')[0];
   console.log(`Morning scan starting: ${today}`);
 
   try {

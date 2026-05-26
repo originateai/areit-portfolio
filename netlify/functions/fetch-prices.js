@@ -51,7 +51,7 @@ async function getBulkPrices(tickers) {
 
 exports.handler = schedule('0 6 * * 1-5', async () => {
   const db    = getSupabase();
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date(Date.now() + 10*60*60*1000).toISOString().split('T')[0]; // AEST
   console.log(`Fetch prices starting: ${today}`);
 
   try {
