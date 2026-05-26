@@ -247,9 +247,12 @@ async function scanBreakouts(db, stocks, livePrices, macroScore) {
           }
         }
 
-        // Minimum threshold — need price action + volume confirmation
+        // Backtest optimal: 52W high break + vol >2x = 42.3% WR, +1.38% exp
+        // Must have actual 52W break (not just near) AND volume >2x
+        const actual52wBreak = high52w && price > high52w;
+        if (!actual52wBreak) continue;       // require actual new high, not just near
+        if (volRatio < 2.0) continue;        // require vol >2x (backtest optimal)
         if (breakoutScore < 4) continue;
-        if (volRatio < 1.5) continue; // must have volume
 
         // Dynamic stop — just below breakout point (previous resistance)
         const stopPrice  = parseFloat((Math.max(recentHigh * 0.98, price * 0.97)).toFixed(3));
@@ -453,51 +456,51 @@ function buildEmail(data) {
     </td>
     <td style="width:6px"></td>`;
 
-  const tradeCard = t => `
+  const tradeCard = t => {
+    const exitDay = new Date();
+    exitDay.setDate(exitDay.getDate() + 3);
+    const exitDayStr = exitDay.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+    return `
     <div style="border:1px solid #e8e4dc;border-radius:6px;padding:14px;margin-bottom:10px;background:#fff">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
         <div>
           <span style="font-family:monospace;font-weight:700;font-size:17px;color:#1a5f6e">${t.ticker}</span>
-          <span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:monospace;
-            background:${t.conviction==='EXCEPTIONAL'?'#1a5f6e':t.conviction==='STRONG'?'#eef6ee':'#fdf8ee'};
-            color:${t.conviction==='EXCEPTIONAL'?'#fff':t.conviction==='STRONG'?'#2d5a2d':'#7a5500'}">
-            ${t.conviction} ${t.total_score}/6
-          </span>
+          <span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:monospace;background:${t.conviction==='EXCEPTIONAL'?'#1a5f6e':t.conviction==='STRONG'?'#eef6ee':'#fdf8ee'};color:${t.conviction==='EXCEPTIONAL'?'#fff':t.conviction==='STRONG'?'#2d5a2d':'#7a5500'}">${t.conviction} ${t.total_score}/7</span>
         </div>
         <span style="font-family:monospace;font-weight:600;font-size:17px">${fmt.$3(t.price)}</span>
       </div>
-      <div style="font-size:12px;color:#888;margin-bottom:8px">${t.name}</div>
+      <div style="font-size:12px;color:#888;margin-bottom:4px">${t.name}</div>
       <div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">${(t.signal_reasons||[]).slice(0,3).join(' · ')}</div>
-      <table style="width:100%;border-collapse:collapse">
+      <table style="width:100%;border-collapse:collapse;margin-bottom:10px">
         <tr>
           <td style="background:#fdf0f0;border-radius:4px;padding:8px;text-align:center;width:33%">
-            <div style="font-size:10px;color:#888;margin-bottom:2px">STOP</div>
-            <div style="font-family:monospace;font-weight:700;color:#8b2e2e">${fmt.$3(t.stop_price)}</div>
+            <div style="font-size:9px;color:#888;margin-bottom:2px;text-transform:uppercase">Stop Loss</div>
+            <div style="font-family:monospace;font-weight:700;color:#8b2e2e;font-size:15px">${fmt.$3(t.stop_price)}</div>
+            <div style="font-size:9px;color:#aaa">-2% · sell if triggered</div>
           </td>
           <td style="width:6px"></td>
           <td style="background:#f0f8f0;border-radius:4px;padding:8px;text-align:center;width:33%">
-            <div style="font-size:10px;color:#888;margin-bottom:2px">TARGET</div>
-            <div style="font-family:monospace;font-weight:700;color:#2d5a2d">${fmt.$3(t.target_price)}</div>
+            <div style="font-size:9px;color:#888;margin-bottom:2px;text-transform:uppercase">Target</div>
+            <div style="font-family:monospace;font-weight:700;color:#2d5a2d;font-size:15px">${fmt.$3(t.target_price)}</div>
+            <div style="font-size:9px;color:#aaa">+5% · sell at market</div>
           </td>
           <td style="width:6px"></td>
           <td style="background:#f5f2ec;border-radius:4px;padding:8px;text-align:center;width:33%">
-            <div style="font-size:10px;color:#888;margin-bottom:2px">SIZE</div>
-            <div style="font-family:monospace;font-weight:700">$${(t.position_size||0).toLocaleString()}</div>
+            <div style="font-size:9px;color:#888;margin-bottom:2px;text-transform:uppercase">Position</div>
+            <div style="font-family:monospace;font-weight:700;font-size:15px">$${(t.position_size||0).toLocaleString()}</div>
+            <div style="font-size:9px;color:#aaa">${t.units||0} units</div>
           </td>
         </tr>
       </table>
-      <div style="margin-top:10px;display:flex;gap:4px">
-        ${[1,2,3,4,5,6].map((i,idx) => {
-          const on = idx < (t.total_score||0);
-          const labels = ['Macro','Trend','Mom','Rev','Vol','Candle'];
-          return `<div style="flex:1;text-align:center;padding:4px 2px;border-radius:3px;background:${on?'#1a5f6e':'#e8e4dc'}">
-            <div style="font-size:8px;color:${on?'rgba(255,255,255,0.7)':'#999'};margin-bottom:1px">${labels[idx]}</div>
-            <div style="font-size:11px;font-weight:700;color:${on?'#fff':'#bbb'}">${on?'✓':'·'}</div>
-          </div>`;
-        }).join('')}
+      <div style="background:#f5f2ec;border-radius:4px;padding:10px 12px;font-size:12px;line-height:2;border-left:3px solid #1a5f6e">
+        <div style="font-size:10px;color:#999;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em">CommSec Order Instructions — Mean Reversion</div>
+        <div>1. <strong>BUY</strong> ${t.ticker} · Market order · ${t.units||0} units · Place at <strong>10:00am AEST</strong></div>
+        <div>2. Once filled → place <strong>Stop Loss Sell</strong>: ${t.units||0} units · Trigger <strong>${fmt.$3(t.stop_price)}</strong> · Good Till Cancel</div>
+        <div>3. If price reaches <strong>${fmt.$3(t.target_price)}</strong> → cancel stop → <strong>Sell at Market</strong></div>
+        <div>4. <strong>${exitDayStr}</strong>: if still open → sell at market on open regardless</div>
       </div>
     </div>`;
-
+  };
   const reitCard = r => {
     const disc = r.nta&&r.price ? (r.price-r.nta)/r.nta : null;
     return `
@@ -647,7 +650,7 @@ function buildEmail(data) {
           </div>
           <div style="text-align:right">
             <div style="font-size:16px;font-weight:700">$${b.price.toFixed(3)}</div>
-            <div style="font-size:11px;color:#b8943f;font-weight:600">BREAKOUT ${b.breakout_score}/8</div>
+            <div style="font-size:11px;color:#b8943f;font-weight:600">BREAKOUT ${b.breakout_score}/8 · ⏰ ENTER 10:45am</div>
           </div>
         </div>
         <div style="margin-top:8px;font-size:12px;color:#555">${b.signals.join(' · ')}</div>
@@ -659,7 +662,7 @@ function buildEmail(data) {
         </div>
         <div style="margin-top:4px;font-size:11px;color:#aaa">52W High: $${b.high_52w?.toFixed(3)||'--'} · Momentum breakout — wider stop, higher target</div>
       </div>`).join('')}
-  <p style="font-size:11px;color:#aaa;margin-top:6px">Breakout trades: Enter on open, 6% target, stop just below breakout level · Different sizing to mean reversion</p>
+  <p style="font-size:11px;color:#aaa;margin-top:6px">⏰ <strong>Enter at 10:45am AEST — not on open.</strong> Confirm price still above breakout level and volume still elevated before placing. False breakouts fade in first 30 mins.</p>
 </div>
 
 <div class="sec">
