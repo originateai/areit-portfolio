@@ -298,29 +298,71 @@ async function preScreenFromDB(db, macroScore) {
 
     if (!latest) {
       console.log('No analysis data — will analyse full batch');
-      return null; // null = no pre-screen data, use fallback
-    }
-
-    const lastDate = latest.analysis_date;
-    console.log(`Pre-screening from analysis date: ${lastDate}`);
-
-    // Candidates: stocks that showed signs of life yesterday
-    const { data: candidates } = await db.from('daily_analysis')
-      .select('ticker, rsi14, vol_ratio, bb_position, pct_from_ma20, above_ma200, total_score')
-      .eq('analysis_date', lastDate)
-      .eq('above_ma200', true)      // only uptrend stocks
-      .lte('rsi14', 50)             // not overbought
-      .gte('vol_ratio', 1.0)        // some volume activity
-      .order('vol_ratio', { ascending: false })
-      .limit(60);
-
-    if (!candidates?.length) {
-      console.log('No pre-screen candidates from DB — using fallback batch');
       return null;
     }
 
-    console.log(`Pre-screen returned ${candidates.length} candidates`);
-    return candidates.map(c => c.ticker);
+    const lastDate = latest.analysis_date;
+
+    // Pull all analysed stocks for cross-sectional ranking
+    const { data: universe } = await db.from('daily_analysis')
+      .select('ticker, rsi14, vol_ratio, bb_position, pct_from_ma20, pct_from_ma200, above_ma200, total_score, adx')
+      .eq('analysis_date', lastDate)
+      .not('rsi14', 'is', null)
+      .not('vol_ratio', 'is', null);
+
+    if (!universe?.length) return null;
+
+    // ── CROSS-SECTIONAL RANKING ──────────────────────────────────────────────
+    // Score each stock relative to the universe, not just on absolute thresholds
+    // This finds the most oversold + highest volume + best setup RELATIVE to peers
+
+    const n = universe.length;
+
+    // Rank each metric (percentile 0-100, higher = better signal)
+    const rankPct = (arr, key, ascending=true) => {
+      const sorted = [...arr].sort((a, b) => ascending
+        ? (a[key]||0) - (b[key]||0)
+        : (b[key]||0) - (a[key]||0)
+      );
+      const ranks = {};
+      sorted.forEach((s, i) => { ranks[s.ticker] = (i / (n-1)) * 100; });
+      return ranks;
+    };
+
+    // Lower RSI = more oversold = better (ascending rank = low RSI scores high)
+    const rsiRank    = rankPct(universe, 'rsi14', true);
+    // Higher vol_ratio = better
+    const volRank    = rankPct(universe, 'vol_ratio', false);
+    // Lower bb_position = more oversold = better
+    const bbRank     = rankPct(universe, 'bb_position', true);
+    // More negative pct_from_ma20 = more stretched = better for mean reversion
+    const ma20Rank   = rankPct(universe, 'pct_from_ma20', true);
+    // More negative pct_from_ma200 = more stretched = better
+    const ma200Rank  = universe[0]?.pct_from_ma200 !== undefined
+      ? rankPct(universe, 'pct_from_ma200', true) : {};
+
+    // Composite cross-sectional score (weighted by backtest feature importance)
+    const csScores = universe.map(s => {
+      if (!s.above_ma200) return { ticker: s.ticker, csScore: 0 }; // must be in uptrend
+
+      const cs =
+        (rsiRank[s.ticker]   || 0) * 0.25 +  // RSI oversold — top feature
+        (volRank[s.ticker]   || 0) * 0.20 +  // Volume — confirmation
+        (bbRank[s.ticker]    || 0) * 0.20 +  // Bollinger position
+        (ma20Rank[s.ticker]  || 0) * 0.20 +  // Distance from 20DMA
+        (ma200Rank[s.ticker] || 0) * 0.15;   // Distance from 200DMA
+
+      return { ticker: s.ticker, csScore: cs, totalScore: s.total_score || 0 };
+    });
+
+    // Take top 40 by cross-sectional score — these are relatively the most attractive
+    const topCS = csScores
+      .sort((a, b) => b.csScore - a.csScore)
+      .slice(0, 40)
+      .map(s => s.ticker);
+
+    console.log(`Cross-sectional ranking: top ${topCS.length} from ${n} stocks`);
+    return topCS;
 
   } catch(e) {
     console.error('Pre-screen error:', e.message);
@@ -838,6 +880,28 @@ const run = async () => {
     }
 
     // 10. Save model trades — no duplicates
+    // Auto-expire trades older than hold_days (default 3)
+    const holdDays = parseInt(settings.hold_days || '3');
+    const expiryDate = new Date(Date.now() - holdDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const { data: expiredTrades } = await db.from('model_trades')
+      .select('id,ticker,entry_price,units')
+      .eq('status', 'OPEN')
+      .lt('trade_date', expiryDate);
+
+    if (expiredTrades?.length) {
+      for (const t of expiredTrades) {
+        const exitPrice = livePrices[t.ticker]?.close || t.entry_price;
+        const pnl = (exitPrice - t.entry_price) * (t.units || 0);
+        await db.from('model_trades').update({
+          status: 'CLOSED', exit_price: exitPrice, exit_date: today,
+          pnl: parseFloat(pnl.toFixed(2)),
+          pnl_pct: parseFloat(((exitPrice - t.entry_price) / t.entry_price).toFixed(6)),
+          hold_days: holdDays
+        }).eq('id', t.id);
+      }
+      console.log(`Auto-expired ${expiredTrades.length} trades after ${holdDays} days`);
+    }
+
     if (topEquities.length > 0) {
       const { data: openPositions } = await db.from('model_trades')
         .select('ticker').eq('status', 'OPEN');

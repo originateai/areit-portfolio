@@ -4,8 +4,60 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
-const BASE = 'https://eodhd.com/api';
-const KEY  = () => process.env.EODHD_API_KEY;
+const BASE   = 'https://eodhd.com/api';
+const KEY    = () => process.env.EODHD_API_KEY;
+const ML_URL = () => process.env.ML_SERVICE_URL; // e.g. https://asx-ml.railway.app
+
+// ── ML LAYER 7 — CALL PYTHON MICROSERVICE ─────────────────────────────────────
+async function getMLProbability(ticker, indicators, volRatio, candles) {
+  const mlUrl = ML_URL();
+  if (!mlUrl) return null; // fall back to rule-based proxy if no service configured
+
+  try {
+    const price  = indicators.price || 1;
+    const ma20   = indicators.ma20  || price;
+    const ma200  = indicators.ma200 || price;
+    const body   = Math.abs((indicators.open || price) - price);
+    const range  = (indicators.high || price) - (indicators.low || price);
+    const lower  = Math.min(indicators.open || price, price) - (indicators.low  || price);
+
+    const features = {
+      rsi14:           indicators.rsi14   || 50,
+      sma20:           ma20,
+      sma50:           indicators.ma50    || price,
+      sma200:          ma200,
+      bb_pos:          indicators.bb_position || 0.5,
+      vol_ratio:       volRatio || 1,
+      roc5:            0, // not fetched separately — use roc20 proxy
+      roc20:           indicators.roc20   || 0,
+      pct_from_sma20:  ma20  > 0 ? (price - ma20)  / ma20  : 0,
+      pct_from_sma200: ma200 > 0 ? (price - ma200) / ma200 : 0,
+      above_sma20:     ma20  > 0 && price > ma20  ? 1 : 0,
+      above_sma200:    ma200 > 0 && price > ma200 ? 1 : 0,
+      golden_cross:    indicators.ma50 && ma200 && indicators.ma50 > ma200 ? 1 : 0,
+      hammer:          candles?.hammer ? 1 : 0,
+      bull_candle:     candles?.bullish ? 1 : 0,
+      lower_shadow:    lower,
+      upper_shadow:    (indicators.high || price) - Math.max(indicators.open || price, price),
+      body,
+      range,
+    };
+
+    const res = await fetch(`${mlUrl}/predict/${ticker}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(features),
+      signal:  AbortSignal.timeout(3000) // 3s timeout — don't hold up the scan
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.probability || null;
+  } catch(e) {
+    // ML service unavailable — fall back to rule-based proxy silently
+    return null;
+  }
+}
 
 function getDB() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -261,14 +313,15 @@ function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candl
 
   // ── LAYER 7: ML CONFIRMATION ──────────────────────────────────────────────
   // Rule-based proxy using top backtest features (lower_shadow, pct_from_sma200, roc5, bb_pos)
+  // Calibrated to ~65% ML confidence threshold (optimal from backtest: Hold 3d, Score 5+, ML >65%)
   let mlSignals = 0;
   if (pctFromMa200 && pctFromMa200 < -0.05) mlSignals++;        // Stretched below 200DMA
   if (rsi14 && rsi14 < 40) mlSignals++;                          // RSI oversold
   if (volRatio && volRatio > 1.8) mlSignals++;                   // Volume confirmation
   if (candles?.bullish) mlSignals++;                             // Bullish reversal candle
   if (roc20 && roc20 > -0.15 && roc20 < 0.01) mlSignals++;      // Recent weakness not crash
-  if (mlSignals >= 3) {
-    l7 = 1; reasons.push(`Layer 7 ML: ${mlSignals}/5 signals confirm`);
+  if (mlSignals >= 4) {  // Tightened to 4/5 (was 3/5) — calibrated to 65% ML threshold
+    l7 = 1; reasons.push(`Layer 7 ML: ${mlSignals}/5 signals confirm (high confidence)`);
   }
 
   const total = l1 + l2 + l3 + l4 + l5 + l6 + l7;
@@ -336,12 +389,30 @@ async function analyseStock(stock, macroScore, settings, livePrice=null) {
     // 7. Score
     const scoring = scoreStock(indicators, macroScore, stock, currentYield, volRatio, candles);
 
+    // 7b. Real ML probability — override rule-based Layer 7 if service available
+    const mlProb = await getMLProbability(stock.ticker, { ...indicators, price }, volRatio, candles);
+    if (mlProb !== null) {
+      if (mlProb >= 0.65 && scoring.l7 === 0) {
+        scoring.l7 = 1;
+        scoring.total += 1;
+        scoring.reasons.push(`Layer 7 ML: ${(mlProb*100).toFixed(0)}% confidence (model)`);
+        // Recalculate conviction with new total
+        scoring.conviction = scoring.total >= 6 ? 'EXCEPTIONAL' : scoring.total >= 5 ? 'STRONG' : 'MODERATE';
+      } else if (mlProb < 0.40 && scoring.l7 === 1) {
+        // ML disagrees — remove Layer 7
+        scoring.l7 = 0;
+        scoring.total -= 1;
+        scoring.reasons.push(`Layer 7 ML: ${(mlProb*100).toFixed(0)}% — low confidence, removed`);
+        scoring.conviction = scoring.total >= 6 ? 'EXCEPTIONAL' : scoring.total >= 5 ? 'STRONG' : scoring.total >= 4 ? 'MODERATE' : 'WEAK';
+      }
+    }
+
     // 8. Position size — minimum score 5 required (raised from 4)
     const positionSize = scoring.total >= 5
       ? getPositionSize(scoring.conviction, settings, stock.is_reit) : 0;
 
-    const stopPct   = parseFloat(settings.stop_loss_pct || '1.5') / 100;
-    const targetPct = parseFloat(settings.target_pct    || '3.0') / 100;
+    const stopPct   = parseFloat(settings.stop_loss_pct || '2.0') / 100;  // Backtest optimal: 2%
+    const targetPct = parseFloat(settings.target_pct    || '5.0') / 100;  // Backtest optimal: 5%
 
     // ATR-based dynamic stop — use 1.5× ATR if available, otherwise fall back to fixed %
     // This adapts stop distance to each stock's actual volatility
