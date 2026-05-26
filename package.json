@@ -1,0 +1,11 @@
+{
+  "name": "areit-portfolio",
+  "version": "1.0.0",
+  "description": "ASX Trading Platform",
+  "dependencies": {
+    "@netlify/functions": "^2.4.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "resend": "^3.2.0",
+    "xlsx": "^0.18.5"
+  }
+}
