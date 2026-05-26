@@ -941,7 +941,7 @@ async function loadStrategies() {
       <td><span class="tkr">${a.ticker}</span></td>
       <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.stocks?.name||''}</td>
       <td class="r">${(livePriceCache[a.ticker]?.price||a.close)?f.$(livePriceCache[a.ticker]?.price||a.close,3):'--'} ${livePriceCache[a.ticker]?'<span style="font-size:9px;color:'+(livePriceCache[a.ticker].changePct>=0?'var(--green)':'var(--red)')+'">'+(livePriceCache[a.ticker].changePct>=0?'+':'')+((livePriceCache[a.ticker].changePct||0)*100).toFixed(1)+'%</span>':''}</td>
-      <td><span class="badge ${sc}">${a.total_score||0}/6</span>${dots(a.total_score||0)}</td>
+      <td><span class="badge ${sc}">${a.total_score||0}/7</span>${dots(a.total_score||0)}</td>
       <td style="text-align:center;color:${a.layer1_macro?'var(--green)':'var(--rule)'};font-weight:600">${a.layer1_macro?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer2_trend?'var(--green)':'var(--rule)'};font-weight:600">${a.layer2_trend?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer3_momentum?'var(--green)':'var(--rule)'};font-weight:600">${a.layer3_momentum?'✓':'·'}</td>
@@ -1012,7 +1012,7 @@ async function screenStock() {
 
       ${data ? `
         <div class="kb" style="margin-bottom:14px">
-          <div class="kc dk"><div class="kl">Score</div><div class="kv">${data.total_score||0}/6</div></div>
+          <div class="kc dk"><div class="kl">Score</div><div class="kv">${data.total_score||0}/7</div></div>
           <div class="kc"><div class="kl">Conviction</div><div class="kv">${data.conviction||'--'}</div></div>
           <div class="kc"><div class="kl">RSI 14</div><div class="kv ${data.rsi14<35?'green':data.rsi14>70?'red':''}">${data.rsi14?parseFloat(data.rsi14).toFixed(0):'--'}</div></div>
           <div class="kc"><div class="kl">Volume ×</div><div class="kv ${data.vol_ratio>1.5?'teal':''}">${data.vol_ratio?parseFloat(data.vol_ratio).toFixed(1)+'×':'--'}</div></div>
@@ -1111,7 +1111,7 @@ async function loadWatchlist() {
             <td><span class="tkr">${w.ticker}</span></td>
             <td style="font-size:11px">${w.name||''}</td>
             <td class="r">${a?.close?f.$(a.close,3):'--'}</td>
-            <td>${a?`<span class="badge ${sc}">${a.total_score||0}/6</span>`:'<span style="font-size:11px;color:var(--muted)">Pending</span>'}</td>
+            <td>${a?`<span class="badge ${sc}">${a.total_score||0}/7</span>`:'<span style="font-size:11px;color:var(--muted)">Pending</span>'}</td>
             <td class="r" style="color:${a?.rsi14<35?'var(--green)':a?.rsi14>70?'var(--red)':'var(--muted)'}">${a?.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
             <td class="r" style="color:${a?.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a?.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
             <td style="font-size:11px;color:var(--muted)">${a?.analysis_date||'Not yet'}</td>
@@ -1250,7 +1250,7 @@ async function loadSortedStocks() {
             <td><span class="tkr">${a.ticker}</span>${reitType?`<span class="badge b-reit" style="margin-left:4px;font-size:9px">${reitType}</span>`:''}</td>
             <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||''}</td>
             <td class="r">${(livePriceCache[a.ticker]?.price||a.close)?f.$(livePriceCache[a.ticker]?.price||a.close,3):'--'} ${livePriceCache[a.ticker]?'<span style="font-size:9px;color:'+(livePriceCache[a.ticker].changePct>=0?'var(--green)':'var(--red)')+'">'+(livePriceCache[a.ticker].changePct>=0?'+':'')+((livePriceCache[a.ticker].changePct||0)*100).toFixed(1)+'%</span>':''}</td>
-            <td><span class="badge ${sc}">${a.total_score||0}/6</span></td>
+            <td><span class="badge ${sc}">${a.total_score||0}/7</span></td>
             <td class="r" style="color:${a.rsi14<35?'var(--green)':a.rsi14>70?'var(--red)':'var(--muted)'}">${a.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
             <td class="r" style="color:${a.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
             <td class="r" style="color:${s.pct_from_52w_low<10?'var(--green)':'var(--muted)'}">
@@ -1428,7 +1428,7 @@ async function loadREITSignals() {
       </td>
       <td class="r">${s.wale != null ? parseFloat(s.wale).toFixed(1)+'yr' : '--'}</td>
       <td class="r">${s.occupancy != null ? (s.occupancy*100).toFixed(1)+'%' : '--'}</td>
-      <td>${a ? `<span class="badge ${a.conviction==='EXCEPTIONAL'?'b-exc':a.conviction==='STRONG'?'b-str':'b-mod'}">${a.total_score||0}/6</span>${dots(a.total_score||0)}` : '<span style="font-size:10px;color:var(--muted)">Pending</span>'}</td>
+      <td>${a ? `<span class="badge ${a.conviction==='EXCEPTIONAL'?'b-exc':a.conviction==='STRONG'?'b-str':'b-mod'}">${a.total_score||0}/7</span>${dots(a.total_score||0)}` : '<span style="font-size:10px;color:var(--muted)">Pending</span>'}</td>
       <td><span style="font-size:11px;font-weight:${fired?600:400};color:${fired?'var(--green)':close?'var(--amber)':'var(--muted)'}">
         ${fired ? '🟢 BUY' : close ? '⚠️ Close' : 'Watching'}
       </span></td>
@@ -1758,7 +1758,7 @@ async function openSignalDrawer(ticker) {
       ${live ? `<span style="font-size:14px;font-family:'DM Mono',monospace;color:${chgColor};margin-left:8px">${chgSign}${(liveChange*100).toFixed(2)}%</span>` : ''}
     </div>
     ${live ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:'DM Mono',monospace">O $${live.open?.toFixed(3)||'--'} · H $${live.high?.toFixed(3)||'--'} · L $${live.low?.toFixed(3)||'--'} · Vol ${(live.volume/1000).toFixed(0)}K <span style="color:var(--teal)">● Live</span></div>` : ''}
-    <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;margin-top:4px;background:${convBg};color:${convFg}">${conv} ${score}/6</span>
+    <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;margin-top:4px;background:${convBg};color:${convFg}">${conv} ${score}/7</span>
   `;
 
   // Key metrics grid
@@ -1769,7 +1769,7 @@ async function openSignalDrawer(ticker) {
     { l:'50 DMA',   v: analysis?.ma50  ? '$'+parseFloat(analysis.ma50).toFixed(3)  : '--',   c: 'var(--ink)', dark: false },
     { l:'200 DMA',  v: analysis?.ma200 ? '$'+parseFloat(analysis.ma200).toFixed(3) : '--',   c: 'var(--ink)', dark: false },
     { l:'BB Pos',   v: analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%':'--', c: 'var(--ink)', dark: false },
-    { l:'Conviction',v: conv + ' ' + score+'/6',  c: convFg, dark: conv==='EXCEPTIONAL' },
+    { l:'Conviction',v: conv + ' ' + score+'/7',  c: convFg, dark: conv==='EXCEPTIONAL' },
     { l:'Candle',   v: candleTooltip(analysis?.candle_pattern) || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false, html: true },
     ...(stock?.is_reit ? [
       { l:'NTA',      v: stock.nta ? '$'+parseFloat(stock.nta).toFixed(2) : '--', c: 'var(--ink)', dark: false },
