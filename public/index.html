@@ -602,19 +602,27 @@ async function refreshLivePrices() {
   if (livePriceFetching) return;
   livePriceFetching = true;
   try {
-    const res  = await fetch('/.netlify/functions/bulk-live-prices?universe=ALL');
-    if (res.ok) {
-      livePriceCache     = await res.json();
-      livePriceLastFetch = Date.now();
-      console.log(`Live prices refreshed — ${Object.keys(livePriceCache).length} tickers`);
-      // Reload whichever page is currently active with fresh prices
-      const active = document.querySelector('.page.active')?.id;
-      if (active === 'pg-reit-trading') loadREITSignals();
-      if (active === 'pg-strategies')   loadStrategies();
-      if (active === 'pg-model')        loadModel();
-      if (active === 'pg-reit')         loadREIT();
-      if (active === 'pg-screener')     loadSortedStocks();
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const res = await fetch(`/.netlify/functions/bulk-live-prices?universe=ALL&offset=${offset}`);
+      if (!res.ok) break;
+      const data = await res.json();
+      // Support both old format (plain object) and new paginated format
+      const prices = data.prices || data;
+      Object.assign(livePriceCache, prices);
+      hasMore = data.hasMore || false;
+      offset  = data.nextOffset || offset + 100;
     }
+    livePriceLastFetch = Date.now();
+    console.log(`Live prices refreshed — ${Object.keys(livePriceCache).length} tickers`);
+    // Reload whichever page is currently active with fresh prices
+    const active = document.querySelector('.page.active')?.id;
+    if (active === 'pg-reit-trading') loadREITSignals();
+    if (active === 'pg-strategies')   loadStrategies();
+    if (active === 'pg-model')        loadModel();
+    if (active === 'pg-reit')         loadREIT();
+    if (active === 'pg-screener')     loadSortedStocks();
   } catch(e) {
     console.warn('Live price refresh failed:', e.message);
   }
