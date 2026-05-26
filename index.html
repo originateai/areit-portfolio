@@ -75,7 +75,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
 thead tr{border-bottom:2px solid var(--ink)}
 th{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--muted);padding:6px 7px;text-align:left;font-weight:400;white-space:nowrap}
 th.r{text-align:right}
-tbody tr{border-bottom:1px solid var(--rule);transition:background 0.1s}
+tbody tr{border-bottom:1px solid var(--rule);transition:background 0.1s;height:38px}tbody td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;vertical-align:middle}
 tbody tr:hover{background:var(--cream)}
 tbody tr.clickable{cursor:pointer}
 tbody tr.clickable:hover{background:#e8f2fb;border-left:3px solid var(--teal)}
@@ -164,6 +164,7 @@ tfoot td.r{text-align:right}
       <div class="kc"><div class="kl">Invested</div><div class="kv teal" id="m-inv">--</div><div class="kn">Deployed</div></div>
       <div class="kc"><div class="kl">Cash</div><div class="kv" id="m-cash">--</div><div class="kn">Available</div></div>
       <div class="kc"><div class="kl">Open Trades</div><div class="kv" id="m-open">--</div></div>
+      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn" id="m-price-status">Loading live prices...</div></div>
       <div class="kc"><div class="kl">Total P&L</div><div class="kv" id="m-pnl">--</div></div>
       <div class="kc"><div class="kl">Win Rate</div><div class="kv gold" id="m-win">--</div></div>
     </div>
@@ -207,31 +208,51 @@ tfoot td.r{text-align:right}
 
   <!-- STRATEGY ENGINE -->
   <div id="pg-strategies" class="page">
-    <div class="ph"><h1>Strategy Engine</h1><p>6-layer scoring · Today's analysis across ASX500 + REIT universe</p></div>
-    <div class="sl">How the 6 layers work</div>
-    <div class="layer-grid" id="layer-explainer">
-      <div class="layer on"><div class="layer-n">Layer 1</div><div class="layer-v">Macro</div><div style="font-size:10px;color:var(--muted);margin-top:4px">US overnight, VIX, bonds, AUD</div></div>
-      <div class="layer on"><div class="layer-n">Layer 2</div><div class="layer-v">Trend</div><div style="font-size:10px;color:var(--muted);margin-top:4px">200DMA, 50DMA, golden cross</div></div>
-      <div class="layer on"><div class="layer-n">Layer 3</div><div class="layer-v">Momentum</div><div style="font-size:10px;color:var(--muted);margin-top:4px">20DMA, ROC, MACD</div></div>
-      <div class="layer on"><div class="layer-n">Layer 4</div><div class="layer-v">Reversion</div><div style="font-size:10px;color:var(--muted);margin-top:4px">RSI, Bollinger, % from MA</div></div>
-      <div class="layer on"><div class="layer-n">Layer 5</div><div class="layer-v">Volume</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Vol spike vs 20-day avg, OBV</div></div>
-      <div class="layer on"><div class="layer-n">Layer 6</div><div class="layer-v">Candle</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Hammer, engulfing, morning star</div></div>
+    <div class="ph"><h1>Strategy Engine</h1><p>7-layer scoring · Mean reversion + breakout · Today's signals across ASX500</p></div>
+
+    <div class="tab-row" style="margin-bottom:16px">
+      <button class="tab active" onclick="switchStratType('reversion',this)">📉 Mean Reversion</button>
+      <button class="tab" onclick="switchStratType('breakout',this)">🚀 Breakout</button>
     </div>
-    <div class="sl" style="margin-top:20px">Today's scored stocks — sorted by conviction</div>
-    <div class="tab-row">
-      <button class="tab active" onclick="switchTab('strat','all',this)">All</button>
-      <button class="tab" onclick="switchTab('strat','exceptional',this)">🔥 Exceptional (6/6)</button>
-      <button class="tab" onclick="switchTab('strat','strong',this)">🟢 Strong (5/6)</button>
-      <button class="tab" onclick="switchTab('strat','moderate',this)">🟡 Moderate (4/6)</button>
+
+    <div id="strat-reversion-section">
+      <div class="sl">How the 7 layers work</div>
+      <div class="layer-grid" id="layer-explainer">
+        <div class="layer on"><div class="layer-n">Layer 1</div><div class="layer-v">Macro</div><div style="font-size:10px;color:var(--muted);margin-top:4px">US overnight, VIX, bonds, AUD</div></div>
+        <div class="layer on"><div class="layer-n">Layer 2</div><div class="layer-v">Trend</div><div style="font-size:10px;color:var(--muted);margin-top:4px">200DMA, 50DMA, golden cross</div></div>
+        <div class="layer on"><div class="layer-n">Layer 3</div><div class="layer-v">Momentum</div><div style="font-size:10px;color:var(--muted);margin-top:4px">20DMA, ROC, MACD</div></div>
+        <div class="layer on"><div class="layer-n">Layer 4</div><div class="layer-v">Reversion</div><div style="font-size:10px;color:var(--muted);margin-top:4px">RSI <40, Bollinger, % from MA</div></div>
+        <div class="layer on"><div class="layer-n">Layer 5</div><div class="layer-v">Volume</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Vol >1.8× 20-day avg</div></div>
+        <div class="layer on"><div class="layer-n">Layer 6</div><div class="layer-v">Candle</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Hammer, engulfing, morning star</div></div>
+        <div class="layer on" style="border-top-color:var(--gold)"><div class="layer-n">Layer 7</div><div class="layer-v" style="color:var(--gold)">ML</div><div style="font-size:10px;color:var(--muted);margin-top:4px">XGBoost — 73% WR when confirmed</div></div>
+      </div>
+      <div class="sl" style="margin-top:20px">Today's mean reversion signals</div>
+      <div class="tab-row">
+        <button class="tab active" onclick="switchTab('strat','all',this)">All</button>
+        <button class="tab" onclick="switchTab('strat','exceptional',this)">🔥 Exceptional (6+/7)</button>
+        <button class="tab" onclick="switchTab('strat','strong',this)">🟢 Strong (5/7)</button>
+        <button class="tab" onclick="switchTab('strat','moderate',this)">🟡 Moderate (4/7)</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Ticker</th><th>Company</th><th class="r">Price</th><th>Score</th>
+          <th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>L5</th><th>L6</th><th>L7</th>
+          <th class="r">RSI</th><th class="r">Vol×</th><th>Candle</th><th>Why</th>
+        </tr></thead>
+        <tbody id="strat-tbody"><tr><td colspan="15" class="empty">Loading strategy analysis...</td></tr></tbody>
+      </table>
     </div>
-    <table>
-      <thead><tr>
-        <th>Ticker</th><th>Company</th><th class="r">Price</th><th>Score</th>
-        <th>L1</th><th>L2</th><th>L3</th><th>L4</th><th>L5</th><th>L6</th>
-        <th class="r">RSI</th><th class="r">Vol×</th><th>Candle</th><th>Why</th>
-      </tr></thead>
-      <tbody id="strat-tbody"><tr><td colspan="14" class="empty">Loading strategy analysis...</td></tr></tbody>
-    </table>
+
+    <div id="strat-breakout-section" style="display:none">
+      <div style="background:var(--cream);border:1px solid var(--rule);border-radius:4px;padding:12px 14px;margin-bottom:16px;font-size:12px">
+        <strong>🚀 Breakout Strategy</strong> — stocks closing at/above 52W high with volume >2× average.
+        Backtest: <strong>42.3% WR, +1.38% expectancy/trade</strong>.
+        Enter at <strong>10:45am AEST</strong> after confirming price still above breakout level.
+        Target: +6% · Stop: just below breakout level.
+      </div>
+      <div class="sl">Today's breakout signals</div>
+      <div id="breakout-strat-results"><div class="empty">Loading breakout signals...</div></div>
+    </div>
   </div>
 
   <!-- STOCK SCREENER -->
@@ -276,6 +297,9 @@ tfoot td.r{text-align:right}
     </div>
     <div id="sorted-stocks-table"></div>
 
+    <div class="sl" style="margin-top:24px">🚀 Breakout Signals — Today</div>
+    <div id="breakout-results"><div class="empty">Loading breakout signals...</div></div>
+
     <div id="screener-result"><div class="empty">Enter any ASX ticker above — pulls live data from EODHD even if the stock isn't in the top 400.</div></div>
 
     <div class="sl" style="margin-top:24px">My Watchlist</div>
@@ -305,15 +329,54 @@ tfoot td.r{text-align:right}
 
   <!-- REIT TRADING SIGNALS -->
   <div id="pg-reit-trading" class="page">
-    <div class="ph"><h1>REIT Strategy Signals</h1><p>All Moelis-covered pure landlords · 6-layer strategy + yield triggers · No managers, no developers</p></div>
-    <div class="sl">REIT universe — today's scores</div>
+    <div class="ph"><h1>REIT Strategy Signals</h1><p>All Moelis-covered pure landlords · 7-layer strategy + yield triggers · No managers, no developers</p></div>
+    <div id="reit-macro-bar" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:4px;font-size:12px;border:1px solid var(--rule)"></div>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <select id="reit-sort" onchange="loadREITSignals()"
+        style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
+        <option value="yield">Yield (highest)</option>
+        <option value="discount">Discount to NTA (deepest)</option>
+        <option value="price">Price (highest)</option>
+        <option value="target8">8% Target price</option>
+        <option value="score">Strategy score</option>
+        <option value="ticker">Ticker A-Z</option>
+        <option value="sector">Sector</option>
+      </select>
+      <select id="reit-filter" onchange="loadREITSignals()"
+        style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
+        <option value="">All pure landlords</option>
+        <option value="Retail REIT">Retail</option>
+        <option value="Office REIT">Office</option>
+        <option value="Industrial REIT">Industrial</option>
+        <option value="Healthcare REIT">Healthcare</option>
+        <option value="Diversified REIT">Diversified</option>
+        <option value="Specialty REIT">Specialty</option>
+        <option value="Agricultural REIT">Agricultural</option>
+      </select>
+      <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px">
+        <input type="checkbox" id="reit-triggers-only" onchange="loadREITSignals()">
+        Triggers only (8%+)
+      </label>
+    </div>
+
     <table>
-      <thead><tr>
-        <th>Ticker</th><th>Name</th><th>Sector</th><th class="r">Price</th>
-        <th class="r">NTA</th><th class="r">Disc</th><th class="r">Yield</th>
-        <th class="r">8% Target</th><th>Score</th><th>Status</th>
+      <thead><tr id="reit-thead">
+        <th onclick="reitSortBy('ticker')" style="cursor:pointer">Ticker ↕</th>
+        <th>Name</th>
+        <th onclick="reitSortBy('sector')" style="cursor:pointer">Sector ↕</th>
+        <th class="r" onclick="reitSortBy('price')" style="cursor:pointer">Price ↕</th>
+        <th class="r">NTA</th>
+        <th class="r" onclick="reitSortBy('discount')" style="cursor:pointer">Disc NTA ↕</th>
+        <th class="r" onclick="reitSortBy('yield')" style="cursor:pointer">Yield ↕</th>
+        <th class="r" onclick="reitSortBy('target8')" style="cursor:pointer">8% Target ↕</th>
+        <th class="r">Gearing</th>
+        <th class="r">WALE</th>
+        <th class="r">Occ.</th>
+        <th onclick="reitSortBy('score')" style="cursor:pointer">Score ↕</th>
+        <th>Status</th>
       </tr></thead>
-      <tbody id="reit-signals-tbody"><tr><td colspan="10" class="empty">Loading REIT signals...</td></tr></tbody>
+      <tbody id="reit-signals-tbody"><tr><td colspan="13" class="empty">Loading REIT signals...</td></tr></tbody>
     </table>
   </div>
 
@@ -481,11 +544,35 @@ async function init() {
     const res = await fetch('/.netlify/functions/env');
     const env = await res.json();
     db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
+    // Load model immediately with DB prices for fast initial render
     loadModel();
+    // Then fetch live prices — model auto-reloads when done via refreshLivePrices()
+    refreshLivePrices();
   } catch(e) {
     console.error('Init failed:', e);
     document.querySelectorAll('.empty').forEach(el => el.textContent = 'Could not connect to database. Check environment variables in Netlify.');
   }
+}
+
+
+// ── CANDLE PATTERN DESCRIPTIONS ──────────────────────────────────────────────
+const CANDLE_DESC = {
+  'Hammer':              'Hammer — small body at top, long lower wick. Buyers stepped in after sellers pushed price down. Bullish reversal signal, especially at support.',
+  'Bullish Engulfing':   'Bullish Engulfing — green candle completely swallows previous red candle. Strong buyers overwhelming sellers. Powerful reversal signal.',
+  'Morning Star':        'Morning Star — 3-candle pattern: big red, small doji/spinning top, big green. Marks a bottom after a downtrend. One of the strongest reversal signals.',
+  'Doji':                'Doji — open and close almost equal, creating a cross shape. Indecision between buyers and sellers. Often signals a reversal when appearing after a trend.',
+  'Three White Soldiers':'Three White Soldiers — three consecutive green candles, each closing near its high. Strong sustained buying pressure. Highly bullish continuation signal.',
+  'Shooting Star':       'Shooting Star — small body at bottom, long upper wick. Buyers pushed price up but sellers took control. Bearish at highs, but here used as reversal at lows.',
+  'Bullish Harami':      'Bullish Harami — small green candle inside previous red candle. Selling momentum slowing. Moderate bullish signal.',
+  'Piercing Line':       'Piercing Line — green candle opens below previous close but closes above midpoint of red candle. Buyers regaining control.',
+  'Evening Star':        'Evening Star — opposite of Morning Star. Bearish reversal at tops.',
+};
+
+function candleTooltip(pattern) {
+  if (!pattern || pattern === 'None') return pattern || 'None';
+  const desc = CANDLE_DESC[pattern];
+  if (!desc) return pattern;
+  return `<span title="${desc}" style="cursor:help;border-bottom:1px dotted var(--amber)">${pattern}</span>`;
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
@@ -497,7 +584,7 @@ function go(page, el) {
   if (el) el.classList.add('active');
   const fns = {
     model: loadModel, real: loadReal, strategies: loadStrategies,
-    screener: () => { loadWatchlist(); loadSortedStocks(); }, reit: loadREIT, 'reit-trading': loadREITSignals,
+    screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals,
     income: loadIncome, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
   };
@@ -511,6 +598,59 @@ function wireNav() {
       go(this.dataset.page, this);
     });
   });
+}
+
+function switchStratType(type, el) {
+  document.querySelectorAll('.tab-row .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('strat-reversion-section').style.display = type === 'reversion' ? '' : 'none';
+  document.getElementById('strat-breakout-section').style.display  = type === 'breakout'  ? '' : 'none';
+  if (type === 'breakout') loadBreakoutStrat();
+}
+
+async function loadBreakoutStrat() {
+  if (!db) return;
+  const el = document.getElementById('breakout-strat-results');
+  if (!el) return;
+
+  const { data: latest } = await db.from('daily_analysis')
+    .select('analysis_date').order('analysis_date', { ascending: false }).limit(1).maybeSingle();
+  if (!latest) { el.innerHTML = '<div class="empty">No data yet.</div>'; return; }
+
+  const { data } = await db.from('daily_analysis')
+    .select('ticker,close,vol_ratio,signal_reasons,total_score,analysis_date')
+    .eq('analysis_date', latest.analysis_date)
+    .eq('signal', 'BREAKOUT')
+    .order('total_score', { ascending: false });
+
+  if (!data?.length) { el.innerHTML = '<div class="empty">No breakout signals today — no stocks at 52W highs with volume >2×.</div>'; return; }
+
+  const { data: stocks } = await db.from('stocks').select('ticker,name,high_52w').in('ticker', data.map(d => d.ticker));
+  const sm = {}; (stocks||[]).forEach(s => { sm[s.ticker] = s; });
+
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Ticker</th><th>Name</th><th class="r">Price</th><th class="r">Score</th>
+      <th class="r">Vol×</th><th class="r">52W High</th><th>Entry time</th><th>Signals</th>
+    </tr></thead>
+    <tbody>
+    ${data.map(a => {
+      const s = sm[a.ticker]||{};
+      const live = livePriceCache[a.ticker];
+      const price = live?.price || a.close;
+      const chg = live?.changePct || 0;
+      return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
+        <td><span class="tkr">${a.ticker}</span></td>
+        <td style="font-size:11px">${s.name||''}</td>
+        <td class="r">${price?f.$(price,3):'--'} <span style="font-size:9px;color:${chg>=0?'var(--green)':'var(--red)'}">${chg>=0?'+':''}${(chg*100).toFixed(1)}%</span></td>
+        <td class="r"><span class="badge b-str">${a.total_score}/8</span></td>
+        <td class="r" style="color:var(--teal)">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
+        <td class="r">${s.high_52w?f.$(s.high_52w,3):'--'}</td>
+        <td style="font-size:10px;color:var(--amber);font-weight:600">⏰ 10:45am</td>
+        <td style="font-size:10px;color:var(--muted)">${(a.signal_reasons||[]).slice(0,2).join(' · ')}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
 }
 
 function switchTab(group, tab, el) {
@@ -557,13 +697,97 @@ function mg(label, val, type, color) {
   return `<div class="mg"><div class="mg-l">${label}</div><div class="mg-v" style="color:${col}">${v}</div></div>`;
 }
 
+// ── LIVE PRICE CACHE ──────────────────────────────────────────────────────────
+let livePriceCache = {};
+let livePriceLastFetch = 0;
+let livePriceFetching = false;
+
+async function refreshLivePrices() {
+  if (livePriceFetching) return;
+  livePriceFetching = true;
+  try {
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const res = await fetch(`/.netlify/functions/bulk-live-prices?universe=ALL&offset=${offset}`);
+      if (!res.ok) break;
+      const data = await res.json();
+      // Support both old format (plain object) and new paginated format
+      const prices = data.prices || data;
+      Object.assign(livePriceCache, prices);
+      hasMore = data.hasMore || false;
+      offset  = data.nextOffset || offset + 100;
+    }
+    livePriceLastFetch = Date.now();
+    console.log(`Live prices refreshed — ${Object.keys(livePriceCache).length} tickers`);
+    // Update status indicator
+    const statusEl = document.getElementById('m-price-status');
+    if (statusEl) {
+      const t = new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});
+      statusEl.textContent = `Live as at ${t}`;
+    }
+    // Reload whichever page is currently active with fresh prices
+    const active = document.querySelector('.page.active')?.id;
+    if (active === 'pg-reit-trading') loadREITSignals();
+    if (active === 'pg-strategies')   loadStrategies();
+    if (active === 'pg-reit')         loadREIT();
+    if (active === 'pg-screener')     loadSortedStocks();
+    loadModel(); // always reload model — it's the default page and needs live prices
+  } catch(e) {
+    console.warn('Live price refresh failed:', e.message);
+  }
+  livePriceFetching = false;
+}
+
 async function getPrices(tickers) {
-  const { data } = await db.from('prices').select('ticker,close,change_pct,market_date')
+  // If cache is populated use it immediately
+  if (Object.keys(livePriceCache).length) {
+    const map = {};
+    (tickers || []).forEach(t => {
+      if (livePriceCache[t]) {
+        map[t] = {
+          price:     livePriceCache[t].price,
+          open:      livePriceCache[t].open,
+          high:      livePriceCache[t].high,
+          low:       livePriceCache[t].low,
+          change:    livePriceCache[t].change,
+          changePct: livePriceCache[t].changePct,
+          volume:    livePriceCache[t].volume,
+          high_52w:  livePriceCache[t].high_52w,
+          low_52w:   livePriceCache[t].low_52w,
+        };
+      }
+    });
+    return map;
+  }
+  // Cache not ready yet — fall back to DB prices table
+  if (!db) return {};
+  const { data } = await db.from('prices').select('ticker,close,change_pct,open,high,low,volume,market_date')
     .in('ticker', tickers).order('market_date', { ascending: false });
   const map = {};
-  (data||[]).forEach(r => { if(!map[r.ticker]) map[r.ticker] = { price: parseFloat(r.close), change: parseFloat(r.change_pct||0) }; });
+  (data||[]).forEach(r => {
+    if (!map[r.ticker]) map[r.ticker] = {
+      price:     parseFloat(r.close),
+      open:      parseFloat(r.open  || r.close),
+      high:      parseFloat(r.high  || r.close),
+      low:       parseFloat(r.low   || r.close),
+      changePct: parseFloat(r.change_pct || 0),
+      volume:    parseInt(r.volume || 0),
+    };
+  });
   return map;
 }
+
+// Auto-refresh every 15 minutes
+setInterval(async () => {
+  await refreshLivePrices();
+  // Reload whichever page is active
+  const active = document.querySelector('.page.active')?.id;
+  if (active === 'pg-reit-trading') loadREITSignals();
+  if (active === 'pg-strategies')   loadStrategies();
+  if (active === 'pg-model')        loadModel();
+  if (active === 'pg-reit')         loadREIT();
+}, 15 * 60 * 1000);
 
 // ── MODEL PORTFOLIO ───────────────────────────────────────────────────────────
 async function loadModel() {
@@ -587,6 +811,23 @@ async function loadModel() {
   pnlEl.textContent = (totPnl>=0?'+':'')+f.$k(totPnl);
   pnlEl.style.color = f.clr(totPnl);
   document.getElementById('m-win').textContent = closed.length ? Math.round(wins.length/closed.length*100)+'%' : '--';
+
+  // Today's P&L — unrealised move on open positions since yesterday's close
+  const openTrades = (allTrades||[]).filter(t=>t.status==='OPEN');
+  let todayPnl = 0;
+  openTrades.forEach(t => {
+    const live = livePriceCache[t.ticker];
+    if (live && live.change && t.units) {
+      todayPnl += live.change * t.units;
+    }
+  });
+  const todayEl = document.getElementById('m-today-pnl');
+  if (todayEl) {
+    todayEl.textContent = openTrades.length && Object.keys(livePriceCache).length
+      ? (todayPnl>=0?'+':'')+f.$(todayPnl,0)
+      : '--';
+    todayEl.style.color = f.clr(todayPnl);
+  }
 
   // Get current prices for open trades
   const openTickers = (trades||[]).filter(t=>t.status==='OPEN').map(t=>t.ticker);
@@ -699,17 +940,18 @@ async function loadStrategies() {
     tr.innerHTML = `
       <td><span class="tkr">${a.ticker}</span></td>
       <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.stocks?.name||''}</td>
-      <td class="r">${a.close?f.$(a.close,3):'--'}</td>
-      <td><span class="badge ${sc}">${a.total_score||0}/6</span>${dots(a.total_score||0)}</td>
+      <td class="r">${(livePriceCache[a.ticker]?.price||a.close)?f.$(livePriceCache[a.ticker]?.price||a.close,3):'--'} ${livePriceCache[a.ticker]?'<span style="font-size:9px;color:'+(livePriceCache[a.ticker].changePct>=0?'var(--green)':'var(--red)')+'">'+(livePriceCache[a.ticker].changePct>=0?'+':'')+((livePriceCache[a.ticker].changePct||0)*100).toFixed(1)+'%</span>':''}</td>
+      <td><span class="badge ${sc}">${a.total_score||0}/7</span>${dots(a.total_score||0)}</td>
       <td style="text-align:center;color:${a.layer1_macro?'var(--green)':'var(--rule)'};font-weight:600">${a.layer1_macro?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer2_trend?'var(--green)':'var(--rule)'};font-weight:600">${a.layer2_trend?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer3_momentum?'var(--green)':'var(--rule)'};font-weight:600">${a.layer3_momentum?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer4_reversion?'var(--green)':'var(--rule)'};font-weight:600">${a.layer4_reversion?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer5_volume?'var(--green)':'var(--rule)'};font-weight:600">${a.layer5_volume?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer6_candle?'var(--green)':'var(--rule)'};font-weight:600">${a.layer6_candle?'✓':'·'}</td>
+      <td style="text-align:center;color:${a.layer7_ml?'var(--gold)':'var(--rule)'};font-weight:600">${a.layer7_ml?'✓':'·'}</td>
       <td class="r" style="color:${a.rsi14<35?'var(--green)':a.rsi14>70?'var(--red)':'var(--muted)'}">${a.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
       <td class="r" style="color:${a.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
-      <td style="font-size:10px;color:var(--amber)">${a.candle_pattern||'--'}</td>
+      <td style="font-size:10px;color:var(--amber)">${candleTooltip(a.candle_pattern)||'--'}</td>
       <td style="font-size:10px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(a.signal_reasons||[]).slice(0,2).join(' · ')}</td>
     `;
     tbody.appendChild(tr);
@@ -733,13 +975,9 @@ async function screenStock() {
       .limit(1)
       .maybeSingle();
 
-    // 2. Get latest price from prices table
-    const { data: priceRow } = await db.from('prices')
-      .select('close,change_pct,market_date')
-      .eq('ticker', ticker)
-      .order('market_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 2. Get live price from cache
+    const livePd  = livePriceCache[ticker] || {};
+    const priceRow = livePd.price ? { close: livePd.price, change_pct: livePd.changePct, open: livePd.open, high: livePd.high, low: livePd.low } : null;
 
     // 3. Get stock info
     const { data: stock } = await db.from('stocks')
@@ -774,7 +1012,7 @@ async function screenStock() {
 
       ${data ? `
         <div class="kb" style="margin-bottom:14px">
-          <div class="kc dk"><div class="kl">Score</div><div class="kv">${data.total_score||0}/6</div></div>
+          <div class="kc dk"><div class="kl">Score</div><div class="kv">${data.total_score||0}/7</div></div>
           <div class="kc"><div class="kl">Conviction</div><div class="kv">${data.conviction||'--'}</div></div>
           <div class="kc"><div class="kl">RSI 14</div><div class="kv ${data.rsi14<35?'green':data.rsi14>70?'red':''}">${data.rsi14?parseFloat(data.rsi14).toFixed(0):'--'}</div></div>
           <div class="kc"><div class="kl">Volume ×</div><div class="kv ${data.vol_ratio>1.5?'teal':''}">${data.vol_ratio?parseFloat(data.vol_ratio).toFixed(1)+'×':'--'}</div></div>
@@ -789,6 +1027,7 @@ async function screenStock() {
           <div class="layer ${data.layer4_reversion?'on':''}"><div class="layer-n">Reversion</div><div class="layer-v">${data.layer4_reversion?'✓':'✗'}</div></div>
           <div class="layer ${data.layer5_volume?'on':''}"><div class="layer-n">Volume</div><div class="layer-v">${data.layer5_volume?'✓':'✗'}</div></div>
           <div class="layer ${data.layer6_candle?'on':''}"><div class="layer-n">Candle</div><div class="layer-v">${data.layer6_candle?'✓':'✗'}</div></div>
+        <div class="layer ${data.layer7_ml?'on':''}" style="${data.layer7_ml?'border-top-color:var(--gold)':''}"><div class="layer-n">ML</div><div class="layer-v" style="${data.layer7_ml?'color:var(--gold)':''}">${data.layer7_ml?'✓':'✗'}</div></div>
         </div>
         <div class="sl" style="margin-top:16px">Signal reasons</div>
         <div class="info">${(data.signal_reasons||['No reasons recorded']).join('<br>')}</div>
@@ -872,7 +1111,7 @@ async function loadWatchlist() {
             <td><span class="tkr">${w.ticker}</span></td>
             <td style="font-size:11px">${w.name||''}</td>
             <td class="r">${a?.close?f.$(a.close,3):'--'}</td>
-            <td>${a?`<span class="badge ${sc}">${a.total_score||0}/6</span>`:'<span style="font-size:11px;color:var(--muted)">Pending</span>'}</td>
+            <td>${a?`<span class="badge ${sc}">${a.total_score||0}/7</span>`:'<span style="font-size:11px;color:var(--muted)">Pending</span>'}</td>
             <td class="r" style="color:${a?.rsi14<35?'var(--green)':a?.rsi14>70?'var(--red)':'var(--muted)'}">${a?.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
             <td class="r" style="color:${a?.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a?.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
             <td style="font-size:11px;color:var(--muted)">${a?.analysis_date||'Not yet'}</td>
@@ -885,6 +1124,59 @@ async function loadWatchlist() {
 }
 
 // ── SORTED STOCK BROWSER ──────────────────────────────────────────────────────
+async function loadBreakouts() {
+  if (!db) return;
+  const el = document.getElementById('breakout-results');
+  if (!el) return;
+
+  // Get latest breakout signals from daily_analysis
+  const { data: latest } = await db.from('daily_analysis')
+    .select('analysis_date').order('analysis_date', { ascending: false }).limit(1).maybeSingle();
+  if (!latest) { el.innerHTML = '<div class="empty">No breakout data yet — run morning scan.</div>'; return; }
+
+  const { data } = await db.from('daily_analysis')
+    .select('ticker,close,vol_ratio,signal_reasons,total_score,analysis_date')
+    .eq('analysis_date', latest.analysis_date)
+    .eq('signal', 'BREAKOUT')
+    .order('total_score', { ascending: false })
+    .limit(10);
+
+  if (!data?.length) {
+    el.innerHTML = '<div class="empty">No breakout signals today.</div>';
+    return;
+  }
+
+  const { data: stocksData } = await db.from('stocks')
+    .select('ticker,name,high_52w,low_52w').in('ticker', data.map(d => d.ticker));
+  const stockMap = {};
+  (stocksData||[]).forEach(s => { stockMap[s.ticker] = s; });
+
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Ticker</th><th>Name</th><th class="r">Price</th>
+      <th class="r">Score</th><th class="r">Vol ×</th>
+      <th class="r">52W High</th><th>Signals</th>
+    </tr></thead>
+    <tbody>
+    ${data.map(a => {
+      const s = stockMap[a.ticker] || {};
+      const live = livePriceCache[a.ticker];
+      const price = live?.price || a.close;
+      const chg = live?.changePct || 0;
+      const pctFrom52w = s.high_52w && price ? ((price - s.high_52w) / s.high_52w * 100).toFixed(1) : null;
+      return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
+        <td><span class="tkr">${a.ticker}</span></td>
+        <td style="font-size:11px">${s.name||''}</td>
+        <td class="r">${price?f.$(price,3):'--'} <span style="font-size:9px;color:${chg>=0?'var(--green)':'var(--red)'}">${chg>=0?'+':''}${(chg*100).toFixed(1)}%</span></td>
+        <td class="r"><span class="badge b-str">${a.total_score}/8</span></td>
+        <td class="r" style="color:var(--teal)">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
+        <td class="r">${pctFrom52w != null ? pctFrom52w+'%' : '--'}</td>
+        <td style="font-size:10px;color:var(--amber)">${(a.signal_reasons||[]).slice(0,2).join(' · ')}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
 async function loadSortedStocks() {
   if (!db) return;
   const sortField   = document.getElementById('sort-field')?.value || 'total_score';
@@ -919,17 +1211,17 @@ async function loadSortedStocks() {
   const { data: analysis } = await query.limit(100);
   if (!analysis?.length) { el.innerHTML = '<div class="empty">No stocks match this filter</div>'; return; }
 
-  // Get stock metadata for 52W data
+  // Get stock metadata for all tickers
   const tickers = analysis.map(a => a.ticker);
-  let stockQuery = db.from('stocks').select('ticker,name,sector,high_52w,low_52w,market_cap,pct_from_52w_low,pct_from_52w_high').in('ticker', tickers);
-  if (universe) stockQuery = stockQuery.eq('universe', universe);
-  const { data: stocks } = await stockQuery;
+  const { data: stocksData } = await db.from('stocks')
+    .select('ticker,name,sector,universe,is_reit,is_manager,is_developer,high_52w,low_52w,market_cap,pct_from_52w_low,pct_from_52w_high')
+    .in('ticker', tickers);
   const stockMap = {};
-  (stocks||[]).forEach(s => { stockMap[s.ticker] = s; });
+  (stocksData||[]).forEach(s => { stockMap[s.ticker] = s; });
 
-  // Filter by universe if set
+  // Filter by universe
   const filtered = universe
-    ? analysis.filter(a => stockMap[a.ticker])
+    ? analysis.filter(a => stockMap[a.ticker]?.universe === universe)
     : analysis;
 
   // Sort by 52W fields (need stock data)
@@ -953,11 +1245,12 @@ async function loadSortedStocks() {
           const s  = stockMap[a.ticker] || {};
           const sc = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod'}[a.conviction]||'b-hold';
           const mcap = s.market_cap ? (s.market_cap >= 1e9 ? `$${(s.market_cap/1e9).toFixed(1)}B` : `$${(s.market_cap/1e6).toFixed(0)}M`) : '--';
+          const reitType = s.is_manager ? 'Mgr' : s.is_developer ? 'Dev' : s.is_reit ? 'REIT' : '';
           return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
-            <td><span class="tkr">${a.ticker}</span></td>
+            <td><span class="tkr">${a.ticker}</span>${reitType?`<span class="badge b-reit" style="margin-left:4px;font-size:9px">${reitType}</span>`:''}</td>
             <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||''}</td>
-            <td class="r">${a.close?f.$(a.close,3):'--'}</td>
-            <td><span class="badge ${sc}">${a.total_score||0}/6</span></td>
+            <td class="r">${(livePriceCache[a.ticker]?.price||a.close)?f.$(livePriceCache[a.ticker]?.price||a.close,3):'--'} ${livePriceCache[a.ticker]?'<span style="font-size:9px;color:'+(livePriceCache[a.ticker].changePct>=0?'var(--green)':'var(--red)')+'">'+(livePriceCache[a.ticker].changePct>=0?'+':'')+((livePriceCache[a.ticker].changePct||0)*100).toFixed(1)+'%</span>':''}</td>
+            <td><span class="badge ${sc}">${a.total_score||0}/7</span></td>
             <td class="r" style="color:${a.rsi14<35?'var(--green)':a.rsi14>70?'var(--red)':'var(--muted)'}">${a.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
             <td class="r" style="color:${a.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
             <td class="r" style="color:${s.pct_from_52w_low<10?'var(--green)':'var(--muted)'}">
@@ -967,7 +1260,7 @@ async function loadSortedStocks() {
               ${s.pct_from_52w_high!=null?parseFloat(s.pct_from_52w_high).toFixed(1)+'%':'--'}
             </td>
             <td class="r" style="font-size:11px">${mcap}</td>
-            <td style="font-size:10px;color:var(--amber)">${a.candle_pattern||''}</td>
+            <td style="font-size:10px;color:var(--amber)">${candleTooltip(a.candle_pattern)||''}</td>
           </tr>`;
         }).join('')}
       </tbody>
@@ -1022,42 +1315,123 @@ async function loadREIT() {
 }
 
 // ── REIT SIGNALS ──────────────────────────────────────────────────────────────
+function reitSortBy(field) {
+  const sel = document.getElementById('reit-sort');
+  if (sel) sel.value = field;
+  loadREITSignals();
+}
+
 async function loadREITSignals() {
   if (!db) return;
-  const { data: stocks } = await db.from('stocks').select('*').eq('is_reit',true).eq('active',true).eq('is_manager',false);
-  const tickers = (stocks||[]).filter(s=>s.ticker!=='GSBG37').map(s=>s.ticker);
+
+  const sortBy      = document.getElementById('reit-sort')?.value     || 'yield';
+  const filterSect  = document.getElementById('reit-filter')?.value   || '';
+  const triggersOnly = document.getElementById('reit-triggers-only')?.checked || false;
+
+  // Load REIT macro from latest morning scan
+  const { data: latestMacro } = await db.from('morning_signals')
+    .select('reit_macro_score,reit_macro_signal,vnq_change,us_10yr,aus_10yr,aud_change,signal_date')
+    .order('signal_date', { ascending: false }).limit(1).maybeSingle();
+
+  const macroBar = document.getElementById('reit-macro-bar');
+  if (macroBar && latestMacro?.reit_macro_signal) {
+    const sc    = latestMacro.reit_macro_score || 0;
+    const bg    = sc >= 2 ? '#f0f8f0' : sc >= 0 ? '#fffbf0' : '#fdf8ee';
+    const border= sc >= 2 ? '#2d5a2d' : sc >= 0 ? '#b8943f' : '#8b2e2e';
+    const emoji = sc >= 4 ? '🟢' : sc >= 2 ? '🟢' : sc >= 0 ? '🟡' : sc >= -2 ? '🟠' : '🔴';
+    const vnq   = latestMacro.vnq_change;
+    macroBar.style.display = 'block';
+    macroBar.style.background = bg;
+    macroBar.style.borderColor = border;
+    macroBar.innerHTML = `
+      <strong>${emoji} REIT MACRO: ${latestMacro.reit_macro_signal}</strong>
+      <span style="margin-left:16px;color:var(--muted)">
+        AUS 10yr ${latestMacro.aus_10yr ? (latestMacro.aus_10yr*100).toFixed(2)+'%' : '--'} &nbsp;·&nbsp;
+        US 10yr ${latestMacro.us_10yr ? (latestMacro.us_10yr*100).toFixed(2)+'%' : '--'} &nbsp;·&nbsp;
+        VNQ ${vnq != null ? (vnq>=0?'+':'')+(vnq*100).toFixed(1)+'%' : '--'} overnight
+      </span>
+      <span style="margin-left:8px;font-size:10px;color:var(--muted)">${latestMacro.signal_date}</span>
+    `;
+  }
+
+  const { data: stocks } = await db.from('stocks')
+    .select('*').eq('is_reit', true).eq('active', true)
+    .eq('is_manager', false).eq('is_developer', false);
+
+  const tickers = (stocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => s.ticker);
   const prices  = await getPrices(tickers);
 
-  const { data: analysis } = await db.from('daily_analysis').select('*').in('ticker',tickers).order('analysis_date',{ascending:false});
+  const { data: analysis } = await db.from('daily_analysis')
+    .select('*').in('ticker', tickers).order('analysis_date', { ascending: false });
   const analysisMap = {};
-  (analysis||[]).forEach(a => { if(!analysisMap[a.ticker]) analysisMap[a.ticker] = a; });
+  (analysis||[]).forEach(a => { if (!analysisMap[a.ticker]) analysisMap[a.ticker] = a; });
 
   const tbody = document.getElementById('reit-signals-tbody');
   tbody.innerHTML = '';
 
-  (stocks||[]).filter(s=>s.ticker!=='GSBG37').forEach(s => {
-    const pd  = prices[s.ticker];
-    const a   = analysisMap[s.ticker];
-    const p   = pd?.price;
-    const y   = s.dps_fy26 && p ? s.dps_fy26 / p : null;
-    const t8  = s.dps_fy26 ? s.dps_fy26 / 0.08 : null;
+  // Build enriched list
+  let reitList = (stocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => {
+    const pd   = prices[s.ticker];
+    const a    = analysisMap[s.ticker];
+    const p    = pd?.price;
+    const y    = s.dps_fy26 && p ? s.dps_fy26 / p : null;
+    const t8   = s.dps_fy26 ? s.dps_fy26 / 0.08 : null;
     const disc = s.nta && p ? (p - s.nta) / s.nta : null;
-    const fired = y && y >= (s.yield_trigger||0.08);
-    const close = !fired && t8 && p && (t8-p)/p > -0.12;
-    const tr  = document.createElement('tr');
-    if (fired) tr.style.background='#f0f8f0';
-    if (close) tr.style.background='#fffbf0';
+    const fired = y && y >= (s.yield_trigger || 0.08);
+    const close = !fired && t8 && p && (t8 - p) / p > -0.12;
+    return { s, a, p, y, t8, disc, fired, close };
+  });
+
+  // Filter
+  if (filterSect)    reitList = reitList.filter(r => r.s.sector === filterSect);
+  if (triggersOnly)  reitList = reitList.filter(r => r.fired);
+
+  // Sort
+  reitList.sort((a, b) => {
+    switch(sortBy) {
+      case 'yield':    return (b.y||0) - (a.y||0);
+      case 'discount': return (a.disc||0) - (b.disc||0);
+      case 'score':    return (b.a?.total_score||0) - (a.a?.total_score||0);
+      case 'ticker':   return a.s.ticker.localeCompare(b.s.ticker);
+      case 'sector':   return (a.s.sector||'').localeCompare(b.s.sector||'');
+      case 'price':    return (b.p||0) - (a.p||0);
+      case 'target8':  return (b.t8||0) - (a.t8||0);
+      default:         return (b.y||0) - (a.y||0);
+    }
+  });
+
+  // Update count
+  const countEl = document.getElementById('reit-count');
+  if (countEl) countEl.textContent = `${reitList.length} REITs`;
+
+  reitList.forEach(({ s, a, p, y, t8, disc, fired, close }) => {
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.addEventListener('click', () => openSignalDrawer(s.ticker));
+    if (fired) tr.style.background = '#f0f8f0';
+    if (close) tr.style.background = '#fffbf0';
     tr.innerHTML = `
       <td><span class="tkr">${s.ticker}</span></td>
       <td style="font-size:11px">${s.name}</td>
-      <td style="font-size:10px;color:var(--muted)">${s.subsector||''}</td>
-      <td class="r">${p?f.$(p,3):'--'}</td>
-      <td class="r">${s.nta?f.$(s.nta,2):'--'}</td>
-      <td class="r" style="color:${disc==null?'var(--muted)':disc<0?'var(--teal)':'var(--red)'}">${disc!=null?(disc*100).toFixed(1)+'%':'--'}</td>
-      <td class="r" style="color:${y>=0.08?'var(--green)':y>=0.07?'var(--teal)':'var(--muted)'};font-weight:${y>=0.07?600:400}">${y?(y*100).toFixed(1)+'%':'--'}</td>
-      <td class="r">${t8?f.$(t8,3):'--'}</td>
-      <td>${a?`<span class="badge ${a.conviction==='EXCEPTIONAL'?'b-exc':a.conviction==='STRONG'?'b-str':'b-mod'}">${a.total_score||0}/6</span>${dots(a.total_score||0)}`:'<span style="font-size:10px;color:var(--muted)">Pending scan</span>'}</td>
-      <td><span style="font-size:11px;font-weight:${fired?600:400};color:${fired?'var(--green)':close?'var(--amber)':'var(--muted)'}">${fired?'🟢 BUY':close?'⚠️ Close':'Watching'}</span></td>
+      <td style="font-size:10px;color:var(--muted)">${s.sector||''}</td>
+      <td class="r">${p ? f.$(p,3) : '--'}</td>
+      <td class="r">${s.nta ? f.$(s.nta,2) : '--'}</td>
+      <td class="r" style="color:${disc==null?'var(--muted)':disc<-0.1?'var(--green)':disc<0?'var(--teal)':'var(--red)'}">
+        ${disc != null ? (disc*100).toFixed(1)+'%' : '--'}
+      </td>
+      <td class="r" style="color:${y>=0.08?'var(--green)':y>=0.07?'var(--teal)':'var(--muted)'};font-weight:${y>=0.07?600:400}">
+        ${y ? (y*100).toFixed(1)+'%' : '--'}
+      </td>
+      <td class="r">${t8 ? f.$(t8,3) : '--'}</td>
+      <td class="r" style="color:${s.gearing>0.4?'var(--red)':s.gearing>0.35?'var(--amber)':'var(--muted)'}">
+        ${s.gearing != null ? (s.gearing*100).toFixed(0)+'%' : '--'}
+      </td>
+      <td class="r">${s.wale != null ? parseFloat(s.wale).toFixed(1)+'yr' : '--'}</td>
+      <td class="r">${s.occupancy != null ? (s.occupancy*100).toFixed(1)+'%' : '--'}</td>
+      <td>${a ? `<span class="badge ${a.conviction==='EXCEPTIONAL'?'b-exc':a.conviction==='STRONG'?'b-str':'b-mod'}">${a.total_score||0}/7</span>${dots(a.total_score||0)}` : '<span style="font-size:10px;color:var(--muted)">Pending</span>'}</td>
+      <td><span style="font-size:11px;font-weight:${fired?600:400};color:${fired?'var(--green)':close?'var(--amber)':'var(--muted)'}">
+        ${fired ? '🟢 BUY' : close ? '⚠️ Close' : 'Watching'}
+      </span></td>
     `;
     tbody.appendChild(tr);
   });
@@ -1314,9 +1688,9 @@ async function openSignalDrawer(ticker) {
 
   // Fetch all data in parallel
   const [tradeRes, analysisRes, pricesRes, stockRes] = await Promise.all([
-    db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).single(),
+    db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).maybeSingle(),
     db.from('daily_analysis').select('*').eq('ticker', ticker).order('analysis_date',{ascending:false}).limit(1).single(),
-    db.from('prices').select('market_date,open,high,low,close,volume').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
+    db.from('prices').select('market_date,open,high,low,close,volume,change_pct').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
     db.from('stocks').select('*').eq('ticker', ticker).single()
   ]);
 
@@ -1331,12 +1705,39 @@ async function openSignalDrawer(ticker) {
     { name: 'Layer 3 — Momentum',   val: analysis?.layer3_momentum,  desc: '20DMA, ROC 20-day, MACD signal' },
     { name: 'Layer 4 — Reversion',  val: analysis?.layer4_reversion, desc: 'RSI <45, Bollinger lower band, % from 20DMA' },
     { name: 'Layer 5 — Volume',     val: analysis?.layer5_volume,    desc: 'Volume spike >1.5x 20-day average' },
-    { name: 'Layer 6 — Candle',     val: analysis?.layer6_candle,    desc: analysis?.candle_pattern || 'Hammer, engulfing, morning star, doji' },
+    { name: 'Layer 6 — Candle',     val: analysis?.layer6_candle,    desc: analysis?.candle_pattern ? (CANDLE_DESC[analysis.candle_pattern] || analysis.candle_pattern) : 'Hammer, engulfing, morning star, doji' },
+    { name: 'Layer 7 — ML',         val: analysis?.layer7_ml,        desc: 'Distance from 200DMA, RSI oversold, volume, candle pattern, ROC confirmation' },
   ];
 
   const score = analysis?.total_score || trade?.total_score || 0;
   const conv  = analysis?.conviction  || trade?.conviction  || '--';
-  const price = prices[prices.length-1]?.close || trade?.entry_price;
+
+  // Inject today's live price as the most recent row
+  const live     = livePriceCache[ticker];
+  const today    = new Date().toISOString().split('T')[0];
+  const lastRow  = prices[prices.length - 1];
+  if (live && live.price > 0) {
+    const liveRow = {
+      market_date: today,
+      open:        live.open  || live.price,
+      high:        live.high  || live.price,
+      low:         live.low   || live.price,
+      close:       live.price,
+      volume:      live.volume || 0,
+      change_pct:  live.changePct || 0,
+      _live:       true
+    };
+    // Replace today's DB row if it exists, otherwise append
+    if (lastRow?.market_date === today) {
+      prices[prices.length - 1] = liveRow;
+    } else {
+      prices.push(liveRow);
+    }
+  }
+
+  const livePrice  = live?.price || prices[prices.length-1]?.close || trade?.entry_price;
+  const liveChange = live?.changePct || 0;
+  const prevClose  = live ? (livePrice - (live.change || 0)) : null;
 
   // Build candlestick chart data
   const chartHtml = prices.length > 5 ? buildFullChart(prices, trade) : '<div style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;background:var(--cream);border-radius:4px">Not enough price history yet — bootstrap running</div>';
@@ -1348,11 +1749,16 @@ async function openSignalDrawer(ticker) {
   document.getElementById('sd-subtitle').textContent = `${stock?.sector || ''} · ${analysis?.analysis_date || trade?.trade_date || 'Today'}`;
 
   // Price block
-  const convBg = conv==='EXCEPTIONAL'?'var(--teal)':conv==='STRONG'?'#eef6ee':'#fdf8ee';
-  const convFg = conv==='EXCEPTIONAL'?'#fff':conv==='STRONG'?'var(--green)':'var(--amber)';
+  const convBg   = conv==='EXCEPTIONAL'?'var(--teal)':conv==='STRONG'?'#eef6ee':'#fdf8ee';
+  const convFg   = conv==='EXCEPTIONAL'?'#fff':conv==='STRONG'?'var(--green)':'var(--amber)';
+  const chgColor = liveChange >= 0 ? 'var(--green)' : 'var(--red)';
+  const chgSign  = liveChange >= 0 ? '+' : '';
   document.getElementById('sd-price-block').innerHTML = `
-    <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700">${price?'$'+parseFloat(price).toFixed(3):'--'}</div>
-    <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;margin-top:4px;background:${convBg};color:${convFg}">${conv} ${score}/6</span>
+    <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700">${livePrice?'$'+parseFloat(livePrice).toFixed(3):'--'}
+      ${live ? `<span style="font-size:14px;font-family:'DM Mono',monospace;color:${chgColor};margin-left:8px">${chgSign}${(liveChange*100).toFixed(2)}%</span>` : ''}
+    </div>
+    ${live ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:'DM Mono',monospace">O $${live.open?.toFixed(3)||'--'} · H $${live.high?.toFixed(3)||'--'} · L $${live.low?.toFixed(3)||'--'} · Vol ${(live.volume/1000).toFixed(0)}K <span style="color:var(--teal)">● Live</span></div>` : ''}
+    <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;margin-top:4px;background:${convBg};color:${convFg}">${conv} ${score}/7</span>
   `;
 
   // Key metrics grid
@@ -1363,8 +1769,15 @@ async function openSignalDrawer(ticker) {
     { l:'50 DMA',   v: analysis?.ma50  ? '$'+parseFloat(analysis.ma50).toFixed(3)  : '--',   c: 'var(--ink)', dark: false },
     { l:'200 DMA',  v: analysis?.ma200 ? '$'+parseFloat(analysis.ma200).toFixed(3) : '--',   c: 'var(--ink)', dark: false },
     { l:'BB Pos',   v: analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%':'--', c: 'var(--ink)', dark: false },
-    { l:'Conviction',v: conv + ' ' + score+'/6',  c: convFg, dark: conv==='EXCEPTIONAL' },
-    { l:'Candle',   v: analysis?.candle_pattern || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false },
+    { l:'Conviction',v: conv + ' ' + score+'/7',  c: convFg, dark: conv==='EXCEPTIONAL' },
+    { l:'Candle',   v: candleTooltip(analysis?.candle_pattern) || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false, html: true },
+    ...(stock?.is_reit ? [
+      { l:'NTA',      v: stock.nta ? '$'+parseFloat(stock.nta).toFixed(2) : '--', c: 'var(--ink)', dark: false },
+      { l:'Gearing',  v: stock.gearing ? (stock.gearing*100).toFixed(0)+'%' : '--', c: stock.gearing>0.4?'var(--red)':stock.gearing>0.35?'var(--amber)':'var(--ink)', dark: false },
+      { l:'WALE',     v: stock.wale ? parseFloat(stock.wale).toFixed(1)+'yr' : '--', c: 'var(--ink)', dark: false },
+      { l:'Occupancy',v: stock.occupancy ? (stock.occupancy*100).toFixed(1)+'%' : '--', c: stock.occupancy>0.97?'var(--green)':stock.occupancy>0.93?'var(--ink)':'var(--amber)', dark: false },
+      { l:'Cap Rate', v: stock.cap_rate ? (stock.cap_rate*100).toFixed(2)+'%' : '--', c: 'var(--teal)', dark: false },
+    ] : []),
   ];
   document.getElementById('sd-metrics').innerHTML = metrics.map(m =>
     `<div class="kc ${m.dark?'dk':''}">
@@ -1425,7 +1838,7 @@ async function openSignalDrawer(ticker) {
     ['% from 20DMA',  analysis?.pct_from_ma20 ? (parseFloat(analysis.pct_from_ma20)*100).toFixed(1)+'%' : '--',
       'How far price is from the 20-day moving average. Negative = below the MA, potential mean reversion opportunity.'],
     ['Vol Ratio',     analysis?.vol_ratio ? parseFloat(analysis.vol_ratio).toFixed(2)+'×' : '--',
-      'Today's volume vs 20-day average. 1.5× means 50% more volume than usual — something is happening.'],
+      'Today\'s volume vs 20-day average. 1.5x means 50% more volume than usual — something is happening.'],
     ['Above 20DMA',   analysis?.above_ma20 != null ? (analysis.above_ma20 ? 'Yes ✓' : 'No ✗') : '--',
       '20-day moving average. Short-term trend indicator. Price above = short term uptrend.'],
     ['Above 200DMA',  analysis?.above_ma200 != null ? (analysis.above_ma200 ? 'Yes ✓' : 'No ✗') : '--',
@@ -1497,6 +1910,7 @@ async function refreshLivePrice(ticker) {
 }
 
 
+function closeStockDetail() {
   document.getElementById('pg-stock-detail').classList.remove('active');
   const navItem = document.getElementById('nav-stock-detail');
   if (navItem) { navItem.style.display = 'none'; navItem.classList.remove('active'); }
@@ -1610,12 +2024,12 @@ function buildFullChart(prices, trade) {
 
   // Trade levels
   const tradeLines = trade ? [
-    trade.entry_price ? `<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="#1a1a1a" stroke-width="2"/>
-      <text x="${w-padR+2}" y="${py(parseFloat(trade.entry_price))+4}" font-size="10" fill="#555">Entry</text>` : '',
-    trade.stop_price  ? `<line x1="${padL}" y1="${py(parseFloat(trade.stop_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.stop_price))}" stroke="#8b2e2e" stroke-width="1.5" stroke-dasharray="6,4"/>
-      <text x="${w-padR+2}" y="${py(parseFloat(trade.stop_price))+4}" font-size="10" fill="#8b2e2e">Stop</text>` : '',
-    trade.target_price? `<line x1="${padL}" y1="${py(parseFloat(trade.target_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.target_price))}" stroke="#2d5a2d" stroke-width="1.5" stroke-dasharray="6,4"/>
-      <text x="${w-padR+2}" y="${py(parseFloat(trade.target_price))+4}" font-size="10" fill="#2d5a2d">Target</text>` : '',
+    trade.entry_price ? `<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="${padL+4}" y="${py(parseFloat(trade.entry_price))-3}" font-size="9" fill="#555" font-family="monospace">Entry $${parseFloat(trade.entry_price).toFixed(3)}</text>` : '',
+    trade.stop_price  ? `<line x1="${padL}" y1="${py(parseFloat(trade.stop_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.stop_price))}" stroke="#8b2e2e" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="${padL+4}" y="${py(parseFloat(trade.stop_price))-3}" font-size="9" fill="#8b2e2e" font-family="monospace">Stop $${parseFloat(trade.stop_price).toFixed(3)}</text>` : '',
+    trade.target_price? `<line x1="${padL}" y1="${py(parseFloat(trade.target_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.target_price))}" stroke="#2d5a2d" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="${padL+4}" y="${py(parseFloat(trade.target_price))-3}" font-size="9" fill="#2d5a2d" font-family="monospace">Target $${parseFloat(trade.target_price).toFixed(3)}</text>` : '',
   ].join('') : '';
 
   // Price grid lines and labels
