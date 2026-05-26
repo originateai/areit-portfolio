@@ -217,6 +217,7 @@ tfoot td.r{text-align:right}
       <div class="layer on"><div class="layer-n">Layer 4</div><div class="layer-v">Reversion</div><div style="font-size:10px;color:var(--muted);margin-top:4px">RSI, Bollinger, % from MA</div></div>
       <div class="layer on"><div class="layer-n">Layer 5</div><div class="layer-v">Volume</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Vol spike vs 20-day avg, OBV</div></div>
       <div class="layer on"><div class="layer-n">Layer 6</div><div class="layer-v">Candle</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Hammer, engulfing, morning star</div></div>
+      <div class="layer on" style="border-top-color:var(--gold)"><div class="layer-n">Layer 7</div><div class="layer-v" style="color:var(--gold)">ML</div><div style="font-size:10px;color:var(--muted);margin-top:4px">Distance 200DMA, RSI, volume, candle, ROC</div></div>
     </div>
     <div class="sl" style="margin-top:20px">Today's scored stocks — sorted by conviction</div>
     <div class="tab-row">
@@ -306,7 +307,8 @@ tfoot td.r{text-align:right}
 
   <!-- REIT TRADING SIGNALS -->
   <div id="pg-reit-trading" class="page">
-    <div class="ph"><h1>REIT Strategy Signals</h1><p>All Moelis-covered pure landlords · 6-layer strategy + yield triggers · No managers, no developers</p></div>
+    <div class="ph"><h1>REIT Strategy Signals</h1><p>All Moelis-covered pure landlords · 7-layer strategy + yield triggers · No managers, no developers</p></div>
+    <div id="reit-macro-bar" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:4px;font-size:12px;border:1px solid var(--rule)"></div>
 
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
       <select id="reit-sort" onchange="loadREITSignals()"
@@ -842,6 +844,7 @@ async function loadStrategies() {
       <td style="text-align:center;color:${a.layer4_reversion?'var(--green)':'var(--rule)'};font-weight:600">${a.layer4_reversion?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer5_volume?'var(--green)':'var(--rule)'};font-weight:600">${a.layer5_volume?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer6_candle?'var(--green)':'var(--rule)'};font-weight:600">${a.layer6_candle?'✓':'·'}</td>
+      <td style="text-align:center;color:${a.layer7_ml?'var(--gold)':'var(--rule)'};font-weight:600">${a.layer7_ml?'✓':'·'}</td>
       <td class="r" style="color:${a.rsi14<35?'var(--green)':a.rsi14>70?'var(--red)':'var(--muted)'}">${a.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
       <td class="r" style="color:${a.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
       <td style="font-size:10px;color:var(--amber)">${a.candle_pattern||'--'}</td>
@@ -920,6 +923,7 @@ async function screenStock() {
           <div class="layer ${data.layer4_reversion?'on':''}"><div class="layer-n">Reversion</div><div class="layer-v">${data.layer4_reversion?'✓':'✗'}</div></div>
           <div class="layer ${data.layer5_volume?'on':''}"><div class="layer-n">Volume</div><div class="layer-v">${data.layer5_volume?'✓':'✗'}</div></div>
           <div class="layer ${data.layer6_candle?'on':''}"><div class="layer-n">Candle</div><div class="layer-v">${data.layer6_candle?'✓':'✗'}</div></div>
+        <div class="layer ${data.layer7_ml?'on':''}" style="${data.layer7_ml?'border-top-color:var(--gold)':''}"><div class="layer-n">ML</div><div class="layer-v" style="${data.layer7_ml?'color:var(--gold)':''}">${data.layer7_ml?'✓':'✗'}</div></div>
         </div>
         <div class="sl" style="margin-top:16px">Signal reasons</div>
         <div class="info">${(data.signal_reasons||['No reasons recorded']).join('<br>')}</div>
@@ -1166,6 +1170,32 @@ async function loadREITSignals() {
   const sortBy      = document.getElementById('reit-sort')?.value     || 'yield';
   const filterSect  = document.getElementById('reit-filter')?.value   || '';
   const triggersOnly = document.getElementById('reit-triggers-only')?.checked || false;
+
+  // Load REIT macro from latest morning scan
+  const { data: latestMacro } = await db.from('morning_signals')
+    .select('reit_macro_score,reit_macro_signal,vnq_change,us_10yr,aus_10yr,aud_change,signal_date')
+    .order('signal_date', { ascending: false }).limit(1).maybeSingle();
+
+  const macroBar = document.getElementById('reit-macro-bar');
+  if (macroBar && latestMacro?.reit_macro_signal) {
+    const sc    = latestMacro.reit_macro_score || 0;
+    const bg    = sc >= 2 ? '#f0f8f0' : sc >= 0 ? '#fffbf0' : '#fdf8ee';
+    const border= sc >= 2 ? '#2d5a2d' : sc >= 0 ? '#b8943f' : '#8b2e2e';
+    const emoji = sc >= 4 ? '🟢' : sc >= 2 ? '🟢' : sc >= 0 ? '🟡' : sc >= -2 ? '🟠' : '🔴';
+    const vnq   = latestMacro.vnq_change;
+    macroBar.style.display = 'block';
+    macroBar.style.background = bg;
+    macroBar.style.borderColor = border;
+    macroBar.innerHTML = `
+      <strong>${emoji} REIT MACRO: ${latestMacro.reit_macro_signal}</strong>
+      <span style="margin-left:16px;color:var(--muted)">
+        AUS 10yr ${latestMacro.aus_10yr ? (latestMacro.aus_10yr*100).toFixed(2)+'%' : '--'} &nbsp;·&nbsp;
+        US 10yr ${latestMacro.us_10yr ? (latestMacro.us_10yr*100).toFixed(2)+'%' : '--'} &nbsp;·&nbsp;
+        VNQ ${vnq != null ? (vnq>=0?'+':'')+(vnq*100).toFixed(1)+'%' : '--'} overnight
+      </span>
+      <span style="margin-left:8px;font-size:10px;color:var(--muted)">${latestMacro.signal_date}</span>
+    `;
+  }
 
   const { data: stocks } = await db.from('stocks')
     .select('*').eq('is_reit', true).eq('active', true)
@@ -1519,6 +1549,7 @@ async function openSignalDrawer(ticker) {
     { name: 'Layer 4 — Reversion',  val: analysis?.layer4_reversion, desc: 'RSI <45, Bollinger lower band, % from 20DMA' },
     { name: 'Layer 5 — Volume',     val: analysis?.layer5_volume,    desc: 'Volume spike >1.5x 20-day average' },
     { name: 'Layer 6 — Candle',     val: analysis?.layer6_candle,    desc: analysis?.candle_pattern || 'Hammer, engulfing, morning star, doji' },
+    { name: 'Layer 7 — ML',         val: analysis?.layer7_ml,        desc: 'Distance from 200DMA, RSI oversold, volume, candle pattern, ROC confirmation' },
   ];
 
   const score = analysis?.total_score || trade?.total_score || 0;
