@@ -1705,7 +1705,7 @@ async function openSignalDrawer(ticker) {
     { name: 'Layer 3 — Momentum',   val: analysis?.layer3_momentum,  desc: '20DMA, ROC 20-day, MACD signal' },
     { name: 'Layer 4 — Reversion',  val: analysis?.layer4_reversion, desc: 'RSI <45, Bollinger lower band, % from 20DMA' },
     { name: 'Layer 5 — Volume',     val: analysis?.layer5_volume,    desc: 'Volume spike >1.5x 20-day average' },
-    { name: 'Layer 6 — Candle',     val: analysis?.layer6_candle,    desc: analysis?.candle_pattern ? (CANDLE_DESC[analysis.candle_pattern] || analysis.candle_pattern) : 'Hammer, engulfing, morning star, doji' },
+    { name: stock?.is_reit ? 'Layer 6 — Yield Trigger' : 'Layer 6 — Candle', val: analysis?.layer6_candle, desc: stock?.is_reit ? `Yield ${analysis?.dps_yield?(analysis.dps_yield*100).toFixed(1)+'%':''} vs trigger ${stock?.yield_trigger?(stock.yield_trigger*100).toFixed(0)+'%':'8%'}` : (analysis?.candle_pattern ? (CANDLE_DESC[analysis.candle_pattern] || analysis.candle_pattern) : 'Hammer, engulfing, morning star, doji') },
     { name: 'Layer 7 — ML',         val: analysis?.layer7_ml,        desc: 'Distance from 200DMA, RSI oversold, volume, candle pattern, ROC confirmation' },
   ];
 
