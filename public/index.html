@@ -533,6 +533,27 @@ async function init() {
   }
 }
 
+
+// ── CANDLE PATTERN DESCRIPTIONS ──────────────────────────────────────────────
+const CANDLE_DESC = {
+  'Hammer':              'Hammer — small body at top, long lower wick. Buyers stepped in after sellers pushed price down. Bullish reversal signal, especially at support.',
+  'Bullish Engulfing':   'Bullish Engulfing — green candle completely swallows previous red candle. Strong buyers overwhelming sellers. Powerful reversal signal.',
+  'Morning Star':        'Morning Star — 3-candle pattern: big red, small doji/spinning top, big green. Marks a bottom after a downtrend. One of the strongest reversal signals.',
+  'Doji':                'Doji — open and close almost equal, creating a cross shape. Indecision between buyers and sellers. Often signals a reversal when appearing after a trend.',
+  'Three White Soldiers':'Three White Soldiers — three consecutive green candles, each closing near its high. Strong sustained buying pressure. Highly bullish continuation signal.',
+  'Shooting Star':       'Shooting Star — small body at bottom, long upper wick. Buyers pushed price up but sellers took control. Bearish at highs, but here used as reversal at lows.',
+  'Bullish Harami':      'Bullish Harami — small green candle inside previous red candle. Selling momentum slowing. Moderate bullish signal.',
+  'Piercing Line':       'Piercing Line — green candle opens below previous close but closes above midpoint of red candle. Buyers regaining control.',
+  'Evening Star':        'Evening Star — opposite of Morning Star. Bearish reversal at tops.',
+};
+
+function candleTooltip(pattern) {
+  if (!pattern || pattern === 'None') return pattern || 'None';
+  const desc = CANDLE_DESC[pattern];
+  if (!desc) return pattern;
+  return `<span title="${desc}" style="cursor:help;border-bottom:1px dotted var(--amber)">${pattern}</span>`;
+}
+
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 function go(page, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -850,7 +871,7 @@ async function loadStrategies() {
       <td style="text-align:center;color:${a.layer7_ml?'var(--gold)':'var(--rule)'};font-weight:600">${a.layer7_ml?'✓':'·'}</td>
       <td class="r" style="color:${a.rsi14<35?'var(--green)':a.rsi14>70?'var(--red)':'var(--muted)'}">${a.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
       <td class="r" style="color:${a.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
-      <td style="font-size:10px;color:var(--amber)">${a.candle_pattern||'--'}</td>
+      <td style="font-size:10px;color:var(--amber)">${candleTooltip(a.candle_pattern)||'--'}</td>
       <td style="font-size:10px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(a.signal_reasons||[]).slice(0,2).join(' · ')}</td>
     `;
     tbody.appendChild(tr);
@@ -1159,7 +1180,7 @@ async function loadSortedStocks() {
               ${s.pct_from_52w_high!=null?parseFloat(s.pct_from_52w_high).toFixed(1)+'%':'--'}
             </td>
             <td class="r" style="font-size:11px">${mcap}</td>
-            <td style="font-size:10px;color:var(--amber)">${a.candle_pattern||''}</td>
+            <td style="font-size:10px;color:var(--amber)">${candleTooltip(a.candle_pattern)||''}</td>
           </tr>`;
         }).join('')}
       </tbody>
@@ -1604,7 +1625,7 @@ async function openSignalDrawer(ticker) {
     { name: 'Layer 3 — Momentum',   val: analysis?.layer3_momentum,  desc: '20DMA, ROC 20-day, MACD signal' },
     { name: 'Layer 4 — Reversion',  val: analysis?.layer4_reversion, desc: 'RSI <45, Bollinger lower band, % from 20DMA' },
     { name: 'Layer 5 — Volume',     val: analysis?.layer5_volume,    desc: 'Volume spike >1.5x 20-day average' },
-    { name: 'Layer 6 — Candle',     val: analysis?.layer6_candle,    desc: analysis?.candle_pattern || 'Hammer, engulfing, morning star, doji' },
+    { name: 'Layer 6 — Candle',     val: analysis?.layer6_candle,    desc: analysis?.candle_pattern ? (CANDLE_DESC[analysis.candle_pattern] || analysis.candle_pattern) : 'Hammer, engulfing, morning star, doji' },
     { name: 'Layer 7 — ML',         val: analysis?.layer7_ml,        desc: 'Distance from 200DMA, RSI oversold, volume, candle pattern, ROC confirmation' },
   ];
 
@@ -1669,7 +1690,7 @@ async function openSignalDrawer(ticker) {
     { l:'200 DMA',  v: analysis?.ma200 ? '$'+parseFloat(analysis.ma200).toFixed(3) : '--',   c: 'var(--ink)', dark: false },
     { l:'BB Pos',   v: analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%':'--', c: 'var(--ink)', dark: false },
     { l:'Conviction',v: conv + ' ' + score+'/6',  c: convFg, dark: conv==='EXCEPTIONAL' },
-    { l:'Candle',   v: analysis?.candle_pattern || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false },
+    { l:'Candle',   v: candleTooltip(analysis?.candle_pattern) || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false, html: true },
     ...(stock?.is_reit ? [
       { l:'NTA',      v: stock.nta ? '$'+parseFloat(stock.nta).toFixed(2) : '--', c: 'var(--ink)', dark: false },
       { l:'Gearing',  v: stock.gearing ? (stock.gearing*100).toFixed(0)+'%' : '--', c: stock.gearing>0.4?'var(--red)':stock.gearing>0.35?'var(--amber)':'var(--ink)', dark: false },
@@ -1923,12 +1944,12 @@ function buildFullChart(prices, trade) {
 
   // Trade levels
   const tradeLines = trade ? [
-    trade.entry_price ? `<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="#1a1a1a" stroke-width="2"/>
-      <text x="${w-padR+2}" y="${py(parseFloat(trade.entry_price))+4}" font-size="10" fill="#555">Entry</text>` : '',
-    trade.stop_price  ? `<line x1="${padL}" y1="${py(parseFloat(trade.stop_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.stop_price))}" stroke="#8b2e2e" stroke-width="1.5" stroke-dasharray="6,4"/>
-      <text x="${w-padR+2}" y="${py(parseFloat(trade.stop_price))+4}" font-size="10" fill="#8b2e2e">Stop</text>` : '',
-    trade.target_price? `<line x1="${padL}" y1="${py(parseFloat(trade.target_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.target_price))}" stroke="#2d5a2d" stroke-width="1.5" stroke-dasharray="6,4"/>
-      <text x="${w-padR+2}" y="${py(parseFloat(trade.target_price))+4}" font-size="10" fill="#2d5a2d">Target</text>` : '',
+    trade.entry_price ? `<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="${padL+4}" y="${py(parseFloat(trade.entry_price))-3}" font-size="9" fill="#555" font-family="monospace">Entry $${parseFloat(trade.entry_price).toFixed(3)}</text>` : '',
+    trade.stop_price  ? `<line x1="${padL}" y1="${py(parseFloat(trade.stop_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.stop_price))}" stroke="#8b2e2e" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="${padL+4}" y="${py(parseFloat(trade.stop_price))-3}" font-size="9" fill="#8b2e2e" font-family="monospace">Stop $${parseFloat(trade.stop_price).toFixed(3)}</text>` : '',
+    trade.target_price? `<line x1="${padL}" y1="${py(parseFloat(trade.target_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.target_price))}" stroke="#2d5a2d" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="${padL+4}" y="${py(parseFloat(trade.target_price))-3}" font-size="9" fill="#2d5a2d" font-family="monospace">Target $${parseFloat(trade.target_price).toFixed(3)}</text>` : '',
   ].join('') : '';
 
   // Price grid lines and labels
