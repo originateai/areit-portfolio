@@ -146,6 +146,7 @@ For each REIT return:
   "dps_fy27": null or number (Distributions per share/unit for FY27 in AUD),
   "gearing": null or number (Gearing ratio as decimal e.g. 0.35 for 35%),
   "implied_cap": null or number (Implied capitalisation rate as decimal e.g. 0.065 for 6.5%),
+  "cap_rate": null or number (Portfolio cap rate as decimal e.g. 0.065 for 6.5%),
   "yield_trigger": null or number (Yield at which to buy — leave null if not stated),
   "wale": null or number (Weighted average lease expiry in years),
   "occupancy": null or number (Occupancy rate as decimal e.g. 0.97 for 97%),
@@ -155,7 +156,7 @@ For each REIT return:
 Rules:
 - Only include fields you actually found in the document. Set everything else to null.
 - Do not invent or estimate numbers. If uncertain, set to null.
-- Gearing, implied_cap, yield_trigger, occupancy must be decimals not percentages.
+- Gearing, implied_cap, cap_rate, yield_trigger, occupancy must be decimals not percentages.
 - NTA and DPS must be in dollars (e.g. 1.52, not 152).
 - If you see multiple NTA estimates (e.g. book vs adjusted), use the adjusted/reported NTA.
 - If FY year labels are ambiguous, use context to determine which is FY26 vs FY27.
