@@ -349,25 +349,51 @@ td.r { text-align: right; font-family: 'DM Mono', monospace; }
       <div id="asx-status" class="status"></div>
     </div>
 
-    <div class="section-label">REIT Data</div>
+    <div class="section-label">REIT Research Ingestion</div>
     <div class="card">
-      <h3>Moelis REIT Research</h3>
-      <p>Upload the Moelis workings Excel. Updates NTA, DPS, gearing and yield triggers for all covered REITs.</p>
-      <div class="upload-zone" onclick="document.getElementById('moelis-file').click()">
-        <input type="file" id="moelis-file" accept=".xlsx,.xls" onchange="handleMoelisUpload(this.files[0])">
-        📊 Drop Moelis Excel here or click to browse
+      <h3>Upload Broker or Company Research</h3>
+      <p>Drop any Moelis workings Excel, broker PDF, or half-year results file. Claude reads the document and extracts NTA, DPS, gearing, cap rates, WALE, occupancy — whatever it finds. You review the data before anything is written to the database.</p>
+      <div class="upload-zone" id="research-zone" onclick="document.getElementById('research-file').click()">
+        <input type="file" id="research-file" accept=".xlsx,.xls,.pdf" onchange="handleResearchUpload(this.files[0])">
+        📄 Drop Moelis Excel, broker PDF or company results here
       </div>
-      <div id="moelis-status" class="status"></div>
+      <div id="research-status" class="status"></div>
     </div>
 
+    <!-- Preview table — shown after Claude extracts data -->
+    <div id="research-preview" style="display:none">
+      <div class="section-label">Extracted Data — Review Before Saving</div>
+      <div class="card-warn" id="research-warn" style="display:none"></div>
+      <div style="overflow-x:auto;margin-bottom:14px">
+        <table id="research-table">
+          <thead><tr>
+            <th>Keep</th><th>Ticker</th><th>Name</th>
+            <th class="r">NTA</th><th class="r">DPS FY26</th><th class="r">DPS FY27</th>
+            <th class="r">Gearing</th><th class="r">Cap Rate</th><th class="r">WALE</th><th class="r">Occ.</th>
+            <th>Source</th>
+          </tr></thead>
+          <tbody id="research-tbody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary" onclick="commitResearch()">✓ Save Selected to Database</button>
+        <button class="btn btn-secondary" onclick="clearResearch()">✗ Discard</button>
+        <span id="research-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div id="research-commit-status" class="status"></div>
+    </div>
+
+    <div class="section-label">Manual REIT Update</div>
     <div class="card">
-      <h3>Manual REIT Update</h3>
-      <p>Update a single REIT after a company result or distribution announcement.</p>
+      <h3>Single ticker override</h3>
+      <p>Update one REIT manually after a result or announcement. Only fills fields you enter — blank fields are left unchanged.</p>
       <div class="form-grid">
         <div class="fg"><label>Ticker</label><input id="u-ticker" type="text" placeholder="GOZ" style="text-transform:uppercase"></div>
         <div class="fg"><label>NTA ($)</label><input id="u-nta" type="number" step="0.01" placeholder="3.10"></div>
         <div class="fg"><label>DPS FY26 ($)</label><input id="u-dps" type="number" step="0.001" placeholder="0.183"></div>
+        <div class="fg"><label>DPS FY27 ($)</label><input id="u-dps27" type="number" step="0.001" placeholder="0.190"></div>
         <div class="fg"><label>Gearing</label><input id="u-gearing" type="number" step="0.001" placeholder="0.412"></div>
+        <div class="fg"><label>Implied Cap Rate</label><input id="u-cap" type="number" step="0.001" placeholder="0.065"></div>
         <div class="fg"><label>Yield Trigger</label><input id="u-trigger" type="number" step="0.01" placeholder="0.09"></div>
       </div>
       <button class="btn btn-primary" onclick="updateREIT()">Update REIT</button>
@@ -656,18 +682,23 @@ async function updateREIT() {
   const ticker  = document.getElementById('u-ticker').value.toUpperCase().trim();
   const nta     = document.getElementById('u-nta').value;
   const dps     = document.getElementById('u-dps').value;
+  const dps27   = document.getElementById('u-dps27').value;
   const gearing = document.getElementById('u-gearing').value;
+  const cap     = document.getElementById('u-cap').value;
   const trigger = document.getElementById('u-trigger').value;
   if (!ticker) { showStatus('reit-update-status', 'Please enter a ticker', 'err'); return; }
   const updates = { updated_at: new Date().toISOString() };
   if (nta)     updates.nta           = parseFloat(nta);
   if (dps)     updates.dps_fy26      = parseFloat(dps);
+  if (dps27)   updates.dps_fy27      = parseFloat(dps27);
   if (gearing) updates.gearing       = parseFloat(gearing);
+  if (cap)     updates.implied_cap   = parseFloat(cap);
   if (trigger) updates.yield_trigger = parseFloat(trigger);
+  if (Object.keys(updates).length <= 1) { showStatus('reit-update-status', 'Nothing to update', 'err'); return; }
   const { error } = await db.from('stocks').update(updates).eq('ticker', ticker);
   if (error) { showStatus('reit-update-status', 'Error: ' + error.message, 'err'); return; }
   showStatus('reit-update-status', '✓ ' + ticker + ' updated', 'ok');
-  ['u-ticker','u-nta','u-dps','u-gearing','u-trigger'].forEach(id => document.getElementById(id).value = '');
+  ['u-ticker','u-nta','u-dps','u-dps27','u-gearing','u-cap','u-trigger'].forEach(id => document.getElementById(id).value = '');
 }
 
 async function exportREITData() {
@@ -818,6 +849,177 @@ async function logDistribution() {
   });
 }
 
+// ── RESEARCH INGESTION ────────────────────────────────────────────────────────
+let researchData = [];
+
+async function handleResearchUpload(file) {
+  if (!file) return;
+  const zone = document.getElementById('research-zone');
+  showStatus('research-status', `Reading ${file.name}...`, 'info');
+  document.getElementById('research-preview').style.display = 'none';
+
+  const isPDF   = file.type === 'application/pdf';
+  const isExcel = file.name.match(/\.(xlsx|xls)$/i);
+
+  if (!isPDF && !isExcel) {
+    showStatus('research-status', 'Only PDF and Excel files are supported', 'err');
+    return;
+  }
+
+  try {
+    let fileData, fileType;
+
+    if (isPDF) {
+      // Send as base64
+      fileData = await toBase64(file);
+      fileType = 'application/pdf';
+      showStatus('research-status', `Sending ${file.name} to Claude for analysis...`, 'info');
+    } else {
+      // Excel: extract to text via SheetJS so Claude can read it
+      fileType = 'excel';
+      showStatus('research-status', `Parsing Excel ${file.name}...`, 'info');
+      fileData = await excelToText(file);
+      showStatus('research-status', `Sending extracted data to Claude...`, 'info');
+    }
+
+    const res = await fetch('/.netlify/functions/parse-research', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileData, fileType, fileName: file.name })
+    });
+
+    const result = await res.json();
+
+    if (result.error) {
+      showStatus('research-status', 'Error: ' + result.error, 'err');
+      return;
+    }
+
+    if (!result.reits?.length) {
+      showStatus('research-status', '⚠️ ' + (result.message || 'No REIT data found in this file'), 'err');
+      if (result.raw) console.log('Claude raw output:', result.raw);
+      return;
+    }
+
+    showStatus('research-status', `✓ Claude found ${result.reits.length} REITs — review below before saving`, 'ok');
+    renderResearchPreview(result.reits);
+
+  } catch(e) {
+    showStatus('research-status', 'Error: ' + e.message, 'err');
+  }
+}
+
+function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = () => reject(new Error('File read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function excelToText(file) {
+  // Load SheetJS from CDN
+  if (!window.XLSX) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  }
+  const buf  = await file.arrayBuffer();
+  const wb   = XLSX.read(buf, { type: 'array' });
+  let text   = '';
+  for (const sheetName of wb.SheetNames) {
+    const ws  = wb.Sheets[sheetName];
+    const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+    if (csv.trim().length > 50) {
+      text += `\n\n=== Sheet: ${sheetName} ===\n${csv}`;
+    }
+  }
+  return text.trim();
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function renderResearchPreview(reits) {
+  researchData = reits;
+  const tbody = document.getElementById('research-tbody');
+  const fmt   = (v, prefix='$', dp=3) => v == null ? '<span style="color:var(--rule)">—</span>' : prefix + parseFloat(v).toFixed(dp);
+  const fmtPct = (v) => v == null ? '<span style="color:var(--rule)">—</span>' : (v*100).toFixed(1) + '%';
+
+  tbody.innerHTML = reits.map((r, i) => `
+    <tr>
+      <td><input type="checkbox" id="rr-${i}" checked></td>
+      <td><span class="tkr">${r.ticker || '?'}</span></td>
+      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name || ''}</td>
+      <td class="r">${fmt(r.nta,'$',2)}</td>
+      <td class="r">${fmt(r.dps_fy26,'$',3)}</td>
+      <td class="r">${fmt(r.dps_fy27,'$',3)}</td>
+      <td class="r">${fmtPct(r.gearing)}</td>
+      <td class="r">${fmtPct(r.implied_cap)}</td>
+      <td class="r">${r.wale != null ? parseFloat(r.wale).toFixed(1)+'yr' : '<span style="color:var(--rule)">—</span>'}</td>
+      <td class="r">${fmtPct(r.occupancy)}</td>
+      <td style="font-size:10px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.source||''}">${r.source || ''}</td>
+    </tr>`).join('');
+
+  document.getElementById('research-count').textContent = `${reits.length} REITs extracted`;
+  document.getElementById('research-preview').style.display = 'block';
+}
+
+async function commitResearch() {
+  if (!db || !researchData.length) return;
+
+  const selected = researchData.filter((r, i) => {
+    const cb = document.getElementById('rr-' + i);
+    return cb && cb.checked;
+  });
+
+  if (!selected.length) {
+    showStatus('research-commit-status', 'No rows selected', 'err');
+    return;
+  }
+
+  showStatus('research-commit-status', `Saving ${selected.length} REITs...`, 'info');
+
+  let saved = 0, skipped = 0, errors = [];
+
+  for (const r of selected) {
+    if (!r.ticker) { skipped++; continue; }
+    const updates = { updated_at: new Date().toISOString() };
+    if (r.nta        != null) updates.nta          = r.nta;
+    if (r.dps_fy26   != null) updates.dps_fy26     = r.dps_fy26;
+    if (r.dps_fy27   != null) updates.dps_fy27     = r.dps_fy27;
+    if (r.gearing    != null) updates.gearing      = r.gearing;
+    if (r.implied_cap!= null) updates.implied_cap  = r.implied_cap;
+    if (r.yield_trigger!=null)updates.yield_trigger= r.yield_trigger;
+    // wale and occupancy — add columns if you extend the schema later
+    if (Object.keys(updates).length <= 1) { skipped++; continue; }
+    const { error } = await db.from('stocks').update(updates).eq('ticker', r.ticker.toUpperCase());
+    if (error) errors.push(r.ticker + ': ' + error.message);
+    else saved++;
+  }
+
+  if (errors.length) {
+    showStatus('research-commit-status', `Saved ${saved}, skipped ${skipped}. Errors: ${errors.join('; ')}`, 'err');
+  } else {
+    showStatus('research-commit-status', `✓ ${saved} REITs saved to database${skipped ? ' · ' + skipped + ' skipped (no data)' : ''}`, 'ok');
+    setTimeout(clearResearch, 2000);
+  }
+}
+
+function clearResearch() {
+  researchData = [];
+  document.getElementById('research-preview').style.display = 'none';
+  document.getElementById('research-file').value = '';
+  showStatus('research-status', '', 'info');
+  document.getElementById('research-status').style.display = 'none';
+}
+
 // ── FILE UPLOADS ──────────────────────────────────────────────────────────────
 async function handleASXUpload(file) {
   if (!file || !db) return;
@@ -846,10 +1048,7 @@ async function handleASXUpload(file) {
   }
 }
 
-function handleMoelisUpload(file) {
-  if (!file) return;
-  showStatus('moelis-status', file.name + ' received. Upload this file to Claude and it will generate the SQL patch automatically. Then run it in Supabase SQL Editor.', 'info');
-}
+
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
