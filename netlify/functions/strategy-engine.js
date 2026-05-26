@@ -1,480 +1,372 @@
 // netlify/functions/strategy-engine.js
-// The core algo brain — runs 6-layer analysis on every stock
-// Called by morning-scan and pre-screen functions
+// 6-layer strategy engine — uses EODHD server-side indicators (ground truth)
+// No manual indicator calculation — EODHD does it correctly with adjusted prices
 
-const { fetchYahoo, BOND_YIELD } = require('./_shared.js');
+const { createClient } = require('@supabase/supabase-js');
 
-// ── CANDLESTICK PATTERN DETECTION ─────────────────────────────────────────────
+const BASE = 'https://eodhd.com/api';
+const KEY  = () => process.env.EODHD_API_KEY;
 
-function detectCandlesticks(candles) {
-  // candles = array of { open, high, low, close } last 3 days
-  if (!candles || candles.length < 3) return { pattern: null, bullish: false, bearish: false };
-
-  const [c2, c1, c0] = candles.slice(-3); // c0 = today, c1 = yesterday, c2 = 2 days ago
-  const patterns = [];
-  let bullish = false;
-  let bearish = false;
-
-  if (!c0 || !c1 || !c2) return { pattern: null, bullish: false, bearish: false };
-
-  const body0  = Math.abs(c0.close - c0.open);
-  const body1  = Math.abs(c1.close - c1.open);
-  const body2  = Math.abs(c2.close - c2.open);
-  const range0 = c0.high - c0.low;
-  const range1 = c1.high - c1.low;
-  const bull0  = c0.close > c0.open;
-  const bull1  = c1.close > c1.open;
-  const bull2  = c2.close > c2.open;
-  const bear0  = c0.close < c0.open;
-  const bear1  = c1.close < c1.open;
-  const bear2  = c2.close < c2.open;
-  const upperShadow0 = c0.high - Math.max(c0.open, c0.close);
-  const lowerShadow0 = Math.min(c0.open, c0.close) - c0.low;
-  const upperShadow1 = c1.high - Math.max(c1.open, c1.close);
-  const lowerShadow1 = Math.min(c1.open, c1.close) - c1.low;
-
-  // HAMMER — small body at top, long lower shadow, bullish reversal
-  if (bear1 && lowerShadow0 > body0 * 2 && upperShadow0 < body0 * 0.5 && range0 > 0) {
-    patterns.push('Hammer');
-    bullish = true;
-  }
-
-  // SHOOTING STAR — small body at bottom, long upper shadow, bearish
-  if (bull1 && upperShadow0 > body0 * 2 && lowerShadow0 < body0 * 0.5 && range0 > 0) {
-    patterns.push('Shooting Star');
-    bearish = true;
-  }
-
-  // BULLISH ENGULFING — bearish candle followed by larger bullish candle
-  if (bear1 && bull0 && c0.open < c1.close && c0.close > c1.open && body0 > body1) {
-    patterns.push('Bullish Engulfing');
-    bullish = true;
-  }
-
-  // BEARISH ENGULFING — bullish candle followed by larger bearish candle
-  if (bull1 && bear0 && c0.open > c1.close && c0.close < c1.open && body0 > body1) {
-    patterns.push('Bearish Engulfing');
-    bearish = true;
-  }
-
-  // DOJI — open and close almost equal (within 0.1% of range)
-  if (range0 > 0 && body0 / range0 < 0.05) {
-    patterns.push('Doji');
-    // Doji is neutral but at support = bullish
-  }
-
-  // MORNING STAR — bearish, doji/small, bullish (3 candle reversal)
-  const doji1 = range1 > 0 && body1 / range1 < 0.1;
-  if (bear2 && doji1 && bull0 && c0.close > (c2.open + c2.close) / 2) {
-    patterns.push('Morning Star');
-    bullish = true;
-  }
-
-  // EVENING STAR — bullish, doji/small, bearish (3 candle reversal)
-  if (bull2 && doji1 && bear0 && c0.close < (c2.open + c2.close) / 2) {
-    patterns.push('Evening Star');
-    bearish = true;
-  }
-
-  // THREE WHITE SOLDIERS — 3 consecutive bullish candles, each closing higher
-  if (bull0 && bull1 && bull2 && c0.close > c1.close && c1.close > c2.close &&
-      body0 > range0 * 0.5 && body1 > range1 * 0.5) {
-    patterns.push('Three White Soldiers');
-    bullish = true;
-  }
-
-  return {
-    pattern:  patterns.length > 0 ? patterns.join(', ') : null,
-    patterns,
-    bullish,
-    bearish,
-    hammer:           patterns.includes('Hammer'),
-    shootingStar:     patterns.includes('Shooting Star'),
-    bullishEngulfing: patterns.includes('Bullish Engulfing'),
-    bearishEngulfing: patterns.includes('Bearish Engulfing'),
-    doji:             patterns.includes('Doji'),
-    morningStar:      patterns.includes('Morning Star'),
-    eveningStar:      patterns.includes('Evening Star'),
-    threeSoldiers:    patterns.includes('Three White Soldiers')
-  };
+function getDB() {
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 }
 
-// ── CALCULATE ALL INDICATORS ──────────────────────────────────────────────────
+// ── FETCH EODHD TECHNICAL INDICATORS ─────────────────────────────────────────
+async function fetchEODHDIndicators(ticker) {
+  const epic = `${ticker}.AU`;
+  const results = {};
 
-function calculateIndicators(closes, volumes, highs, lows, opens) {
-  const n = closes.length;
-  if (n < 20) return null;
+  try {
+    // Fetch all indicators in parallel
+    const [rsiRes, sma20Res, sma50Res, sma200Res, bbRes, macdRes, roc20Res] = await Promise.all([
+      fetch(`${BASE}/technical/${epic}?function=rsi&period=14&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=sma&period=20&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=sma&period=50&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=sma&period=200&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=bbands&period=20&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=macd&fast_period=12&slow_period=26&signal_period=9&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=roc&period=20&api_token=${KEY()}&fmt=json`),
+    ]);
 
-  // Moving averages
-  const ma20  = avg(closes.slice(-20));
-  const ma50  = n >= 50  ? avg(closes.slice(-50))  : null;
-  const ma200 = n >= 200 ? avg(closes.slice(-200)) : null;
+    // RSI
+    const rsiData = await rsiRes.json();
+    if (Array.isArray(rsiData) && rsiData.length > 0) {
+      results.rsi14 = parseFloat(rsiData[rsiData.length-1].rsi);
+    }
 
-  const price = closes[n - 1];
+    // SMA 20, 50, 200
+    const sma20Data = await sma20Res.json();
+    if (Array.isArray(sma20Data) && sma20Data.length > 0) {
+      results.ma20 = parseFloat(sma20Data[sma20Data.length-1].sma);
+    }
+    const sma50Data = await sma50Res.json();
+    if (Array.isArray(sma50Data) && sma50Data.length > 0) {
+      results.ma50 = parseFloat(sma50Data[sma50Data.length-1].sma);
+    }
+    const sma200Data = await sma200Res.json();
+    if (Array.isArray(sma200Data) && sma200Data.length > 0) {
+      results.ma200 = parseFloat(sma200Data[sma200Data.length-1].sma);
+    }
 
-  // RSI 14
-  const rsi = calcRSI(closes, 14);
+    // Bollinger Bands
+    const bbData = await bbRes.json();
+    if (Array.isArray(bbData) && bbData.length > 0) {
+      const last = bbData[bbData.length-1];
+      results.bb_upper    = parseFloat(last.uband);
+      results.bb_lower    = parseFloat(last.lband);
+      results.bb_mid      = parseFloat(last.mband);
+    }
 
-  // Rate of change 20 day
-  const roc20 = n >= 21 ? (closes[n-1] - closes[n-21]) / closes[n-21] : null;
+    // MACD
+    const macdData = await macdRes.json();
+    if (Array.isArray(macdData) && macdData.length > 0) {
+      const last = macdData[macdData.length-1];
+      results.macd        = parseFloat(last.macd);
+      results.macd_signal = parseFloat(last.signal);
+      results.macd_hist   = parseFloat(last.divergence);
+    }
 
-  // MACD (12, 26, 9)
-  const macdData = calcMACD(closes);
+    // ROC 20
+    const rocData = await roc20Res.json();
+    if (Array.isArray(rocData) && rocData.length > 0) {
+      results.roc20 = parseFloat(rocData[rocData.length-1].roc) / 100;
+    }
 
-  // Bollinger Bands (20, 2)
-  const bb = calcBollinger(closes, 20, 2);
-
-  // Volume ratio
-  const volMa20 = volumes ? Math.round(avg(volumes.slice(-20))) : null;
-  const volRatio = volMa20 && volumes ? volumes[volumes.length-1] / volMa20 : null;
-
-  // Relative strength vs index (placeholder — needs index data)
-  const pctFromMa20 = ma20 ? (price - ma20) / ma20 : null;
-
-  // Candlestick detection (last 3 days)
-  const candles = [];
-  for (let i = Math.max(0, n-3); i < n; i++) {
-    candles.push({
-      open:  opens?.[i]  || closes[i],
-      high:  highs?.[i]  || closes[i],
-      low:   lows?.[i]   || closes[i],
-      close: closes[i]
-    });
+    return results;
+  } catch(e) {
+    console.error(`EODHD indicators error ${ticker}:`, e.message);
+    return null;
   }
-  const candleSignals = detectCandlesticks(candles);
+}
 
-  // Golden/death cross
-  const goldenCross = ma50 && ma200 && ma50 > ma200;
-  const deathCross  = ma50 && ma200 && ma50 < ma200;
+// ── FETCH VOLUME DATA FROM DB ─────────────────────────────────────────────────
+async function getVolumeRatio(db, ticker) {
+  try {
+    const { data } = await db.from('prices')
+      .select('volume, market_date')
+      .eq('ticker', ticker)
+      .order('market_date', { ascending: false })
+      .limit(21);
 
-  return {
-    price, ma20, ma50, ma200,
-    above_ma20:   ma20  ? price > ma20  : null,
-    above_ma50:   ma50  ? price > ma50  : null,
-    above_ma200:  ma200 ? price > ma200 : null,
-    golden_cross: goldenCross,
-    death_cross:  deathCross,
-    rsi14:        rsi,
-    roc20,
-    macd:         macdData?.macd,
-    macd_signal:  macdData?.signal,
-    macd_hist:    macdData?.hist,
-    bb_upper:     bb?.upper,
-    bb_lower:     bb?.lower,
-    bb_mid:       bb?.mid,
-    bb_position:  bb?.position,
-    pct_from_ma20: pctFromMa20,
-    vol_ma20:     volMa20,
-    vol_ratio:    volRatio,
-    candleSignals
-  };
+    if (!data || data.length < 5) return null;
+
+    const todayVol = parseInt(data[0].volume || 0);
+    const avgVol   = data.slice(1, 21).reduce((s, r) => s + parseInt(r.volume || 0), 0) / Math.min(data.length - 1, 20);
+
+    return avgVol > 0 ? parseFloat((todayVol / avgVol).toFixed(4)) : null;
+  } catch(e) {
+    return null;
+  }
+}
+
+// ── CANDLESTICK DETECTION (from DB prices) ────────────────────────────────────
+async function detectCandlesticks(db, ticker) {
+  try {
+    const { data } = await db.from('prices')
+      .select('open, high, low, close')
+      .eq('ticker', ticker)
+      .order('market_date', { ascending: false })
+      .limit(3);
+
+    if (!data || data.length < 3) return { pattern: null, bullish: false };
+
+    const candles = data.reverse(); // chronological
+    const [c2, c1, c0] = candles;
+
+    const patterns = [];
+    let bullish = false;
+
+    const body0  = Math.abs(c0.close - c0.open);
+    const body1  = Math.abs(c1.close - c1.open);
+    const body2  = Math.abs(c2.close - c2.open);
+    const range0 = c0.high - c0.low;
+    const range1 = c1.high - c1.low;
+    const bull0  = c0.close > c0.open;
+    const bull1  = c1.close > c1.open;
+    const bull2  = c2.close > c2.open;
+    const bear1  = !bull1;
+    const bear2  = !bull2;
+    const lowerShadow0 = Math.min(c0.open, c0.close) - c0.low;
+    const upperShadow0 = c0.high - Math.max(c0.open, c0.close);
+    const upperShadow1 = c1.high - Math.max(c1.open, c1.close);
+
+    // Hammer
+    if (bear1 && lowerShadow0 > body0 * 2 && upperShadow0 < body0 * 0.5 && range0 > 0) {
+      patterns.push('Hammer'); bullish = true;
+    }
+    // Bullish Engulfing
+    if (bear1 && bull0 && c0.open < c1.close && c0.close > c1.open && body0 > body1) {
+      patterns.push('Bullish Engulfing'); bullish = true;
+    }
+    // Doji
+    if (range0 > 0 && body0 / range0 < 0.05) {
+      patterns.push('Doji');
+    }
+    // Morning Star
+    const doji1 = range1 > 0 && body1 / range1 < 0.1;
+    if (bear2 && doji1 && bull0 && c0.close > (c2.open + c2.close) / 2) {
+      patterns.push('Morning Star'); bullish = true;
+    }
+    // Three White Soldiers
+    if (bull0 && bull1 && bull2 && c0.close > c1.close && c1.close > c2.close &&
+        body0 > range0 * 0.5 && body1 > range1 * 0.5) {
+      patterns.push('Three White Soldiers'); bullish = true;
+    }
+
+    return {
+      pattern: patterns.length > 0 ? patterns.join(', ') : null,
+      bullish,
+      hammer:          patterns.includes('Hammer'),
+      bullishEngulfing: patterns.includes('Bullish Engulfing'),
+      doji:            patterns.includes('Doji'),
+      morningStar:     patterns.includes('Morning Star'),
+      threeSoldiers:   patterns.includes('Three White Soldiers'),
+    };
+  } catch(e) {
+    return { pattern: null, bullish: false };
+  }
 }
 
 // ── 6-LAYER SCORING ───────────────────────────────────────────────────────────
-
-function scoreStock(indicators, macroScore, stock, currentYield) {
+function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candles) {
   const reasons = [];
-  let l1 = 0, l2 = 0, l3 = 0, l4 = 0, l5 = 0, l6 = 0;
+  let l1=0, l2=0, l3=0, l4=0, l5=0, l6=0;
 
-  if (!indicators) return { total: 0, l1, l2, l3, l4, l5, l6, reasons, signal: 'NEUTRAL', conviction: 'WEAK' };
-
-  const { price, ma20, ma50, ma200, above_ma20, above_ma50, above_ma200,
-    golden_cross, rsi14, roc20, macd, macd_signal, bb_lower, bb_position,
-    pct_from_ma20, vol_ratio, candleSignals } = indicators;
+  const { rsi14, ma20, ma50, ma200, bb_lower, bb_upper, macd, macd_signal, roc20 } = indicators;
+  const price = indicators.price;
 
   // ── LAYER 1: MACRO ────────────────────────────────────────────────────────
-  // Pass/fail based on overnight macro signal
   if (macroScore >= 1) {
     l1 = 1;
-    reasons.push('Macro positive');
-  } else if (macroScore <= -2) {
-    l1 = 0;
-    reasons.push('Macro negative — caution');
+    reasons.push(`Macro ${macroScore > 0 ? 'positive' : 'neutral'} (score ${macroScore})`);
   } else {
-    l1 = 1; // neutral macro still allows trades
-    reasons.push('Macro neutral');
+    reasons.push('Macro negative — caution');
   }
 
   // ── LAYER 2: TREND ────────────────────────────────────────────────────────
-  // Must be in uptrend — above key moving averages
-  if (above_ma200 && above_ma50) {
-    l2 = 1;
-    reasons.push('Above 200DMA + 50DMA — uptrend confirmed');
-  } else if (above_ma200 && golden_cross) {
-    l2 = 1;
-    reasons.push('Golden cross — trend turning bullish');
-  } else if (above_ma200) {
-    l2 = 1;
-    reasons.push('Above 200DMA — long term uptrend');
+  const above200 = ma200 && price > ma200;
+  const above50  = ma50  && price > ma50;
+  const golden   = ma50  && ma200 && ma50 > ma200;
+
+  if (above200 && above50) {
+    l2 = 1; reasons.push('Above 200DMA + 50DMA — uptrend confirmed');
+  } else if (above200 && golden) {
+    l2 = 1; reasons.push('Golden cross — trend turning bullish');
+  } else if (above200) {
+    l2 = 1; reasons.push('Above 200DMA — long term uptrend');
   } else {
-    l2 = 0;
     reasons.push('Below 200DMA — avoid');
   }
 
   // ── LAYER 3: MOMENTUM ─────────────────────────────────────────────────────
-  // Price momentum turning positive
-  let momentumScore = 0;
-  if (above_ma20) momentumScore++;
-  if (roc20 && roc20 > 0.02) momentumScore++;
-  if (macd && macd_signal && macd > macd_signal) momentumScore++;
+  let momScore = 0;
+  if (ma20 && price > ma20) momScore++;
+  if (roc20 && roc20 > 0.02) momScore++;
+  if (macd && macd_signal && macd > macd_signal) momScore++;
 
-  if (momentumScore >= 2) {
-    l3 = 1;
-    reasons.push(`Momentum positive (${momentumScore}/3 signals)`);
-  } else if (momentumScore === 1 && above_ma20) {
-    l3 = 1;
-    reasons.push('Short term momentum building');
-  } else {
-    l3 = 0;
+  if (momScore >= 2) {
+    l3 = 1; reasons.push(`Momentum positive (${momScore}/3 signals)`);
+  } else if (momScore === 1 && ma20 && price > ma20) {
+    l3 = 1; reasons.push('Short term momentum building');
   }
 
   // ── LAYER 4: MEAN REVERSION ───────────────────────────────────────────────
-  // Oversold conditions = opportunity
+  const pctFromMa20 = ma20 ? (price - ma20) / ma20 : null;
+
   if (rsi14 && rsi14 < 35) {
-    l4 = 1;
-    reasons.push(`RSI ${rsi14.toFixed(0)} — oversold`);
-  } else if (bb_position && bb_position < 0.2) {
-    l4 = 1;
-    reasons.push('At Bollinger Band lower — oversold');
-  } else if (pct_from_ma20 && pct_from_ma20 < -0.05) {
-    l4 = 1;
-    reasons.push(`${(pct_from_ma20*100).toFixed(1)}% below 20DMA — stretched`);
+    l4 = 1; reasons.push(`RSI ${rsi14.toFixed(0)} — oversold`);
+  } else if (bb_lower && price <= bb_lower) {
+    l4 = 1; reasons.push('At Bollinger lower band — oversold');
+  } else if (pctFromMa20 && pctFromMa20 < -0.05) {
+    l4 = 1; reasons.push(`${(pctFromMa20*100).toFixed(1)}% below 20DMA`);
   } else if (rsi14 && rsi14 < 45) {
-    l4 = 1;
-    reasons.push(`RSI ${rsi14.toFixed(0)} — approaching oversold`);
+    l4 = 1; reasons.push(`RSI ${rsi14.toFixed(0)} — approaching oversold`);
   }
 
   // ── LAYER 5: VOLUME ───────────────────────────────────────────────────────
-  // Smart money moving — volume spike
-  if (vol_ratio && vol_ratio > 2.0) {
-    l5 = 1;
-    reasons.push(`Volume ${vol_ratio.toFixed(1)}x average — strong interest`);
-  } else if (vol_ratio && vol_ratio > 1.5) {
-    l5 = 1;
-    reasons.push(`Volume ${vol_ratio.toFixed(1)}x average — elevated`);
-  } else if (vol_ratio && vol_ratio > 1.2) {
-    l5 = 1;
-    reasons.push('Volume slightly above average');
+  if (volRatio && volRatio > 2.0) {
+    l5 = 1; reasons.push(`Volume ${volRatio.toFixed(1)}× average — strong interest`);
+  } else if (volRatio && volRatio > 1.5) {
+    l5 = 1; reasons.push(`Volume ${volRatio.toFixed(1)}× average — elevated`);
+  } else if (volRatio && volRatio > 1.2) {
+    l5 = 1; reasons.push('Volume slightly above average');
   }
 
-  // ── LAYER 6: CANDLESTICK ──────────────────────────────────────────────────
-  // Bullish pattern confirmation
-  if (candleSignals?.bullish) {
-    l6 = 1;
-    reasons.push(`Candle: ${candleSignals.pattern}`);
+  // ── LAYER 6: CANDLE ───────────────────────────────────────────────────────
+  if (candles?.bullish) {
+    l6 = 1; reasons.push(`Candle: ${candles.pattern}`);
   }
-
-  // REIT-specific: yield trigger
+  // REIT yield trigger
   if (stock?.is_reit && currentYield && currentYield >= (stock?.yield_trigger || 0.08)) {
-    l6 = 1;
-    reasons.push(`Yield trigger: ${(currentYield*100).toFixed(1)}% ≥ ${((stock?.yield_trigger||0.08)*100).toFixed(0)}%`);
+    l6 = 1; reasons.push(`Yield trigger: ${(currentYield*100).toFixed(1)}% ≥ ${((stock?.yield_trigger||0.08)*100).toFixed(0)}%`);
   }
 
   const total = l1 + l2 + l3 + l4 + l5 + l6;
-
-  const signal =
-    total >= 6 ? 'STRONG_BUY' :
-    total >= 5 ? 'BUY'        :
-    total >= 4 ? 'WATCH'      :
-    total >= 2 ? 'NEUTRAL'    : 'AVOID';
-
-  const conviction =
-    total >= 6 ? 'EXCEPTIONAL' :
-    total >= 5 ? 'STRONG'      :
-    total >= 4 ? 'MODERATE'    : 'WEAK';
+  const signal = total >= 6 ? 'STRONG_BUY' : total >= 5 ? 'BUY' : total >= 4 ? 'WATCH' : total >= 2 ? 'NEUTRAL' : 'AVOID';
+  const conviction = total >= 6 ? 'EXCEPTIONAL' : total >= 5 ? 'STRONG' : total >= 4 ? 'MODERATE' : 'WEAK';
 
   return { total, l1, l2, l3, l4, l5, l6, reasons, signal, conviction };
 }
 
 // ── POSITION SIZE ─────────────────────────────────────────────────────────────
-
-function getPositionSize(conviction, settings, isReit = false) {
+function getPositionSize(conviction, settings, isReit=false) {
   const prefix = isReit ? 'reit' : 'equity';
   const sizes = {
-    EXCEPTIONAL: parseFloat(settings[`conviction_6_${prefix}`] || (isReit ? 4000 : 4000)),
-    STRONG:      parseFloat(settings[`conviction_5_${prefix}`] || (isReit ? 2000 : 2000)),
-    MODERATE:    parseFloat(settings[`conviction_4_${prefix}`] || (isReit ? 1000 : 1000)),
+    EXCEPTIONAL: parseFloat(settings[`conviction_6_${prefix}`] || 999),
+    STRONG:      parseFloat(settings[`conviction_5_${prefix}`] || 800),
+    MODERATE:    parseFloat(settings[`conviction_4_${prefix}`] || 500),
     WEAK:        0
   };
   return sizes[conviction] || 0;
 }
 
-// ── MATH HELPERS ──────────────────────────────────────────────────────────────
-
-function avg(arr) {
-  if (!arr?.length) return null;
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
-
-function calcRSI(closes, period = 14) {
-  if (closes.length < period + 1) return null;
-  const diffs = [];
-  for (let i = 1; i < closes.length; i++) diffs.push(closes[i] - closes[i-1]);
-  const gains  = diffs.map(d => d > 0 ? d : 0);
-  const losses = diffs.map(d => d < 0 ? Math.abs(d) : 0);
-  const avgG   = avg(gains.slice(-period));
-  const avgL   = avg(losses.slice(-period));
-  if (avgL === 0) return 100;
-  return parseFloat((100 - (100 / (1 + avgG / avgL))).toFixed(2));
-}
-
-function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
-  if (closes.length < slow + signal) return null;
-  const emaFast = calcEMA(closes, fast);
-  const emaSlow = calcEMA(closes, slow);
-  if (!emaFast || !emaSlow) return null;
-  const macdLine = emaFast - emaSlow;
-  // Simplified — would need full EMA series for accurate signal
-  return { macd: parseFloat(macdLine.toFixed(4)), signal: 0, hist: parseFloat(macdLine.toFixed(4)) };
-}
-
-function calcEMA(closes, period) {
-  if (closes.length < period) return null;
-  const k = 2 / (period + 1);
-  let ema = avg(closes.slice(0, period));
-  for (let i = period; i < closes.length; i++) {
-    ema = closes[i] * k + ema * (1 - k);
-  }
-  return ema;
-}
-
-function calcBollinger(closes, period = 20, stdDev = 2) {
-  if (closes.length < period) return null;
-  const slice = closes.slice(-period);
-  const mid   = avg(slice);
-  const std   = Math.sqrt(slice.reduce((sum, v) => sum + Math.pow(v - mid, 2), 0) / period);
-  const upper = mid + stdDev * std;
-  const lower = mid - stdDev * std;
-  const price = closes[closes.length - 1];
-  const position = upper === lower ? 0.5 : (price - lower) / (upper - lower);
-  return { upper: parseFloat(upper.toFixed(4)), lower: parseFloat(lower.toFixed(4)), mid: parseFloat(mid.toFixed(4)), position: parseFloat(position.toFixed(4)) };
-}
-
-// ── FULL STOCK ANALYSIS ───────────────────────────────────────────────────────
-
-async function analyseStock(stock, macroScore, settings, livePrice = null) {
+// ── MAIN ANALYSE FUNCTION ─────────────────────────────────────────────────────
+async function analyseStock(stock, macroScore, settings, livePrice=null) {
+  const db = getDB();
   try {
-    const ticker = stock.ticker;
-    const asx    = stock.universe === 'REIT' ? ticker + '.AX' : ticker + '.AX';
-
-    // Use live price from EODHD if provided, then get history from DB or Yahoo
-    let closes, opens, highs, lows, volumes;
-
-    // Try to get historical data from prices table in Supabase first
-    // This avoids Yahoo Finance calls when we have EODHD data
-    try {
-      const { createClient } = require('@supabase/supabase-js');
-      const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-      const { data: priceRows } = await db.from('prices')
-        .select('close,open,high,low,volume')
-        .eq('ticker', stock.ticker)
-        .order('market_date', { ascending: false })
-        .limit(250);
-
-      if (priceRows && priceRows.length >= 20) {
-        // Reverse to get chronological order
-        const sorted = priceRows.reverse();
-        closes  = sorted.map(p => parseFloat(p.close));
-        opens   = sorted.map(p => parseFloat(p.open  || p.close));
-        highs   = sorted.map(p => parseFloat(p.high  || p.close));
-        lows    = sorted.map(p => parseFloat(p.low   || p.close));
-        volumes = sorted.map(p => parseInt(p.volume  || 0));
-        // Override last close with live price if provided
-        if (livePrice && livePrice > 0) {
-          closes[closes.length - 1] = livePrice;
-        }
-      } else {
-        throw new Error('Not enough DB data, falling back to Yahoo');
-      }
-    } catch(dbErr) {
-      // Fallback to Yahoo Finance
-      const data = await fetchYahoo(asx, '300d');
-      if (!data?.closes || data.closes.length < 20) return null;
-      closes  = data.closes.filter(Boolean);
-      opens   = data.opens?.filter(Boolean);
-      highs   = data.highs?.filter(Boolean);
-      lows    = data.lows?.filter(Boolean);
-      volumes = data.volumes?.filter(v => v !== null);
-      if (livePrice && livePrice > 0) {
-        closes[closes.length - 1] = livePrice;
-      }
+    // 1. Get EODHD indicators (ground truth, adjusted prices)
+    const indicators = await fetchEODHDIndicators(stock.ticker);
+    if (!indicators || !indicators.ma20) {
+      console.log(`No EODHD indicators for ${stock.ticker}`);
+      return null;
     }
 
-    if (!closes || closes.length < 20) return null;
+    // 2. Get current price
+    let price = livePrice;
+    if (!price) {
+      const { data: priceRow } = await db.from('prices')
+        .select('close').eq('ticker', stock.ticker)
+        .order('market_date', { ascending: false }).limit(1).single();
+      price = priceRow?.close ? parseFloat(priceRow.close) : null;
+    }
+    if (!price) return null;
 
-    const indicators = calculateIndicators(closes, volumes, highs, lows, opens);
-    if (!indicators) return null;
+    indicators.price = parseFloat(price);
 
-    // REIT-specific: calculate yield
+    // 3. Volume ratio from DB
+    const volRatio = await getVolumeRatio(db, stock.ticker);
+
+    // 4. Candlestick detection from DB
+    const candles = await detectCandlesticks(db, stock.ticker);
+
+    // 5. Bollinger position (0-1)
+    const bbRange    = indicators.bb_upper && indicators.bb_lower
+      ? indicators.bb_upper - indicators.bb_lower : null;
+    const bb_position = bbRange && bbRange > 0
+      ? parseFloat(((price - indicators.bb_lower) / bbRange).toFixed(4)) : null;
+
+    const pct_from_ma20 = indicators.ma20
+      ? parseFloat(((price - indicators.ma20) / indicators.ma20).toFixed(6)) : null;
+
+    // 6. REIT yield
     let currentYield = null;
-    if (stock.is_reit && stock.dps_fy26 && indicators.price) {
-      currentYield = stock.dps_fy26 / indicators.price;
+    if (stock.is_reit && stock.dps_fy26 && price) {
+      currentYield = stock.dps_fy26 / price;
     }
 
-    const scoring = scoreStock(indicators, macroScore, stock, currentYield);
+    // 7. Score
+    const scoring = scoreStock(indicators, macroScore, stock, currentYield, volRatio, candles);
 
-    // Calculate position size from settings
+    // 8. Position size
     const positionSize = scoring.total >= 4
-      ? getPositionSize(scoring.conviction, settings, stock.is_reit)
-      : 0;
+      ? getPositionSize(scoring.conviction, settings, stock.is_reit) : 0;
 
     const stopPct   = parseFloat(settings.stop_loss_pct || '1.5') / 100;
     const targetPct = parseFloat(settings.target_pct    || '3.0') / 100;
 
     return {
-      ticker,
-      name:         stock.name,
-      universe:     stock.universe,
-      is_reit:      stock.is_reit,
-      price:        indicators.price,
-      // Indicators
-      ma20:         indicators.ma20,
-      ma50:         indicators.ma50,
-      ma200:        indicators.ma200,
-      rsi14:        indicators.rsi14,
-      roc20:        indicators.roc20,
-      bb_position:  indicators.bb_position,
-      vol_ratio:    indicators.vol_ratio,
-      pct_from_ma20: indicators.pct_from_ma20,
-      above_ma20:   indicators.above_ma20,
-      above_ma200:  indicators.above_ma200,
-      golden_cross: indicators.golden_cross,
-      // Candles
-      candle_pattern:         indicators.candleSignals?.pattern,
-      candle_hammer:          indicators.candleSignals?.hammer || false,
-      candle_engulfing_bull:  indicators.candleSignals?.bullishEngulfing || false,
-      candle_engulfing_bear:  indicators.candleSignals?.bearishEngulfing || false,
-      candle_doji:            indicators.candleSignals?.doji || false,
-      candle_morning_star:    indicators.candleSignals?.morningStar || false,
-      candle_evening_star:    indicators.candleSignals?.eveningStar || false,
-      candle_shooting_star:   indicators.candleSignals?.shootingStar || false,
-      candle_three_soldiers:  indicators.candleSignals?.threeSoldiers || false,
+      ticker:           stock.ticker,
+      name:             stock.name,
+      universe:         stock.universe,
+      is_reit:          stock.is_reit,
+      price,
+      // EODHD indicators (ground truth)
+      ma20:             indicators.ma20,
+      ma50:             indicators.ma50,
+      ma200:            indicators.ma200,
+      rsi14:            indicators.rsi14,
+      roc20:            indicators.roc20,
+      macd:             indicators.macd,
+      macd_signal:      indicators.macd_signal,
+      bb_upper:         indicators.bb_upper,
+      bb_lower:         indicators.bb_lower,
+      bb_position,
+      pct_from_ma20,
+      vol_ratio:        volRatio,
+      above_ma20:       indicators.ma20 ? price > indicators.ma20 : null,
+      above_ma200:      indicators.ma200 ? price > indicators.ma200 : null,
+      golden_cross:     indicators.ma50 && indicators.ma200 ? indicators.ma50 > indicators.ma200 : null,
+      // Candlestick
+      candle_pattern:          candles?.pattern,
+      candle_hammer:           candles?.hammer || false,
+      candle_engulfing_bull:   candles?.bullishEngulfing || false,
+      candle_doji:             candles?.doji || false,
+      candle_morning_star:     candles?.morningStar || false,
       // REIT
-      dps_yield:              currentYield,
-      yield_trigger_fired:    currentYield && stock.yield_trigger ? currentYield >= stock.yield_trigger : false,
+      dps_yield:               currentYield,
+      yield_trigger_fired:     currentYield && stock.yield_trigger ? currentYield >= stock.yield_trigger : false,
       // Scoring
-      layer1_macro:    scoring.l1,
-      layer2_trend:    scoring.l2,
-      layer3_momentum: scoring.l3,
+      layer1_macro:     scoring.l1,
+      layer2_trend:     scoring.l2,
+      layer3_momentum:  scoring.l3,
       layer4_reversion: scoring.l4,
-      layer5_volume:   scoring.l5,
-      layer6_candle:   scoring.l6,
-      total_score:     scoring.total,
-      signal:          scoring.signal,
-      conviction:      scoring.conviction,
-      signal_reasons:  scoring.reasons,
+      layer5_volume:    scoring.l5,
+      layer6_candle:    scoring.l6,
+      total_score:      scoring.total,
+      signal:           scoring.signal,
+      conviction:       scoring.conviction,
+      signal_reasons:   scoring.reasons,
       // Trade levels
-      position_size:   positionSize,
-      stop_price:      indicators.price ? parseFloat((indicators.price * (1 - stopPct)).toFixed(3))   : null,
-      target_price:    indicators.price ? parseFloat((indicators.price * (1 + targetPct)).toFixed(3)) : null,
-      units:           indicators.price && positionSize ? Math.floor(positionSize / indicators.price) : 0
+      position_size:    positionSize,
+      stop_price:       price ? parseFloat((price * (1 - stopPct)).toFixed(3))   : null,
+      target_price:     price ? parseFloat((price * (1 + targetPct)).toFixed(3)) : null,
+      units:            price && positionSize ? Math.floor(positionSize / price) : 0
     };
 
-  } catch (err) {
-    console.error(`Analysis error for ${stock.ticker}:`, err.message);
+  } catch(err) {
+    console.error(`Analysis error ${stock.ticker}:`, err.message);
     return null;
   }
 }
 
-
-module.exports = { detectCandlesticks, calculateIndicators, scoreStock, getPositionSize, analyseStock };
+module.exports = { analyseStock, scoreStock, getPositionSize };
