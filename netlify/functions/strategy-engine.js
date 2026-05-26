@@ -68,6 +68,41 @@ function getDB() {
 async function fetchEODHDIndicators(ticker, preloadedPrices=null) {
   const db = getDB();
   try {
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Check if fetch-indicators already ran today — use DB data if available
+    const { data: existing } = await db.from('daily_analysis')
+      .select('*')
+      .eq('ticker', ticker)
+      .eq('analysis_date', today)
+      .maybeSingle();
+
+    if (existing?.rsi14 && existing?.ma20 && existing?.ma200) {
+      // Already have EODHD indicators — return them directly
+      return {
+        price:        existing.close,
+        rsi14:        existing.rsi14,
+        ma20:         existing.ma20,
+        ma50:         existing.ma50,
+        ma200:        existing.ma200,
+        bb_upper:     existing.bb_upper,
+        bb_lower:     existing.bb_lower,
+        bb_position:  existing.bb_position,
+        macd:         existing.macd,
+        macd_signal:  existing.macd_signal,
+        adx:          existing.adx,
+        atr:          existing.atr,
+        roc20:        existing.roc20,
+        above_ma20:   existing.above_ma20,
+        above_ma200:  existing.above_ma200,
+        golden_cross: existing.golden_cross,
+        pct_from_ma20:  existing.pct_from_ma20,
+        pct_from_ma200: existing.pct_from_ma200,
+        vol_ratio:    existing.vol_ratio,
+      };
+    }
+
+    // 2. Fall back to calculating from Supabase price history
     // Use pre-loaded prices if available, otherwise fetch from DB
     let prices = preloadedPrices;
     if (!prices || prices.length < 30) {
