@@ -7,7 +7,7 @@
 
 const {
   getSupabase, fetchYahoo, fetchFRED, sendEmail, loadSettings,
-  BOND_YIELD, VIX_TRIGGER
+  BOND_YIELD, VIX_TRIGGER, emailStyles
 } = require('./_shared.js');
 const { analyseStock, scoreStock, getPositionSize } = require('./strategy-engine.js');
 const { getBulkPrices }  = require('./eodhd-client.js');
