@@ -124,30 +124,39 @@ exports.handler = schedule('0 6 * * 1-5', async () => {
 
     if (openTrades?.length) {
       const livePrices = {};
-      priceRows.forEach(r => { livePrices[r.ticker] = r.close; });
+      priceRows.forEach(r => { livePrices[r.ticker] = r; }); // store full row not just close
 
       for (const trade of openTrades) {
-        const cur = livePrices[trade.ticker];
-        if (!cur) continue;
+        const p = livePrices[trade.ticker];
+        if (!p) continue;
 
-        const pnl    = (cur - trade.entry_price) * (trade.units || 0);
-        const pnlPct = (cur - trade.entry_price) / trade.entry_price;
+        const cur      = p.close;
+        const dayHigh  = p.high  || cur;
+        const dayLow   = p.low   || cur;
+        const pnl      = (cur - trade.entry_price) * (trade.units || 0);
+        const pnlPct   = (cur - trade.entry_price) / trade.entry_price;
 
-        if (cur <= trade.stop_price) {
+        // Check intraday low against stop — more accurate than close-only
+        if (dayLow <= trade.stop_price) {
           await db.from('model_trades').update({
             status: 'STOPPED', exit_price: trade.stop_price,
-            exit_date: today, pnl: parseFloat(pnl.toFixed(2)),
-            pnl_pct: parseFloat(pnlPct.toFixed(6))
+            exit_date: today,
+            pnl: parseFloat((((trade.stop_price - trade.entry_price) * (trade.units||0)) - 6).toFixed(2)),
+            pnl_pct: parseFloat(((trade.stop_price - trade.entry_price) / trade.entry_price).toFixed(6))
           }).eq('id', trade.id);
-          alerts.push({ type: 'stop_hit', ticker: trade.ticker, msg: `${trade.ticker} STOP HIT — $${trade.stop_price} — P&L: ${pnl>=0?'+':''}$${pnl.toFixed(0)}` });
+          const stopPnl = (trade.stop_price - trade.entry_price) * (trade.units||0) - 6;
+          alerts.push({ type: 'stop_hit', ticker: trade.ticker, msg: `${trade.ticker} STOP HIT — Intraday low $${dayLow.toFixed(3)} ≤ stop $${trade.stop_price} — P&L: ${stopPnl>=0?'+':''}$${stopPnl.toFixed(0)} (incl. $6 brokerage)` });
           stopped++;
-        } else if (cur >= trade.target_price) {
+        // Check intraday high against target
+        } else if (dayHigh >= trade.target_price) {
           await db.from('model_trades').update({
             status: 'TARGETED', exit_price: trade.target_price,
-            exit_date: today, pnl: parseFloat(pnl.toFixed(2)),
-            pnl_pct: parseFloat(pnlPct.toFixed(6))
+            exit_date: today,
+            pnl: parseFloat((((trade.target_price - trade.entry_price) * (trade.units||0)) - 6).toFixed(2)),
+            pnl_pct: parseFloat(((trade.target_price - trade.entry_price) / trade.entry_price).toFixed(6))
           }).eq('id', trade.id);
-          alerts.push({ type: 'target_hit', ticker: trade.ticker, msg: `${trade.ticker} TARGET HIT 🎯 — $${trade.target_price} — P&L: +$${pnl.toFixed(0)}` });
+          const tgtPnl = (trade.target_price - trade.entry_price) * (trade.units||0) - 6;
+          alerts.push({ type: 'target_hit', ticker: trade.ticker, msg: `${trade.ticker} TARGET HIT 🎯 — Intraday high $${dayHigh.toFixed(3)} ≥ target $${trade.target_price} — P&L: +$${tgtPnl.toFixed(0)} (incl. $6 brokerage)` });
           targeted++;
         }
       }

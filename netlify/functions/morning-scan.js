@@ -12,29 +12,46 @@ const {
 const { analyseStock }   = require('./strategy-engine.js');
 const { getBulkPrices }  = require('./eodhd-client.js');
 
-// ── FETCH REUTERS HEADLINES ───────────────────────────────────────────────────
+// ── FETCH HEADLINES ───────────────────────────────────────────────────────────
 async function fetchHeadlines() {
-  try {
-    const res  = await fetch('https://feeds.reuters.com/reuters/businessNews', {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const text = await res.text();
-    const items = [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g)];
-    return [...new Set(items.slice(1,9).map(m => m[1]?.trim()).filter(Boolean))].slice(0,7);
-  } catch(e) { return []; }
+  const feeds = [
+    'https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en',
+    'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
+    'https://www.afr.com/rss/feed',
+  ];
+  for (const url of feeds) {
+    try {
+      const res  = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const text = await res.text();
+      const items = [...text.matchAll(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/g)];
+      const headlines = [...new Set(items.slice(1,10).map(m => m[1]?.trim()).filter(Boolean))].slice(0,7);
+      if (headlines.length > 0) return headlines;
+    } catch(e) { continue; }
+  }
+  return [];
 }
 
 async function fetchREITHeadlines() {
-  try {
-    const res  = await fetch('https://feeds.reuters.com/reuters/businessNews', {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const text = await res.text();
-    const all  = [...text.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g)];
-    const kw   = ['reit','property','real estate','interest rate','rba','rate cut',
-                  'rate hike','bond yield','inflation','housing','commercial property','fed'];
-    return all.map(m=>m[1]?.trim()).filter(t=>t&&kw.some(k=>t.toLowerCase().includes(k))).slice(0,5);
-  } catch(e) { return []; }
+  const feeds = [
+    'https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en',
+    'https://www.rba.gov.au/rss/rss-cb-media-releases.xml',
+    'https://www.rba.gov.au/rss/rss-cb-speeches.xml',
+  ];
+  const kw = ['reit','property','real estate','interest rate','rba','rate cut',
+              'rate hike','bond yield','inflation','housing','commercial property',
+              'fed','cash rate','monetary policy','yield','cap rate','landlord'];
+  const items = [];
+  for (const url of feeds) {
+    try {
+      const res  = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const text = await res.text();
+      const all  = [...text.matchAll(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/g)];
+      all.map(m=>m[1]?.trim()).filter(t=>t&&kw.some(k=>t.toLowerCase().includes(k))).forEach(t => {
+        if (!items.includes(t)) items.push(t);
+      });
+    } catch(e) { continue; }
+  }
+  return items.slice(0,5);
 }
 
 // ── MACRO SCORING ─────────────────────────────────────────────────────────────
@@ -419,7 +436,7 @@ function getSectorSignals({ sp500Change, nasdaqChange, ironOreChange, goldChange
 
 // ── BUILD EMAIL ───────────────────────────────────────────────────────────────
 function buildEmail(data) {
-  const { market, macro, reitMacro, equityTrades, breakouts, reitResults, headlines, reitHeadlines,
+  const { market, macro, reitMacro, equityTrades, breakouts, reitResults, headlines, reitHeadlines, rateNews,
           sectorSignals, nikkei, shanghai, futures } = data;
   const { sp500Change, nasdaqChange, vix, us10yr, aus10yr,
           yieldCurve, aud, audChange, realYield, vnqChange } = market;
@@ -686,11 +703,12 @@ function buildEmail(data) {
 
 <div class="sec">
   <div class="sec-title">REIT &amp; Rate News</div>
+  ${rateNews?.length ? `<div style="margin-bottom:8px">${rateNews.map(h=>`<div class="hl" style="color:#1a5f6e">${h}</div>`).join('')}</div>` : ''}
   ${reitHeadlines.map(h=>`<div class="hl">${h}</div>`).join('') || '<p style="color:#aaa;font-size:13px">No REIT-specific news today</p>'}
 </div>
 
 <div class="ftr">
-  Not financial advice · Paper trading mode · EODHD + FRED + Reuters<br>
+  Not financial advice · Paper trading mode · EODHD + FRED + Reuters + RBA<br>
   Place real trades via CommSec · Record in dashboard at areit.netlify.app
 </div>
 </div></body></html>`;
@@ -767,8 +785,8 @@ const run = async () => {
     console.log(`Macro: ${macro.signal} (${macro.score}) | REIT Macro: ${reitMacro.rating} (${reitMacro.score})`);
 
     // 3. Fetch headlines in parallel
-    const [headlines, reitHeadlines] = await Promise.all([
-      fetchHeadlines(), fetchREITHeadlines()
+    const [headlines, reitHeadlines, rateNews] = await Promise.all([
+      fetchHeadlines(), fetchREITHeadlines(), fetchRateNews()
     ]);
 
     // 4. Sector signals
@@ -904,6 +922,7 @@ const run = async () => {
 
     // 10. Save model trades — no duplicates
     // Auto-expire trades older than hold_days (default 3)
+    // Exit at YESTERDAY'S close (Day 3 close), not today's live price
     const holdDays = parseInt(settings.hold_days || '3');
     const expiryDate = new Date(Date.now() - holdDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const { data: expiredTrades } = await db.from('model_trades')
@@ -912,9 +931,23 @@ const run = async () => {
       .lt('trade_date', expiryDate);
 
     if (expiredTrades?.length) {
+      // Fetch yesterday's close for expired tickers
+      const expiredTickers = expiredTrades.map(t => t.ticker);
+      const { data: yesterdayPrices } = await db.from('prices')
+        .select('ticker,close,market_date')
+        .in('ticker', expiredTickers)
+        .order('market_date', { ascending: false })
+        .limit(expiredTickers.length * 2);
+
+      // Get most recent close per ticker (yesterday's close)
+      const prevCloseMap = {};
+      (yesterdayPrices||[]).forEach(p => {
+        if (!prevCloseMap[p.ticker]) prevCloseMap[p.ticker] = parseFloat(p.close);
+      });
+
       for (const t of expiredTrades) {
-        const exitPrice = livePrices[t.ticker]?.close || t.entry_price;
-        const pnl = (exitPrice - t.entry_price) * (t.units || 0);
+        const exitPrice = prevCloseMap[t.ticker] || livePrices[t.ticker]?.close || t.entry_price;
+        const pnl = (exitPrice - t.entry_price) * (t.units || 0) - 6; // deduct $6 brokerage
         await db.from('model_trades').update({
           status: 'CLOSED', exit_price: exitPrice, exit_date: today,
           pnl: parseFloat(pnl.toFixed(2)),
@@ -922,7 +955,7 @@ const run = async () => {
           hold_days: holdDays
         }).eq('id', t.id);
       }
-      console.log(`Auto-expired ${expiredTrades.length} trades after ${holdDays} days`);
+      console.log(`Auto-expired ${expiredTrades.length} trades at Day ${holdDays} close`);
     }
 
     if (topEquities.length > 0) {
@@ -974,7 +1007,7 @@ const run = async () => {
     // 12. Send email
     const { subject, html } = buildEmail({
       market, macro, reitMacro, equityTrades: topEquities, breakouts: topBreakouts, reitResults,
-      headlines, reitHeadlines, sectorSignals,
+      headlines, reitHeadlines, rateNews, sectorSignals,
       nikkei: nikkeiData, shanghai: shanghaiData, futures: futuresData
     });
     await sendEmail(subject, html);
