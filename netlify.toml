@@ -4,27 +4,22 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["@netlify/functions"]
 
 [context.production]
   environment = { NODE_VERSION = "18" }
 
-# Morning briefing — 7:00am AEST = 9:00pm UTC previous day
 [[scheduled_functions]]
   name = "morning-scan"
   cron = "0 21 * * 0-4"
 
-# Opening Range Breakout — 10:15am AEST = 12:15am UTC
 [[scheduled_functions]]
   name = "orb-scan"
   cron = "15 0 * * 1-5"
 
-# Fetch closing prices — 4:00pm AEST = 6:00am UTC
 [[scheduled_functions]]
   name = "fetch-prices"
   cron = "0 6 * * 1-5"
 
-# Check yield triggers — 4:05pm AEST = 6:05am UTC
 [[scheduled_functions]]
   name = "yield-triggers"
   cron = "5 6 * * 1-5"
