@@ -164,6 +164,7 @@ tfoot td.r{text-align:right}
       <div class="kc"><div class="kl">Invested</div><div class="kv teal" id="m-inv">--</div><div class="kn">Deployed</div></div>
       <div class="kc"><div class="kl">Cash</div><div class="kv" id="m-cash">--</div><div class="kn">Available</div></div>
       <div class="kc"><div class="kl">Open Trades</div><div class="kv" id="m-open">--</div></div>
+      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn">Unrealised move</div></div>
       <div class="kc"><div class="kl">Total P&L</div><div class="kv" id="m-pnl">--</div></div>
       <div class="kc"><div class="kl">Win Rate</div><div class="kv gold" id="m-win">--</div></div>
     </div>
@@ -704,6 +705,23 @@ async function loadModel() {
   pnlEl.textContent = (totPnl>=0?'+':'')+f.$k(totPnl);
   pnlEl.style.color = f.clr(totPnl);
   document.getElementById('m-win').textContent = closed.length ? Math.round(wins.length/closed.length*100)+'%' : '--';
+
+  // Today's P&L — unrealised move on open positions since yesterday's close
+  const openTrades = (allTrades||[]).filter(t=>t.status==='OPEN');
+  let todayPnl = 0;
+  openTrades.forEach(t => {
+    const live = livePriceCache[t.ticker];
+    if (live && live.change && t.units) {
+      todayPnl += live.change * t.units;
+    }
+  });
+  const todayEl = document.getElementById('m-today-pnl');
+  if (todayEl) {
+    todayEl.textContent = openTrades.length && Object.keys(livePriceCache).length
+      ? (todayPnl>=0?'+':'')+f.$(todayPnl,0)
+      : '--';
+    todayEl.style.color = f.clr(todayPnl);
+  }
 
   // Get current prices for open trades
   const openTickers = (trades||[]).filter(t=>t.status==='OPEN').map(t=>t.ticker);
@@ -1485,7 +1503,7 @@ async function openSignalDrawer(ticker) {
   const [tradeRes, analysisRes, pricesRes, stockRes] = await Promise.all([
     db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).single(),
     db.from('daily_analysis').select('*').eq('ticker', ticker).order('analysis_date',{ascending:false}).limit(1).single(),
-    db.from('prices').select('market_date,open,high,low,close,volume').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
+    db.from('prices').select('market_date,open,high,low,close,volume,change_pct').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
     db.from('stocks').select('*').eq('ticker', ticker).single()
   ]);
 
