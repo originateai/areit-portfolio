@@ -3,8 +3,8 @@
 // Checks REIT yields against triggers and sends alert
 
 const { getSupabase, sendEmail, BOND_YIELD, YIELD_TARGET, emailStyles, pct, pctRaw, dollar, bps } = require('./_shared.js');
-
-exports.handler = async () => {
+const { schedule } = require('@netlify/functions');
+exports.handler = schedule('5 6 * * 1-5', async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
 

@@ -10,6 +10,7 @@
 // 5. Send actionable email with entry levels
 
 const { getSupabase, sendEmail, BOND_YIELD } = require('./_shared.js');
+const { schedule } = require('@netlify/functions');
 
 const BASE = 'https://eodhd.com/api';
 const KEY  = () => process.env.EODHD_API_KEY;
@@ -245,7 +246,7 @@ ${watching.length > 0 ? `
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
-exports.handler = async () => {
+exports.handler = schedule('15 0 * * 1-5', async () => {
   const db   = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   const dateStr = new Date().toLocaleDateString('en-AU', {

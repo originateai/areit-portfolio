@@ -397,7 +397,8 @@ function buildEmail(data) {
 }
 
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
-exports.handler = async () => {
+const { schedule } = require('@netlify/functions');
+const run = async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   console.log(`Morning scan starting: ${today}`);
@@ -624,3 +625,4 @@ exports.handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
+exports.handler = schedule('0 21 * * 0-4', run);

@@ -4,6 +4,7 @@
 // Uses EODHD bulk real-time endpoint — all 500 stocks in one call
 
 const { getSupabase, sendEmail } = require('./_shared.js');
+const { schedule } = require('@netlify/functions');
 
 const BASE = 'https://eodhd.com/api';
 const KEY  = () => process.env.EODHD_API_KEY;
@@ -15,7 +16,8 @@ async function getBulkPrices(tickers) {
     const url     = `${BASE}/real-time/${epic[0]}?s=${symbols}&api_token=${KEY()}&fmt=json`;
     const res     = await fetch(url);
     if (!res.ok) throw new Error(`EODHD ${res.status}`);
-    const data    = Array.isArray(await res.json()) ? await res.clone().json() : [await res.json()];
+    const json    = await res.json();
+    const data    = Array.isArray(json) ? json : [json];
 
     const map = {};
     data.forEach(d => {
@@ -47,7 +49,7 @@ async function getBulkPrices(tickers) {
   }
 }
 
-exports.handler = async () => {
+exports.handler = schedule('0 6 * * 1-5', async () => {
   const db    = getSupabase();
   const today = new Date().toISOString().split('T')[0];
   console.log(`Fetch prices starting: ${today}`);
