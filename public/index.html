@@ -516,6 +516,7 @@ async function init() {
     const res = await fetch('/.netlify/functions/env');
     const env = await res.json();
     db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
+    refreshLivePrices(); // kick off in background, don't await
     loadModel();
   } catch(e) {
     console.error('Init failed:', e);
@@ -592,13 +593,62 @@ function mg(label, val, type, color) {
   return `<div class="mg"><div class="mg-l">${label}</div><div class="mg-v" style="color:${col}">${v}</div></div>`;
 }
 
+// ── LIVE PRICE CACHE ──────────────────────────────────────────────────────────
+let livePriceCache = {};
+let livePriceLastFetch = 0;
+let livePriceFetching = false;
+
+async function refreshLivePrices() {
+  if (livePriceFetching) return;
+  livePriceFetching = true;
+  try {
+    const res  = await fetch('/.netlify/functions/bulk-live-prices?universe=ALL');
+    if (res.ok) {
+      livePriceCache    = await res.json();
+      livePriceLastFetch = Date.now();
+      console.log(`Live prices refreshed — ${Object.keys(livePriceCache).length} tickers`);
+    }
+  } catch(e) {
+    console.warn('Live price refresh failed:', e.message);
+  }
+  livePriceFetching = false;
+}
+
 async function getPrices(tickers) {
-  const { data } = await db.from('prices').select('ticker,close,change_pct,market_date')
-    .in('ticker', tickers).order('market_date', { ascending: false });
+  // Use cache if fresh (< 15 min), otherwise refresh
+  const age = Date.now() - livePriceLastFetch;
+  if (age > 15 * 60 * 1000 || !Object.keys(livePriceCache).length) {
+    await refreshLivePrices();
+  }
   const map = {};
-  (data||[]).forEach(r => { if(!map[r.ticker]) map[r.ticker] = { price: parseFloat(r.close), change: parseFloat(r.change_pct||0) }; });
+  (tickers || []).forEach(t => {
+    if (livePriceCache[t]) {
+      map[t] = {
+        price:      livePriceCache[t].price,
+        open:       livePriceCache[t].open,
+        high:       livePriceCache[t].high,
+        low:        livePriceCache[t].low,
+        change:     livePriceCache[t].change,
+        changePct:  livePriceCache[t].changePct,
+        volume:     livePriceCache[t].volume,
+        high_52w:   livePriceCache[t].high_52w,
+        low_52w:    livePriceCache[t].low_52w,
+      };
+    }
+  });
   return map;
 }
+
+// Auto-refresh every 15 minutes
+setInterval(async () => {
+  await refreshLivePrices();
+  // Reload whichever page is active
+  const active = document.querySelector('.page.active')?.id;
+  if (active === 'pg-reit-trading') loadREITSignals();
+  if (active === 'pg-strategies')   loadStrategies();
+  if (active === 'pg-model')        loadModel();
+  if (active === 'pg-reit')         loadREIT();
+}, 15 * 60 * 1000);
 
 // ── MODEL PORTFOLIO ───────────────────────────────────────────────────────────
 async function loadModel() {
@@ -768,13 +818,9 @@ async function screenStock() {
       .limit(1)
       .maybeSingle();
 
-    // 2. Get latest price from prices table
-    const { data: priceRow } = await db.from('prices')
-      .select('close,change_pct,market_date')
-      .eq('ticker', ticker)
-      .order('market_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 2. Get live price from cache
+    const livePd  = livePriceCache[ticker] || {};
+    const priceRow = livePd.price ? { close: livePd.price, change_pct: livePd.changePct, open: livePd.open, high: livePd.high, low: livePd.low } : null;
 
     // 3. Get stock info
     const { data: stock } = await db.from('stocks')
