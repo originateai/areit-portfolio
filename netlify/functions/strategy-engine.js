@@ -47,7 +47,6 @@ async function getMLProbability(ticker, indicators, volRatio, candles) {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(features),
-      signal:  AbortSignal.timeout(3000) // 3s timeout — don't hold up the scan
     });
 
     if (!res.ok) return null;
