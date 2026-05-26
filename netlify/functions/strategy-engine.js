@@ -373,12 +373,17 @@ function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candl
     reasons.push(`Volume ${volRatio ? volRatio.toFixed(1)+'×' : '--'} — insufficient`);
   }
 
-  // ── LAYER 6: CANDLE ───────────────────────────────────────────────────────
-  if (candles?.bullish) {
-    l6 = 1; reasons.push(`Candle: ${candles.pattern}`);
-  }
-  if (stock?.is_reit && currentYield && currentYield >= (stock?.yield_trigger || 0.08)) {
-    l6 = 1; reasons.push(`Yield trigger: ${(currentYield*100).toFixed(1)}% ≥ ${((stock?.yield_trigger||0.08)*100).toFixed(0)}%`);
+  // ── LAYER 6: CANDLE (equities) / YIELD TRIGGER (REITs) ───────────────────
+  if (stock?.is_reit) {
+    // REITs: yield trigger only — candle patterns irrelevant for income stocks
+    if (currentYield && currentYield >= (stock?.yield_trigger || 0.08)) {
+      l6 = 1; reasons.push(`Yield trigger: ${(currentYield*100).toFixed(1)}% ≥ ${((stock?.yield_trigger||0.08)*100).toFixed(0)}%`);
+    }
+  } else {
+    // Equities: candle pattern confirmation
+    if (candles?.bullish) {
+      l6 = 1; reasons.push(`Candle: ${candles.pattern}`);
+    }
   }
 
   // ── LAYER 7: ML CONFIRMATION ──────────────────────────────────────────────
