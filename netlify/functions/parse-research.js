@@ -35,11 +35,11 @@ exports.handler = async (event) => {
     'application/vnd.ms-excel': null,
   };
 
-  const isPDF = fileType === 'application/pdf';
-  const isExcel = fileType.includes('spreadsheetml') || fileType.includes('ms-excel');
+  const isPDF   = fileType === 'application/pdf' || fileType === 'pdf';
+  const isExcel = fileType === 'excel' || fileType.includes('spreadsheetml') || fileType.includes('ms-excel');
 
   if (!isPDF && !isExcel) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Only PDF and Excel files supported' }) };
+    return { statusCode: 400, body: JSON.stringify({ error: 'Only PDF and Excel files supported. Got: ' + fileType }) };
   }
 
   // For Excel, we need to extract text first using a simple approach
