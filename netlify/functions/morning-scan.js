@@ -54,7 +54,24 @@ async function fetchREITHeadlines() {
   return items.slice(0,5);
 }
 
-// ── MACRO SCORING ─────────────────────────────────────────────────────────────
+async function fetchRateNews() {
+  const feeds = [
+    'https://www.rba.gov.au/rss/rss-cb-media-releases.xml',
+    'https://www.rba.gov.au/rss/rss-cb-speeches.xml',
+  ];
+  const items = [];
+  for (const url of feeds) {
+    try {
+      const res  = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const text = await res.text();
+      const titles = [...text.matchAll(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/g)];
+      titles.slice(1, 4).forEach(m => { if (m[1]?.trim()) items.push('RBA: ' + m[1].trim()); });
+    } catch(e) { continue; }
+  }
+  return items.slice(0, 3);
+}
+
+
 function scoreMacro({ sp500Change, nasdaqChange, vix, yieldCurve, audChange,
                       us10yrChange, ironOreChange, goldChange, oilChange }) {
   let score = 0;
