@@ -1425,7 +1425,7 @@ async function openSignalDrawer(ticker) {
     ['% from 20DMA',  analysis?.pct_from_ma20 ? (parseFloat(analysis.pct_from_ma20)*100).toFixed(1)+'%' : '--',
       'How far price is from the 20-day moving average. Negative = below the MA, potential mean reversion opportunity.'],
     ['Vol Ratio',     analysis?.vol_ratio ? parseFloat(analysis.vol_ratio).toFixed(2)+'×' : '--',
-      'Today's volume vs 20-day average. 1.5× means 50% more volume than usual — something is happening.'],
+      'Today\'s volume vs 20-day average. 1.5x means 50% more volume than usual — something is happening.'],
     ['Above 20DMA',   analysis?.above_ma20 != null ? (analysis.above_ma20 ? 'Yes ✓' : 'No ✗') : '--',
       '20-day moving average. Short-term trend indicator. Price above = short term uptrend.'],
     ['Above 200DMA',  analysis?.above_ma200 != null ? (analysis.above_ma200 ? 'Yes ✓' : 'No ✗') : '--',
