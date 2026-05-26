@@ -1,6 +1,5 @@
 // netlify/functions/bulk-live-prices.js
 // Returns live EODHD delayed prices for all active tickers
-// EODHD real-time endpoint returns last traded price in 'close' field during market hours
 
 const { getSupabase } = require('./_shared.js');
 
@@ -66,22 +65,23 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) };
   }
 
-  const result = {};
-  for (let i = 0; i < tickers.length; i += 100) {
-    const batch = tickers.slice(i, i + 100);
-    const map   = await fetchBatch(batch);
-    Object.assign(result, map);
-    if (i + 100 < tickers.length) await new Promise(r => setTimeout(r, 300));
-  }
+  // Fetch first batch only to stay within 10s timeout
+  // Frontend calls multiple times with offset for full coverage
+  const offset = parseInt(params.offset || '0');
+  const limit  = 100;
+  const batch  = tickers.slice(offset, offset + limit);
+  const hasMore = offset + limit < tickers.length;
 
-  console.log(`EODHD live prices: ${Object.keys(result).length}/${tickers.length} tickers`);
+  const result = await fetchBatch(batch);
+
+  console.log(`EODHD live prices: ${Object.keys(result).length}/${batch.length} tickers (offset ${offset})`);
 
   return {
     statusCode: 200,
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=60'
+      'Cache-Control': 'no-cache'
     },
-    body: JSON.stringify(result)
+    body: JSON.stringify({ prices: result, hasMore, nextOffset: offset + limit, total: tickers.length })
   };
 };
