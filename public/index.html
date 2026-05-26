@@ -816,7 +816,7 @@ async function loadStrategies() {
     tr.innerHTML = `
       <td><span class="tkr">${a.ticker}</span></td>
       <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.stocks?.name||''}</td>
-      <td class="r">${a.close?f.$(a.close,3):'--'}</td>
+      <td class="r">${(livePriceCache[a.ticker]?.price||a.close)?f.$(livePriceCache[a.ticker]?.price||a.close,3):'--'} ${livePriceCache[a.ticker]?'<span style="font-size:9px;color:'+(livePriceCache[a.ticker].changePct>=0?'var(--green)':'var(--red)')+'">'+(livePriceCache[a.ticker].changePct>=0?'+':'')+((livePriceCache[a.ticker].changePct||0)*100).toFixed(1)+'%</span>':''}</td>
       <td><span class="badge ${sc}">${a.total_score||0}/6</span>${dots(a.total_score||0)}</td>
       <td style="text-align:center;color:${a.layer1_macro?'var(--green)':'var(--rule)'};font-weight:600">${a.layer1_macro?'✓':'·'}</td>
       <td style="text-align:center;color:${a.layer2_trend?'var(--green)':'var(--rule)'};font-weight:600">${a.layer2_trend?'✓':'·'}</td>
@@ -1070,7 +1070,7 @@ async function loadSortedStocks() {
           return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
             <td><span class="tkr">${a.ticker}</span>${reitType?`<span class="badge b-reit" style="margin-left:4px;font-size:9px">${reitType}</span>`:''}</td>
             <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||''}</td>
-            <td class="r">${a.close?f.$(a.close,3):'--'}</td>
+            <td class="r">${(livePriceCache[a.ticker]?.price||a.close)?f.$(livePriceCache[a.ticker]?.price||a.close,3):'--'} ${livePriceCache[a.ticker]?'<span style="font-size:9px;color:'+(livePriceCache[a.ticker].changePct>=0?'var(--green)':'var(--red)')+'">'+(livePriceCache[a.ticker].changePct>=0?'+':'')+((livePriceCache[a.ticker].changePct||0)*100).toFixed(1)+'%</span>':''}</td>
             <td><span class="badge ${sc}">${a.total_score||0}/6</span></td>
             <td class="r" style="color:${a.rsi14<35?'var(--green)':a.rsi14>70?'var(--red)':'var(--muted)'}">${a.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
             <td class="r" style="color:${a.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>

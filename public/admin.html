@@ -873,16 +873,14 @@ async function handleResearchUpload(file) {
     let fileData, fileType;
 
     if (isPDF) {
-      // Send as base64
       fileData = await toBase64(file);
       fileType = 'application/pdf';
       showStatus('research-status', `Sending ${file.name} to Claude for analysis...`, 'info');
     } else {
-      // Excel: extract to text via SheetJS so Claude can read it
+      // Send Excel as base64 — server parses it with xlsx library
+      fileData = await toBase64(file);
       fileType = 'excel';
-      showStatus('research-status', `Parsing Excel ${file.name}...`, 'info');
-      fileData = await excelToText(file);
-      showStatus('research-status', `Sending extracted data to Claude...`, 'info');
+      showStatus('research-status', `Sending ${file.name} to Claude for analysis...`, 'info');
     }
 
     const res = await fetch('/.netlify/functions/parse-research', {
