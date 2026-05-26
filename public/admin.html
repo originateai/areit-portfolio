@@ -788,12 +788,29 @@ async function bootSingle() {
 
 // ── RUN SCANS ─────────────────────────────────────────────────────────────────
 async function runScan(fn, statusId) {
-  showStatus(statusId, 'Running ' + fn + '...', 'info');
+  showStatus(statusId, 'Triggering ' + fn + '... (runs in background, check email in 2-3 mins)', 'info');
   try {
-    const res  = await fetch('/.netlify/functions/' + fn);
-    const data = await res.json();
-    if (data.error) { showStatus(statusId, 'Error: ' + data.error, 'err'); return; }
-    showStatus(statusId, '✓ Complete — ' + JSON.stringify(data), 'ok');
+    // Fire and forget — don't await the full response (scan takes >10s)
+    fetch('/.netlify/functions/' + fn).then(res => {
+      if (res.ok) {
+        res.json().then(data => {
+          showStatus(statusId, '✓ Complete — ' + JSON.stringify(data), 'ok');
+        }).catch(() => {
+          showStatus(statusId, '✓ Scan triggered — check your email in 2-3 minutes', 'ok');
+        });
+      } else {
+        showStatus(statusId, '⚠ Scan triggered but got status ' + res.status + ' — check Netlify logs', 'info');
+      }
+    }).catch(e => {
+      showStatus(statusId, '⚠ Scan triggered — check email in 2-3 minutes (' + e.message + ')', 'info');
+    });
+    // Show immediate confirmation
+    setTimeout(() => {
+      const el = document.getElementById(statusId);
+      if (el && el.textContent.includes('Triggering')) {
+        showStatus(statusId, '⏳ Scan running in background — check your email in 2-3 minutes', 'info');
+      }
+    }, 3000);
   } catch(e) {
     showStatus(statusId, 'Error: ' + e.message, 'err');
   }
