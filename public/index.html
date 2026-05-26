@@ -75,7 +75,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}
 thead tr{border-bottom:2px solid var(--ink)}
 th{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--muted);padding:6px 7px;text-align:left;font-weight:400;white-space:nowrap}
 th.r{text-align:right}
-tbody tr{border-bottom:1px solid var(--rule);transition:background 0.1s}
+tbody tr{border-bottom:1px solid var(--rule);transition:background 0.1s;height:38px}tbody td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;vertical-align:middle}
 tbody tr:hover{background:var(--cream)}
 tbody tr.clickable{cursor:pointer}
 tbody tr.clickable:hover{background:#e8f2fb;border-left:3px solid var(--teal)}
@@ -919,17 +919,17 @@ async function loadSortedStocks() {
   const { data: analysis } = await query.limit(100);
   if (!analysis?.length) { el.innerHTML = '<div class="empty">No stocks match this filter</div>'; return; }
 
-  // Get stock metadata for 52W data
+  // Get stock metadata for all tickers
   const tickers = analysis.map(a => a.ticker);
-  let stockQuery = db.from('stocks').select('ticker,name,sector,high_52w,low_52w,market_cap,pct_from_52w_low,pct_from_52w_high').in('ticker', tickers);
-  if (universe) stockQuery = stockQuery.eq('universe', universe);
-  const { data: stocks } = await stockQuery;
+  const { data: stocksData } = await db.from('stocks')
+    .select('ticker,name,sector,universe,is_reit,is_manager,is_developer,high_52w,low_52w,market_cap,pct_from_52w_low,pct_from_52w_high')
+    .in('ticker', tickers);
   const stockMap = {};
-  (stocks||[]).forEach(s => { stockMap[s.ticker] = s; });
+  (stocksData||[]).forEach(s => { stockMap[s.ticker] = s; });
 
-  // Filter by universe if set
+  // Filter by universe
   const filtered = universe
-    ? analysis.filter(a => stockMap[a.ticker])
+    ? analysis.filter(a => stockMap[a.ticker]?.universe === universe)
     : analysis;
 
   // Sort by 52W fields (need stock data)
@@ -953,8 +953,9 @@ async function loadSortedStocks() {
           const s  = stockMap[a.ticker] || {};
           const sc = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod'}[a.conviction]||'b-hold';
           const mcap = s.market_cap ? (s.market_cap >= 1e9 ? `$${(s.market_cap/1e9).toFixed(1)}B` : `$${(s.market_cap/1e6).toFixed(0)}M`) : '--';
+          const reitType = s.is_manager ? 'Mgr' : s.is_developer ? 'Dev' : s.is_reit ? 'REIT' : '';
           return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
-            <td><span class="tkr">${a.ticker}</span></td>
+            <td><span class="tkr">${a.ticker}</span>${reitType?`<span class="badge b-reit" style="margin-left:4px;font-size:9px">${reitType}</span>`:''}</td>
             <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||''}</td>
             <td class="r">${a.close?f.$(a.close,3):'--'}</td>
             <td><span class="badge ${sc}">${a.total_score||0}/6</span></td>
