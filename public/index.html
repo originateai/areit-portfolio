@@ -1688,7 +1688,7 @@ async function openSignalDrawer(ticker) {
 
   // Fetch all data in parallel
   const [tradeRes, analysisRes, pricesRes, stockRes] = await Promise.all([
-    db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).single(),
+    db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).maybeSingle(),
     db.from('daily_analysis').select('*').eq('ticker', ticker).order('analysis_date',{ascending:false}).limit(1).single(),
     db.from('prices').select('market_date,open,high,low,close,volume,change_pct').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
     db.from('stocks').select('*').eq('ticker', ticker).single()
