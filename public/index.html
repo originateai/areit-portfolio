@@ -498,9 +498,9 @@ tfoot td.r{text-align:right}
     <!-- Two column layout -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
 
-      <!-- Left: 6-layer breakdown -->
+      <!-- Left: 7-layer breakdown -->
       <div>
-        <div class="sl">6-Layer Signal Breakdown</div>
+        <div class="sl">7-Layer Signal Breakdown</div>
         <div id="sd-layers"></div>
       </div>
 
@@ -1012,14 +1012,14 @@ async function screenStock() {
 
       ${data ? `
         <div class="kb" style="margin-bottom:14px">
-          <div class="kc dk"><div class="kl">Score</div><div class="kv">${data.total_score||0}/7</div></div>
+          <div class="kc dk"><div class="kl">Score</div><div class="kv">${(data.layer1_macro?1:0)+(data.layer2_trend?1:0)+(data.layer3_momentum?1:0)+(data.layer4_reversion?1:0)+(data.layer5_volume?1:0)+(data.layer6_candle?1:0)+(data.layer7_ml?1:0)}/7</div></div>
           <div class="kc"><div class="kl">Conviction</div><div class="kv">${data.conviction||'--'}</div></div>
           <div class="kc"><div class="kl">RSI 14</div><div class="kv ${data.rsi14<35?'green':data.rsi14>70?'red':''}">${data.rsi14?parseFloat(data.rsi14).toFixed(0):'--'}</div></div>
           <div class="kc"><div class="kl">Volume ×</div><div class="kv ${data.vol_ratio>1.5?'teal':''}">${data.vol_ratio?parseFloat(data.vol_ratio).toFixed(1)+'×':'--'}</div></div>
           <div class="kc"><div class="kl">20 DMA</div><div class="kv">${data.ma20?f.$(data.ma20,3):'--'}</div></div>
           <div class="kc"><div class="kl">Candle</div><div class="kv" style="font-size:13px">${data.candle_pattern||'None'}</div></div>
         </div>
-        <div class="sl">6-layer breakdown</div>
+        <div class="sl">7-layer breakdown</div>
         <div class="layer-grid">
           <div class="layer ${data.layer1_macro?'on':''}"><div class="layer-n">Macro</div><div class="layer-v">${data.layer1_macro?'✓':'✗'}</div></div>
           <div class="layer ${data.layer2_trend?'on':''}"><div class="layer-n">Trend</div><div class="layer-v">${data.layer2_trend?'✓':'✗'}</div></div>
