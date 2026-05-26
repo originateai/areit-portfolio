@@ -367,11 +367,11 @@ td.r { text-align: right; font-family: 'DM Mono', monospace; }
       <div style="overflow-x:auto;margin-bottom:14px">
         <table id="research-table">
           <thead><tr>
-            <th>Keep</th><th>Ticker</th><th>Name</th>
-            <th class="r">NTA</th><th class="r">DPS FY26</th><th class="r">DPS FY27</th>
-            <th class="r">Gearing</th><th class="r">Cap Rate</th><th class="r">WALE</th><th class="r">Occ.</th>
-            <th>Source</th>
-          </tr></thead>
+          <th>Keep</th><th>Ticker</th><th>Name</th>
+          <th class="r">NTA</th><th class="r">DPS FY26</th><th class="r">DPS FY27</th>
+          <th class="r">Gearing</th><th class="r">Cap Rate</th><th class="r">WALE</th>
+          <th class="r">Occ.</th><th class="r">Yield Trig</th><th>Source</th>
+        </tr></thead>
           <tbody id="research-tbody"></tbody>
         </table>
       </div>
@@ -961,9 +961,10 @@ function renderResearchPreview(reits) {
       <td class="r">${fmt(r.dps_fy26,'$',3)}</td>
       <td class="r">${fmt(r.dps_fy27,'$',3)}</td>
       <td class="r">${fmtPct(r.gearing)}</td>
-      <td class="r">${fmtPct(r.implied_cap)}</td>
+      <td class="r">${fmtPct(r.cap_rate)}</td>
       <td class="r">${r.wale != null ? parseFloat(r.wale).toFixed(1)+'yr' : '<span style="color:var(--rule)">—</span>'}</td>
       <td class="r">${fmtPct(r.occupancy)}</td>
+      <td class="r">${fmtPct(r.yield_trigger)}</td>
       <td style="font-size:10px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.source||''}">${r.source || ''}</td>
     </tr>`).join('');
 
@@ -996,6 +997,9 @@ async function commitResearch() {
     if (r.dps_fy27   != null) updates.dps_fy27     = r.dps_fy27;
     if (r.gearing    != null) updates.gearing      = r.gearing;
     if (r.implied_cap!= null) updates.implied_cap  = r.implied_cap;
+    if (r.cap_rate   != null) updates.cap_rate     = r.cap_rate;
+    if (r.wale       != null) updates.wale         = r.wale;
+    if (r.occupancy  != null) updates.occupancy    = r.occupancy;
     if (r.yield_trigger!=null)updates.yield_trigger= r.yield_trigger;
     // wale and occupancy — add columns if you extend the schema later
     if (Object.keys(updates).length <= 1) { skipped++; continue; }

@@ -345,10 +345,13 @@ tfoot td.r{text-align:right}
         <th class="r" onclick="reitSortBy('discount')" style="cursor:pointer">Disc NTA ↕</th>
         <th class="r" onclick="reitSortBy('yield')" style="cursor:pointer">Yield ↕</th>
         <th class="r" onclick="reitSortBy('target8')" style="cursor:pointer">8% Target ↕</th>
+        <th class="r">Gearing</th>
+        <th class="r">WALE</th>
+        <th class="r">Occ.</th>
         <th onclick="reitSortBy('score')" style="cursor:pointer">Score ↕</th>
         <th>Status</th>
       </tr></thead>
-      <tbody id="reit-signals-tbody"><tr><td colspan="10" class="empty">Loading REIT signals...</td></tr></tbody>
+      <tbody id="reit-signals-tbody"><tr><td colspan="13" class="empty">Loading REIT signals...</td></tr></tbody>
     </table>
   </div>
 
@@ -1215,6 +1218,11 @@ async function loadREITSignals() {
         ${y ? (y*100).toFixed(1)+'%' : '--'}
       </td>
       <td class="r">${t8 ? f.$(t8,3) : '--'}</td>
+      <td class="r" style="color:${s.gearing>0.4?'var(--red)':s.gearing>0.35?'var(--amber)':'var(--muted)'}">
+        ${s.gearing != null ? (s.gearing*100).toFixed(0)+'%' : '--'}
+      </td>
+      <td class="r">${s.wale != null ? parseFloat(s.wale).toFixed(1)+'yr' : '--'}</td>
+      <td class="r">${s.occupancy != null ? (s.occupancy*100).toFixed(1)+'%' : '--'}</td>
       <td>${a ? `<span class="badge ${a.conviction==='EXCEPTIONAL'?'b-exc':a.conviction==='STRONG'?'b-str':'b-mod'}">${a.total_score||0}/6</span>${dots(a.total_score||0)}` : '<span style="font-size:10px;color:var(--muted)">Pending</span>'}</td>
       <td><span style="font-size:11px;font-weight:${fired?600:400};color:${fired?'var(--green)':close?'var(--amber)':'var(--muted)'}">
         ${fired ? '🟢 BUY' : close ? '⚠️ Close' : 'Watching'}
@@ -1557,6 +1565,13 @@ async function openSignalDrawer(ticker) {
     { l:'BB Pos',   v: analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%':'--', c: 'var(--ink)', dark: false },
     { l:'Conviction',v: conv + ' ' + score+'/6',  c: convFg, dark: conv==='EXCEPTIONAL' },
     { l:'Candle',   v: analysis?.candle_pattern || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false },
+    ...(stock?.is_reit ? [
+      { l:'NTA',      v: stock.nta ? '$'+parseFloat(stock.nta).toFixed(2) : '--', c: 'var(--ink)', dark: false },
+      { l:'Gearing',  v: stock.gearing ? (stock.gearing*100).toFixed(0)+'%' : '--', c: stock.gearing>0.4?'var(--red)':stock.gearing>0.35?'var(--amber)':'var(--ink)', dark: false },
+      { l:'WALE',     v: stock.wale ? parseFloat(stock.wale).toFixed(1)+'yr' : '--', c: 'var(--ink)', dark: false },
+      { l:'Occupancy',v: stock.occupancy ? (stock.occupancy*100).toFixed(1)+'%' : '--', c: stock.occupancy>0.97?'var(--green)':stock.occupancy>0.93?'var(--ink)':'var(--amber)', dark: false },
+      { l:'Cap Rate', v: stock.cap_rate ? (stock.cap_rate*100).toFixed(2)+'%' : '--', c: 'var(--teal)', dark: false },
+    ] : []),
   ];
   document.getElementById('sd-metrics').innerHTML = metrics.map(m =>
     `<div class="kc ${m.dark?'dk':''}">
