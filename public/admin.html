@@ -354,7 +354,7 @@ td.r { text-align: right; font-family: 'DM Mono', monospace; }
       <h3>Upload Broker or Company Research</h3>
       <p>Drop any Moelis workings Excel, broker PDF, or half-year results file. Claude reads the document and extracts NTA, DPS, gearing, cap rates, WALE, occupancy — whatever it finds. You review the data before anything is written to the database.</p>
       <div class="upload-zone" id="research-zone" onclick="document.getElementById('research-file').click()">
-        <input type="file" id="research-file" accept=".xlsx,.xls,.pdf" onchange="handleResearchUpload(this.files[0])">
+        <input type="file" id="research-file" accept="*/*" onchange="handleResearchUpload(this.files[0])">
         📄 Drop Moelis Excel, broker PDF or company results here
       </div>
       <div id="research-status" class="status"></div>
