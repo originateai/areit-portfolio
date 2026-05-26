@@ -164,7 +164,7 @@ tfoot td.r{text-align:right}
       <div class="kc"><div class="kl">Invested</div><div class="kv teal" id="m-inv">--</div><div class="kn">Deployed</div></div>
       <div class="kc"><div class="kl">Cash</div><div class="kv" id="m-cash">--</div><div class="kn">Available</div></div>
       <div class="kc"><div class="kl">Open Trades</div><div class="kv" id="m-open">--</div></div>
-      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn">Unrealised move</div></div>
+      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn" id="m-price-status">Loading live prices...</div></div>
       <div class="kc"><div class="kl">Total P&L</div><div class="kv" id="m-pnl">--</div></div>
       <div class="kc"><div class="kl">Win Rate</div><div class="kv gold" id="m-win">--</div></div>
     </div>
@@ -525,8 +525,10 @@ async function init() {
     const res = await fetch('/.netlify/functions/env');
     const env = await res.json();
     db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
-    refreshLivePrices(); // kick off in background, don't await
+    // Load model immediately with DB prices for fast initial render
     loadModel();
+    // Then fetch live prices — model auto-reloads when done via refreshLivePrices()
+    refreshLivePrices();
   } catch(e) {
     console.error('Init failed:', e);
     document.querySelectorAll('.empty').forEach(el => el.textContent = 'Could not connect to database. Check environment variables in Netlify.');
@@ -646,6 +648,12 @@ async function refreshLivePrices() {
     }
     livePriceLastFetch = Date.now();
     console.log(`Live prices refreshed — ${Object.keys(livePriceCache).length} tickers`);
+    // Update status indicator
+    const statusEl = document.getElementById('m-price-status');
+    if (statusEl) {
+      const t = new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});
+      statusEl.textContent = `Live as at ${t}`;
+    }
     // Reload whichever page is currently active with fresh prices
     const active = document.querySelector('.page.active')?.id;
     if (active === 'pg-reit-trading') loadREITSignals();
