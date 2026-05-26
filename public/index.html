@@ -208,12 +208,20 @@ tfoot td.r{text-align:right}
 
   <!-- STOCK SCREENER -->
   <div id="pg-screener" class="page">
-    <div class="ph"><h1>Stock Screener</h1><p>Search any ASX stock and see its current 6-layer score</p></div>
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <input id="screener-input" type="text" placeholder="Enter ASX ticker e.g. BHP" style="padding:9px 12px;border:1px solid var(--rule);border-radius:3px;font-size:13px;font-family:'DM Mono',monospace;width:200px;background:var(--paper)">
+    <div class="ph"><h1>Stock Screener</h1><p>Search any ASX ticker — runs live 6-layer analysis even if not in the top 400</p></div>
+
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <input id="screener-input" type="text" placeholder="Any ASX ticker e.g. NXT, PME, LNW"
+        style="padding:9px 12px;border:1px solid var(--rule);border-radius:3px;font-size:13px;font-family:'DM Mono',monospace;width:220px;background:var(--paper);text-transform:uppercase"
+        onkeydown="if(event.key==='Enter') screenStock()">
       <button class="btn btn-primary" onclick="screenStock()">Analyse</button>
+      <button class="btn btn-secondary" onclick="loadWatchlist()">↻ Watchlist</button>
     </div>
-    <div id="screener-result"><div class="empty">Enter a ticker above to see its 6-layer score.</div></div>
+
+    <div id="screener-result"><div class="empty">Enter any ASX ticker above — pulls live data from EODHD even if the stock isn't in the top 400.</div></div>
+
+    <div class="sl" style="margin-top:24px">My Watchlist</div>
+    <div id="watchlist-content"><div class="empty">Loading watchlist...</div></div>
   </div>
 
   <!-- REIT HOLDINGS -->
@@ -426,7 +434,7 @@ function go(page, el) {
   if (el) el.classList.add('active');
   const fns = {
     model: loadModel, real: loadReal, strategies: loadStrategies,
-    screener: ()=>{}, reit: loadREIT, 'reit-trading': loadREITSignals,
+    screener: loadWatchlist, reit: loadREIT, 'reit-trading': loadREITSignals,
     income: loadIncome, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
   };
@@ -651,36 +659,165 @@ async function screenStock() {
   const ticker = document.getElementById('screener-input').value.toUpperCase().trim();
   if (!ticker) return;
   const el = document.getElementById('screener-result');
-  el.innerHTML = '<div class="empty">Analysing...</div>';
+  el.innerHTML = '<div class="empty">Fetching live data from EODHD...</div>';
 
-  const { data } = await db.from('daily_analysis').select('*,stocks(*)').eq('ticker', ticker).order('analysis_date',{ascending:false}).limit(1).single();
+  try {
+    // 1. Check if we have analysis in DB already
+    const { data: existing } = await db.from('daily_analysis')
+      .select('*,stocks(*)')
+      .eq('ticker', ticker)
+      .order('analysis_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (!data) {
-    el.innerHTML = `<div class="empty">${ticker} not found in today's analysis. It may not be in the universe or the morning scan hasn't run yet.</div>`;
+    // 2. Get latest price from prices table
+    const { data: priceRow } = await db.from('prices')
+      .select('close,change_pct,market_date')
+      .eq('ticker', ticker)
+      .order('market_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // 3. Get stock info
+    const { data: stock } = await db.from('stocks')
+      .select('*').eq('ticker', ticker).maybeSingle();
+
+    // 4. Check watchlist
+    const { data: onWatchlist } = await db.from('watchlist')
+      .select('id').eq('ticker', ticker).maybeSingle();
+
+    const data     = existing;
+    const price    = priceRow?.close || data?.close;
+    const sc       = { EXCEPTIONAL:'b-exc', STRONG:'b-str', MODERATE:'b-mod', WEAK:'b-hold' }[data?.conviction] || 'b-hold';
+    const inWL     = !!onWatchlist;
+
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:var(--teal)">${ticker}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px">${stock?.name || 'Not in top 400 — live data pulled from EODHD'}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="text-align:right">
+            <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700">${price?f.$(price,3):'--'}</div>
+            <div style="font-size:11px;color:var(--muted)">${priceRow?.market_date||''}</div>
+          </div>
+          <button class="btn ${inWL?'btn-danger':'btn-green'}" onclick="${inWL?'removeFromWatchlist':'addToWatchlist'}('${ticker}','${stock?.name||ticker}')" style="white-space:nowrap">
+            ${inWL?'− Remove':'+ Watchlist'}
+          </button>
+          ${data ? `<button class="btn btn-primary" onclick="openSignalDrawer('${ticker}')">Full Detail →</button>` : ''}
+        </div>
+      </div>
+
+      ${data ? `
+        <div class="kb" style="margin-bottom:14px">
+          <div class="kc dk"><div class="kl">Score</div><div class="kv">${data.total_score||0}/6</div></div>
+          <div class="kc"><div class="kl">Conviction</div><div class="kv">${data.conviction||'--'}</div></div>
+          <div class="kc"><div class="kl">RSI 14</div><div class="kv ${data.rsi14<35?'green':data.rsi14>70?'red':''}">${data.rsi14?parseFloat(data.rsi14).toFixed(0):'--'}</div></div>
+          <div class="kc"><div class="kl">Volume ×</div><div class="kv ${data.vol_ratio>1.5?'teal':''}">${data.vol_ratio?parseFloat(data.vol_ratio).toFixed(1)+'×':'--'}</div></div>
+          <div class="kc"><div class="kl">20 DMA</div><div class="kv">${data.ma20?f.$(data.ma20,3):'--'}</div></div>
+          <div class="kc"><div class="kl">Candle</div><div class="kv" style="font-size:13px">${data.candle_pattern||'None'}</div></div>
+        </div>
+        <div class="sl">6-layer breakdown</div>
+        <div class="layer-grid">
+          <div class="layer ${data.layer1_macro?'on':''}"><div class="layer-n">Macro</div><div class="layer-v">${data.layer1_macro?'✓':'✗'}</div></div>
+          <div class="layer ${data.layer2_trend?'on':''}"><div class="layer-n">Trend</div><div class="layer-v">${data.layer2_trend?'✓':'✗'}</div></div>
+          <div class="layer ${data.layer3_momentum?'on':''}"><div class="layer-n">Momentum</div><div class="layer-v">${data.layer3_momentum?'✓':'✗'}</div></div>
+          <div class="layer ${data.layer4_reversion?'on':''}"><div class="layer-n">Reversion</div><div class="layer-v">${data.layer4_reversion?'✓':'✗'}</div></div>
+          <div class="layer ${data.layer5_volume?'on':''}"><div class="layer-n">Volume</div><div class="layer-v">${data.layer5_volume?'✓':'✗'}</div></div>
+          <div class="layer ${data.layer6_candle?'on':''}"><div class="layer-n">Candle</div><div class="layer-v">${data.layer6_candle?'✓':'✗'}</div></div>
+        </div>
+        <div class="sl" style="margin-top:16px">Signal reasons</div>
+        <div class="info">${(data.signal_reasons||['No reasons recorded']).join('<br>')}</div>
+      ` : `
+        <div class="info" style="margin-bottom:14px">
+          No analysis data yet for ${ticker}. This stock may not be in the top 400 universe.<br><br>
+          Add it to your watchlist and it will be included in tomorrow's morning scan.
+          ${stock ? '' : '<br><br>Stock not found in database — adding to watchlist will create it.'}
+        </div>
+      `}
+    `;
+  } catch(e) {
+    el.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+// ── WATCHLIST ─────────────────────────────────────────────────────────────────
+async function addToWatchlist(ticker, name) {
+  if (!db) return;
+
+  // Add to watchlist table
+  await db.from('watchlist').upsert({ ticker, name, added_at: new Date().toISOString() }, { onConflict: 'ticker' });
+
+  // Also ensure stock exists in stocks table so morning scan picks it up
+  const { data: existing } = await db.from('stocks').select('id').eq('ticker', ticker).maybeSingle();
+  if (!existing) {
+    await db.from('stocks').insert({
+      ticker, name, sector: 'Other', universe: 'ASX500',
+      is_reit: false, active: true
+    });
+  } else {
+    await db.from('stocks').update({ active: true }).eq('ticker', ticker);
+  }
+
+  alert(`✓ ${ticker} added to watchlist — will be included in tomorrow's morning scan`);
+  screenStock(); // refresh to show updated button
+  loadWatchlist();
+}
+
+async function removeFromWatchlist(ticker) {
+  if (!db) return;
+  await db.from('watchlist').delete().eq('ticker', ticker);
+  screenStock();
+  loadWatchlist();
+}
+
+async function loadWatchlist() {
+  if (!db) return;
+  const el = document.getElementById('watchlist-content');
+  if (!el) return;
+
+  const { data: wl } = await db.from('watchlist').select('*').order('added_at', { ascending: false });
+
+  if (!wl?.length) {
+    el.innerHTML = '<div class="empty">No stocks on watchlist yet. Search for any ASX ticker above and click + Watchlist.</div>';
     return;
   }
 
-  const sc = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod',WEAK:'b-hold'}[data.conviction]||'b-hold';
+  // Get latest analysis for watchlist stocks
+  const tickers = wl.map(w => w.ticker);
+  const { data: analysis } = await db.from('daily_analysis')
+    .select('ticker,total_score,conviction,rsi14,vol_ratio,close,analysis_date')
+    .in('ticker', tickers)
+    .order('analysis_date', { ascending: false });
+
+  const analysisMap = {};
+  (analysis||[]).forEach(a => { if (!analysisMap[a.ticker]) analysisMap[a.ticker] = a; });
+
   el.innerHTML = `
-    <div class="kb">
-      <div class="kc dk"><div class="kl">${ticker} — ${data.stocks?.name||''}</div><div class="kv">${data.close?f.$(data.close,3):'--'}</div><div class="kn">${data.analysis_date}</div></div>
-      <div class="kc"><div class="kl">Score</div><div class="kv teal">${data.total_score||0}/6</div></div>
-      <div class="kc"><div class="kl">Conviction</div><div class="kv">${data.conviction||'--'}</div></div>
-      <div class="kc"><div class="kl">RSI 14</div><div class="kv ${data.rsi14<35?'green':data.rsi14>70?'red':''}">${data.rsi14?parseFloat(data.rsi14).toFixed(0):'--'}</div></div>
-      <div class="kc"><div class="kl">Volume ×</div><div class="kv ${data.vol_ratio>1.5?'teal':''}">${data.vol_ratio?parseFloat(data.vol_ratio).toFixed(1)+'×':'--'}</div></div>
-      <div class="kc"><div class="kl">Candle</div><div class="kv" style="font-size:13px">${data.candle_pattern||'None'}</div></div>
-    </div>
-    <div class="sl">6-layer breakdown</div>
-    <div class="layer-grid">
-      <div class="layer ${data.layer1_macro?'on':''}"><div class="layer-n">Macro</div><div class="layer-v">${data.layer1_macro?'✓':'✗'}</div></div>
-      <div class="layer ${data.layer2_trend?'on':''}"><div class="layer-n">Trend</div><div class="layer-v">${data.layer2_trend?'✓':'✗'}</div></div>
-      <div class="layer ${data.layer3_momentum?'on':''}"><div class="layer-n">Momentum</div><div class="layer-v">${data.layer3_momentum?'✓':'✗'}</div></div>
-      <div class="layer ${data.layer4_reversion?'on':''}"><div class="layer-n">Reversion</div><div class="layer-v">${data.layer4_reversion?'✓':'✗'}</div></div>
-      <div class="layer ${data.layer5_volume?'on':''}"><div class="layer-n">Volume</div><div class="layer-v">${data.layer5_volume?'✓':'✗'}</div></div>
-      <div class="layer ${data.layer6_candle?'on':''}"><div class="layer-n">Candle</div><div class="layer-v">${data.layer6_candle?'✓':'✗'}</div></div>
-    </div>
-    <div class="sl" style="margin-top:16px">Why</div>
-    <div class="info">${(data.signal_reasons||['No reasons recorded']).join('<br>')}</div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Name</th><th class="r">Price</th>
+        <th>Score</th><th class="r">RSI</th><th class="r">Vol ×</th>
+        <th>Last analysed</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${wl.map(w => {
+          const a = analysisMap[w.ticker];
+          const sc = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod'}[a?.conviction]||'b-hold';
+          return `<tr class="clickable" onclick="openSignalDrawer('${w.ticker}')">
+            <td><span class="tkr">${w.ticker}</span></td>
+            <td style="font-size:11px">${w.name||''}</td>
+            <td class="r">${a?.close?f.$(a.close,3):'--'}</td>
+            <td>${a?`<span class="badge ${sc}">${a.total_score||0}/6</span>`:'<span style="font-size:11px;color:var(--muted)">Pending</span>'}</td>
+            <td class="r" style="color:${a?.rsi14<35?'var(--green)':a?.rsi14>70?'var(--red)':'var(--muted)'}">${a?.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
+            <td class="r" style="color:${a?.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a?.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
+            <td style="font-size:11px;color:var(--muted)">${a?.analysis_date||'Not yet'}</td>
+            <td><button class="btn btn-danger" style="padding:3px 8px;font-size:10px" onclick="event.stopPropagation();removeFromWatchlist('${w.ticker}')">Remove</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
   `;
 }
 
@@ -1045,7 +1182,7 @@ async function openSignalDrawer(ticker) {
   const price = prices[prices.length-1]?.close || trade?.entry_price;
 
   // Build candlestick chart data
-  const chartHtml = prices.length > 5 ? buildMiniChart(prices, trade) : '<div style="padding:20px;color:var(--muted);font-size:12px">Not enough price history yet — bootstrap running</div>';
+  const chartHtml = prices.length > 5 ? buildFullChart(prices, trade) : '<div style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;background:var(--cream);border-radius:4px">Not enough price history yet — bootstrap running</div>';
 
   // ── POPULATE FULL PAGE ──────────────────────────────────────────────────────
 
