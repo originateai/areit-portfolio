@@ -18,7 +18,7 @@ async function fetchEODHDIndicators(ticker) {
 
   try {
     // Fetch all indicators in parallel
-    const [rsiRes, sma20Res, sma50Res, sma200Res, bbRes, macdRes, roc20Res] = await Promise.all([
+    const [rsiRes, sma20Res, sma50Res, sma200Res, bbRes, macdRes, roc20Res, adxRes, atrRes] = await Promise.all([
       fetch(`${BASE}/technical/${epic}?function=rsi&period=14&api_token=${KEY()}&fmt=json`),
       fetch(`${BASE}/technical/${epic}?function=sma&period=20&api_token=${KEY()}&fmt=json`),
       fetch(`${BASE}/technical/${epic}?function=sma&period=50&api_token=${KEY()}&fmt=json`),
@@ -26,6 +26,8 @@ async function fetchEODHDIndicators(ticker) {
       fetch(`${BASE}/technical/${epic}?function=bbands&period=20&api_token=${KEY()}&fmt=json`),
       fetch(`${BASE}/technical/${epic}?function=macd&fast_period=12&slow_period=26&signal_period=9&api_token=${KEY()}&fmt=json`),
       fetch(`${BASE}/technical/${epic}?function=roc&period=20&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=adx&period=14&api_token=${KEY()}&fmt=json`),
+      fetch(`${BASE}/technical/${epic}?function=atr&period=14&api_token=${KEY()}&fmt=json`),
     ]);
 
     // RSI
@@ -70,6 +72,18 @@ async function fetchEODHDIndicators(ticker) {
     const rocData = await roc20Res.json();
     if (Array.isArray(rocData) && rocData.length > 0) {
       results.roc20 = parseFloat(rocData[rocData.length-1].roc) / 100;
+    }
+
+    // ADX — trend strength (14 period)
+    const adxData = await adxRes.json();
+    if (Array.isArray(adxData) && adxData.length > 0) {
+      results.adx = parseFloat(adxData[adxData.length-1].adx);
+    }
+
+    // ATR — Average True Range for dynamic stops (14 period)
+    const atrData = await atrRes.json();
+    if (Array.isArray(atrData) && atrData.length > 0) {
+      results.atr = parseFloat(atrData[atrData.length-1].atr);
     }
 
     return results;
@@ -172,7 +186,7 @@ function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candl
   const reasons = [];
   let l1=0, l2=0, l3=0, l4=0, l5=0, l6=0, l7=0;
 
-  const { rsi14, ma20, ma50, ma200, bb_lower, bb_upper, macd, macd_signal, roc20 } = indicators;
+  const { rsi14, ma20, ma50, ma200, bb_lower, bb_upper, macd, macd_signal, roc20, adx, atr } = indicators;
   const price = indicators.price;
 
   // ── LAYER 1: MACRO ────────────────────────────────────────────────────────
@@ -187,13 +201,16 @@ function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candl
   const above200 = ma200 && price > ma200;
   const above50  = ma50  && price > ma50;
   const golden   = ma50  && ma200 && ma50 > ma200;
-  // Tightened: require above 200DMA AND above 50DMA or golden cross
-  if (above200 && above50) {
+  // ADX >20 = trend has real strength, not just choppy price action
+  const trendStrong = adx && adx > 20;
+  if (above200 && above50 && trendStrong) {
+    l2 = 1; reasons.push(`Above 200DMA + 50DMA, ADX ${adx?.toFixed(0)} — strong uptrend`);
+  } else if (above200 && above50) {
     l2 = 1; reasons.push('Above 200DMA + 50DMA — uptrend confirmed');
   } else if (above200 && golden) {
     l2 = 1; reasons.push('Golden cross — trend turning bullish');
   } else {
-    reasons.push('Below 200DMA or weak trend — avoid');
+    reasons.push(`Below 200DMA or weak trend${adx ? ` (ADX ${adx.toFixed(0)})` : ''} — avoid`);
   }
 
   // ── LAYER 3: MOMENTUM ─────────────────────────────────────────────────────
@@ -326,6 +343,15 @@ async function analyseStock(stock, macroScore, settings, livePrice=null) {
     const stopPct   = parseFloat(settings.stop_loss_pct || '1.5') / 100;
     const targetPct = parseFloat(settings.target_pct    || '3.0') / 100;
 
+    // ATR-based dynamic stop — use 1.5× ATR if available, otherwise fall back to fixed %
+    // This adapts stop distance to each stock's actual volatility
+    const atrStop = indicators?.atr && price
+      ? parseFloat((indicators.atr * 1.5 / price).toFixed(6))  // 1.5× ATR as % of price
+      : null;
+    const dynamicStopPct = atrStop && atrStop > 0.005 && atrStop < 0.08
+      ? atrStop   // use ATR stop if it's between 0.5% and 8%
+      : stopPct;  // fall back to fixed setting
+
     return {
       ticker:           stock.ticker,
       name:             stock.name,
@@ -348,6 +374,8 @@ async function analyseStock(stock, macroScore, settings, livePrice=null) {
       above_ma20:       indicators.ma20 ? price > indicators.ma20 : null,
       above_ma200:      indicators.ma200 ? price > indicators.ma200 : null,
       golden_cross:     indicators.ma50 && indicators.ma200 ? indicators.ma50 > indicators.ma200 : null,
+      adx:              indicators.adx || null,
+      atr:              indicators.atr || null,
       // Candlestick
       candle_pattern:          candles?.pattern,
       candle_hammer:           candles?.hammer || false,
@@ -371,7 +399,7 @@ async function analyseStock(stock, macroScore, settings, livePrice=null) {
       signal_reasons:   scoring.reasons,
       // Trade levels
       position_size:    positionSize,
-      stop_price:       price ? parseFloat((price * (1 - stopPct)).toFixed(3))   : null,
+      stop_price:       price ? parseFloat((price * (1 - dynamicStopPct)).toFixed(3))   : null,
       target_price:     price ? parseFloat((price * (1 + targetPct)).toFixed(3)) : null,
       units:            price && positionSize ? Math.floor(positionSize / price) : 0
     };
