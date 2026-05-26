@@ -604,9 +604,16 @@ async function refreshLivePrices() {
   try {
     const res  = await fetch('/.netlify/functions/bulk-live-prices?universe=ALL');
     if (res.ok) {
-      livePriceCache    = await res.json();
+      livePriceCache     = await res.json();
       livePriceLastFetch = Date.now();
       console.log(`Live prices refreshed — ${Object.keys(livePriceCache).length} tickers`);
+      // Reload whichever page is currently active with fresh prices
+      const active = document.querySelector('.page.active')?.id;
+      if (active === 'pg-reit-trading') loadREITSignals();
+      if (active === 'pg-strategies')   loadStrategies();
+      if (active === 'pg-model')        loadModel();
+      if (active === 'pg-reit')         loadREIT();
+      if (active === 'pg-screener')     loadSortedStocks();
     }
   } catch(e) {
     console.warn('Live price refresh failed:', e.message);
@@ -615,26 +622,40 @@ async function refreshLivePrices() {
 }
 
 async function getPrices(tickers) {
-  // Use cache if fresh (< 15 min), otherwise refresh
-  const age = Date.now() - livePriceLastFetch;
-  if (age > 15 * 60 * 1000 || !Object.keys(livePriceCache).length) {
-    await refreshLivePrices();
+  // If cache is populated use it immediately
+  if (Object.keys(livePriceCache).length) {
+    const map = {};
+    (tickers || []).forEach(t => {
+      if (livePriceCache[t]) {
+        map[t] = {
+          price:     livePriceCache[t].price,
+          open:      livePriceCache[t].open,
+          high:      livePriceCache[t].high,
+          low:       livePriceCache[t].low,
+          change:    livePriceCache[t].change,
+          changePct: livePriceCache[t].changePct,
+          volume:    livePriceCache[t].volume,
+          high_52w:  livePriceCache[t].high_52w,
+          low_52w:   livePriceCache[t].low_52w,
+        };
+      }
+    });
+    return map;
   }
+  // Cache not ready yet — fall back to DB prices table
+  if (!db) return {};
+  const { data } = await db.from('prices').select('ticker,close,change_pct,open,high,low,volume,market_date')
+    .in('ticker', tickers).order('market_date', { ascending: false });
   const map = {};
-  (tickers || []).forEach(t => {
-    if (livePriceCache[t]) {
-      map[t] = {
-        price:      livePriceCache[t].price,
-        open:       livePriceCache[t].open,
-        high:       livePriceCache[t].high,
-        low:        livePriceCache[t].low,
-        change:     livePriceCache[t].change,
-        changePct:  livePriceCache[t].changePct,
-        volume:     livePriceCache[t].volume,
-        high_52w:   livePriceCache[t].high_52w,
-        low_52w:    livePriceCache[t].low_52w,
-      };
-    }
+  (data||[]).forEach(r => {
+    if (!map[r.ticker]) map[r.ticker] = {
+      price:     parseFloat(r.close),
+      open:      parseFloat(r.open  || r.close),
+      high:      parseFloat(r.high  || r.close),
+      low:       parseFloat(r.low   || r.close),
+      changePct: parseFloat(r.change_pct || 0),
+      volume:    parseInt(r.volume || 0),
+    };
   });
   return map;
 }
@@ -1468,7 +1489,33 @@ async function openSignalDrawer(ticker) {
 
   const score = analysis?.total_score || trade?.total_score || 0;
   const conv  = analysis?.conviction  || trade?.conviction  || '--';
-  const price = prices[prices.length-1]?.close || trade?.entry_price;
+
+  // Inject today's live price as the most recent row
+  const live     = livePriceCache[ticker];
+  const today    = new Date().toISOString().split('T')[0];
+  const lastRow  = prices[prices.length - 1];
+  if (live && live.price > 0) {
+    const liveRow = {
+      market_date: today,
+      open:        live.open  || live.price,
+      high:        live.high  || live.price,
+      low:         live.low   || live.price,
+      close:       live.price,
+      volume:      live.volume || 0,
+      change_pct:  live.changePct || 0,
+      _live:       true
+    };
+    // Replace today's DB row if it exists, otherwise append
+    if (lastRow?.market_date === today) {
+      prices[prices.length - 1] = liveRow;
+    } else {
+      prices.push(liveRow);
+    }
+  }
+
+  const livePrice  = live?.price || prices[prices.length-1]?.close || trade?.entry_price;
+  const liveChange = live?.changePct || 0;
+  const prevClose  = live ? (livePrice - (live.change || 0)) : null;
 
   // Build candlestick chart data
   const chartHtml = prices.length > 5 ? buildFullChart(prices, trade) : '<div style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;background:var(--cream);border-radius:4px">Not enough price history yet — bootstrap running</div>';
@@ -1480,10 +1527,15 @@ async function openSignalDrawer(ticker) {
   document.getElementById('sd-subtitle').textContent = `${stock?.sector || ''} · ${analysis?.analysis_date || trade?.trade_date || 'Today'}`;
 
   // Price block
-  const convBg = conv==='EXCEPTIONAL'?'var(--teal)':conv==='STRONG'?'#eef6ee':'#fdf8ee';
-  const convFg = conv==='EXCEPTIONAL'?'#fff':conv==='STRONG'?'var(--green)':'var(--amber)';
+  const convBg   = conv==='EXCEPTIONAL'?'var(--teal)':conv==='STRONG'?'#eef6ee':'#fdf8ee';
+  const convFg   = conv==='EXCEPTIONAL'?'#fff':conv==='STRONG'?'var(--green)':'var(--amber)';
+  const chgColor = liveChange >= 0 ? 'var(--green)' : 'var(--red)';
+  const chgSign  = liveChange >= 0 ? '+' : '';
   document.getElementById('sd-price-block').innerHTML = `
-    <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700">${price?'$'+parseFloat(price).toFixed(3):'--'}</div>
+    <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700">${livePrice?'$'+parseFloat(livePrice).toFixed(3):'--'}
+      ${live ? `<span style="font-size:14px;font-family:'DM Mono',monospace;color:${chgColor};margin-left:8px">${chgSign}${(liveChange*100).toFixed(2)}%</span>` : ''}
+    </div>
+    ${live ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:'DM Mono',monospace">O $${live.open?.toFixed(3)||'--'} · H $${live.high?.toFixed(3)||'--'} · L $${live.low?.toFixed(3)||'--'} · Vol ${(live.volume/1000).toFixed(0)}K <span style="color:var(--teal)">● Live</span></div>` : ''}
     <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;margin-top:4px;background:${convBg};color:${convFg}">${conv} ${score}/6</span>
   `;
 
