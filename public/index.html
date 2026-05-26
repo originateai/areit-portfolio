@@ -623,9 +623,9 @@ async function refreshLivePrices() {
     const active = document.querySelector('.page.active')?.id;
     if (active === 'pg-reit-trading') loadREITSignals();
     if (active === 'pg-strategies')   loadStrategies();
-    if (active === 'pg-model')        loadModel();
     if (active === 'pg-reit')         loadREIT();
     if (active === 'pg-screener')     loadSortedStocks();
+    loadModel(); // always reload model — it's the default page and needs live prices
   } catch(e) {
     console.warn('Live price refresh failed:', e.message);
   }
