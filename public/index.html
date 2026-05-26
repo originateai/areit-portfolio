@@ -278,6 +278,9 @@ tfoot td.r{text-align:right}
     </div>
     <div id="sorted-stocks-table"></div>
 
+    <div class="sl" style="margin-top:24px">🚀 Breakout Signals — Today</div>
+    <div id="breakout-results"><div class="empty">Loading breakout signals...</div></div>
+
     <div id="screener-result"><div class="empty">Enter any ASX ticker above — pulls live data from EODHD even if the stock isn't in the top 400.</div></div>
 
     <div class="sl" style="margin-top:24px">My Watchlist</div>
@@ -539,7 +542,7 @@ function go(page, el) {
   if (el) el.classList.add('active');
   const fns = {
     model: loadModel, real: loadReal, strategies: loadStrategies,
-    screener: () => { loadWatchlist(); loadSortedStocks(); }, reit: loadREIT, 'reit-trading': loadREITSignals,
+    screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals,
     income: loadIncome, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
   };
@@ -1020,6 +1023,59 @@ async function loadWatchlist() {
 }
 
 // ── SORTED STOCK BROWSER ──────────────────────────────────────────────────────
+async function loadBreakouts() {
+  if (!db) return;
+  const el = document.getElementById('breakout-results');
+  if (!el) return;
+
+  // Get latest breakout signals from daily_analysis
+  const { data: latest } = await db.from('daily_analysis')
+    .select('analysis_date').order('analysis_date', { ascending: false }).limit(1).maybeSingle();
+  if (!latest) { el.innerHTML = '<div class="empty">No breakout data yet — run morning scan.</div>'; return; }
+
+  const { data } = await db.from('daily_analysis')
+    .select('ticker,close,vol_ratio,signal_reasons,total_score,analysis_date')
+    .eq('analysis_date', latest.analysis_date)
+    .eq('signal', 'BREAKOUT')
+    .order('total_score', { ascending: false })
+    .limit(10);
+
+  if (!data?.length) {
+    el.innerHTML = '<div class="empty">No breakout signals today.</div>';
+    return;
+  }
+
+  const { data: stocksData } = await db.from('stocks')
+    .select('ticker,name,high_52w,low_52w').in('ticker', data.map(d => d.ticker));
+  const stockMap = {};
+  (stocksData||[]).forEach(s => { stockMap[s.ticker] = s; });
+
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Ticker</th><th>Name</th><th class="r">Price</th>
+      <th class="r">Score</th><th class="r">Vol ×</th>
+      <th class="r">52W High</th><th>Signals</th>
+    </tr></thead>
+    <tbody>
+    ${data.map(a => {
+      const s = stockMap[a.ticker] || {};
+      const live = livePriceCache[a.ticker];
+      const price = live?.price || a.close;
+      const chg = live?.changePct || 0;
+      const pctFrom52w = s.high_52w && price ? ((price - s.high_52w) / s.high_52w * 100).toFixed(1) : null;
+      return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
+        <td><span class="tkr">${a.ticker}</span></td>
+        <td style="font-size:11px">${s.name||''}</td>
+        <td class="r">${price?f.$(price,3):'--'} <span style="font-size:9px;color:${chg>=0?'var(--green)':'var(--red)'}">${chg>=0?'+':''}${(chg*100).toFixed(1)}%</span></td>
+        <td class="r"><span class="badge b-str">${a.total_score}/8</span></td>
+        <td class="r" style="color:var(--teal)">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
+        <td class="r">${pctFrom52w != null ? pctFrom52w+'%' : '--'}</td>
+        <td style="font-size:10px;color:var(--amber)">${(a.signal_reasons||[]).slice(0,2).join(' · ')}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
 async function loadSortedStocks() {
   if (!db) return;
   const sortField   = document.getElementById('sort-field')?.value || 'total_score';
