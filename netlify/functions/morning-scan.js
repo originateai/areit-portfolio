@@ -38,28 +38,112 @@ async function fetchREITHeadlines() {
 }
 
 // ── MACRO SCORING ─────────────────────────────────────────────────────────────
-function scoreMacro({ sp500Change, nasdaqChange, vix, yieldCurve, audChange }) {
+function scoreMacro({ sp500Change, nasdaqChange, vix, yieldCurve, audChange,
+                      us10yrChange, ironOreChange, goldChange, oilChange }) {
   let score = 0;
   const reasons = [];
+
+  // US OVERNIGHT — primary ASX lead indicator
   if      (sp500Change >  0.015) { score+=3; reasons.push(`S&P strong +${(sp500Change*100).toFixed(1)}%`); }
   else if (sp500Change >  0.005) { score+=2; reasons.push(`S&P +${(sp500Change*100).toFixed(1)}%`); }
-  else if (sp500Change >  0)     { score+=1; reasons.push('S&P slightly positive'); }
-  else if (sp500Change > -0.005) { score-=1; reasons.push('S&P slightly negative'); }
-  else if (sp500Change > -0.015) { score-=2; reasons.push(`S&P ${(sp500Change*100).toFixed(1)}%`); }
-  else                           { score-=3; reasons.push(`S&P weak ${(sp500Change*100).toFixed(1)}%`); }
-  if      (nasdaqChange >  0.01) { score+=2; reasons.push('Nasdaq strong'); }
-  else if (nasdaqChange >  0)    { score+=1; }
-  else if (nasdaqChange < -0.01) { score-=2; reasons.push('Nasdaq weak'); }
-  else                           { score-=1; }
-  if      (vix < 15)  { score+=2; }
-  else if (vix < 20)  { score+=1; }
-  else if (vix >= 35) { score-=2; reasons.push('VIX extreme'); }
-  else if (vix >= 25) { score-=1; reasons.push(`VIX ${vix.toFixed(0)} elevated`); }
-  if (yieldCurve >  0.005) { score+=1; reasons.push('Curve steepening'); }
-  if (yieldCurve < -0.002) { score-=1; reasons.push('Curve inverted'); }
-  if (audChange >  0.003)  { score+=1; reasons.push('AUD rising'); }
-  if (audChange < -0.003)  { score-=1; reasons.push('AUD falling'); }
-  return { score, signal: score>=3?'RISK_ON':score<=-3?'RISK_OFF':'NEUTRAL', reasons };
+  else if (sp500Change >  0)     { score+=1; reasons.push(`S&P +${(sp500Change*100).toFixed(1)}%`); }
+  else if (sp500Change > -0.005) { score-=1; reasons.push(`S&P ${(sp500Change*100).toFixed(1)}%`); }
+  else if (sp500Change > -0.015) { score-=2; reasons.push(`S&P weak ${(sp500Change*100).toFixed(1)}%`); }
+  else                           { score-=3; reasons.push(`S&P sold off ${(sp500Change*100).toFixed(1)}%`); }
+
+  // NASDAQ — tech/growth signal
+  if      (nasdaqChange >  0.01) { score+=1; reasons.push('Nasdaq strong'); }
+  else if (nasdaqChange < -0.01) { score-=1; reasons.push('Nasdaq weak'); }
+
+  // VIX — risk appetite
+  if      (vix < 15)  { score+=2; reasons.push(`VIX ${vix.toFixed(0)} — low risk`); }
+  else if (vix < 20)  { score+=1; reasons.push(`VIX ${vix.toFixed(0)} — calm`); }
+  else if (vix >= 35) { score-=3; reasons.push(`VIX ${vix.toFixed(0)} — extreme fear`); }
+  else if (vix >= 28) { score-=2; reasons.push(`VIX ${vix.toFixed(0)} — elevated fear`); }
+  else if (vix >= 22) { score-=1; reasons.push(`VIX ${vix.toFixed(0)} — cautious`); }
+
+  // RATES — critical for ASX, especially REITs and rate-sensitive stocks
+  // Falling yields = positive for ASX (lower discount rate, more attractive vs bonds)
+  if      (us10yrChange < -0.005) { score+=2; reasons.push(`US 10yr fell ${Math.round(us10yrChange*10000)}bps — tailwind`); }
+  else if (us10yrChange < -0.002) { score+=1; reasons.push(`US 10yr fell ${Math.round(us10yrChange*10000)}bps`); }
+  else if (us10yrChange >  0.005) { score-=2; reasons.push(`US 10yr rose ${Math.round(us10yrChange*10000)}bps — headwind`); }
+  else if (us10yrChange >  0.002) { score-=1; reasons.push(`US 10yr rose ${Math.round(us10yrChange*10000)}bps`); }
+
+  // YIELD CURVE — forward rate signal
+  if (yieldCurve >  0.005) { score+=1; reasons.push('Curve steepening — growth positive'); }
+  if (yieldCurve < -0.002) { score-=1; reasons.push('Curve inverted — recession signal'); }
+
+  // AUD — risk proxy and commodity demand signal
+  if      (audChange >  0.005) { score+=2; reasons.push(`AUD +${(audChange*100).toFixed(2)}% — risk on`); }
+  else if (audChange >  0.002) { score+=1; reasons.push(`AUD rising`); }
+  else if (audChange < -0.005) { score-=2; reasons.push(`AUD ${(audChange*100).toFixed(2)}% — risk off`); }
+  else if (audChange < -0.002) { score-=1; reasons.push('AUD falling'); }
+
+  // IRON ORE — drives BHP/RIO/FMG, ~20% of ASX200 by weight
+  if      (ironOreChange &&  ironOreChange >  0.015) { score+=2; reasons.push(`Iron ore +${(ironOreChange*100).toFixed(1)}%`); }
+  else if (ironOreChange &&  ironOreChange >  0.005) { score+=1; reasons.push(`Iron ore positive`); }
+  else if (ironOreChange &&  ironOreChange < -0.015) { score-=2; reasons.push(`Iron ore ${(ironOreChange*100).toFixed(1)}%`); }
+  else if (ironOreChange &&  ironOreChange < -0.005) { score-=1; reasons.push('Iron ore weak'); }
+
+  // GOLD — gold miners significant ASX weight
+  if      (goldChange &&  goldChange >  0.01) { score+=1; reasons.push(`Gold +${(goldChange*100).toFixed(1)}%`); }
+  else if (goldChange &&  goldChange < -0.01) { score-=1; reasons.push(`Gold ${(goldChange*100).toFixed(1)}%`); }
+
+  return { score, signal: score>=4?'RISK_ON':score<=-4?'RISK_OFF':'NEUTRAL', reasons };
+}
+
+// ── REIT MACRO SCORING ────────────────────────────────────────────────────────
+// Separate macro layer specifically for ASX REITs
+// REITs are interest rate plays — macro conditions matter differently
+function scoreREITMacro({ us10yr, aus10yr, us10yrChange, aus10yrChange,
+                           vnqChange, audChange, vix, yieldCurve }) {
+  let score = 0;
+  const reasons = [];
+  const signals = [];
+
+  // AUS 10YR YIELD LEVEL — absolute level matters for REIT spread attractiveness
+  // When AUS 10yr is low, REIT yields look more attractive relative to bonds
+  if      (aus10yr < 0.040) { score+=2; signals.push(`AUS 10yr ${(aus10yr*100).toFixed(2)}% — very low, REITs attractive`); }
+  else if (aus10yr < 0.045) { score+=1; signals.push(`AUS 10yr ${(aus10yr*100).toFixed(2)}% — low`); }
+  else if (aus10yr > 0.055) { score-=1; signals.push(`AUS 10yr ${(aus10yr*100).toFixed(2)}% — elevated`); }
+  else if (aus10yr > 0.060) { score-=2; signals.push(`AUS 10yr ${(aus10yr*100).toFixed(2)}% — high, compresses REIT spread`); }
+
+  // AUS 10YR DIRECTION — falling yields = REIT tailwind
+  if      (aus10yrChange < -0.004) { score+=2; signals.push(`AUS 10yr -${Math.round(Math.abs(aus10yrChange)*10000)}bps — strong REIT tailwind`); }
+  else if (aus10yrChange < -0.001) { score+=1; signals.push(`AUS 10yr falling — REIT positive`); }
+  else if (aus10yrChange >  0.004) { score-=2; signals.push(`AUS 10yr +${Math.round(aus10yrChange*10000)}bps — REIT headwind`); }
+  else if (aus10yrChange >  0.001) { score-=1; signals.push(`AUS 10yr rising — REIT negative`); }
+
+  // US 10YR DIRECTION — US rates lead AUS rates
+  if      (us10yrChange < -0.005) { score+=2; signals.push(`US 10yr -${Math.round(Math.abs(us10yrChange)*10000)}bps — global rate tailwind`); }
+  else if (us10yrChange < -0.002) { score+=1; signals.push(`US 10yr falling`); }
+  else if (us10yrChange >  0.005) { score-=2; signals.push(`US 10yr +${Math.round(us10yrChange*10000)}bps — global rate headwind`); }
+  else if (us10yrChange >  0.002) { score-=1; signals.push(`US 10yr rising`); }
+
+  // VNQ — US REIT ETF overnight performance, direct lead for ASX REITs
+  if      (vnqChange >  0.015) { score+=3; signals.push(`VNQ +${(vnqChange*100).toFixed(1)}% — very strong US REIT lead`); }
+  else if (vnqChange >  0.008) { score+=2; signals.push(`VNQ +${(vnqChange*100).toFixed(1)}% — strong US REIT lead`); }
+  else if (vnqChange >  0.003) { score+=1; signals.push(`VNQ +${(vnqChange*100).toFixed(1)}% — positive`); }
+  else if (vnqChange < -0.015) { score-=3; signals.push(`VNQ ${(vnqChange*100).toFixed(1)}% — heavy US REIT selloff`); }
+  else if (vnqChange < -0.008) { score-=2; signals.push(`VNQ ${(vnqChange*100).toFixed(1)}% — US REITs sold off`); }
+  else if (vnqChange < -0.003) { score-=1; signals.push(`VNQ ${(vnqChange*100).toFixed(1)}% — negative`); }
+
+  // VIX — risk appetite affects REIT capital flows
+  if      (vix < 15)  { score+=1; signals.push(`VIX ${vix?.toFixed(0)} — low risk, capital seeking yield`); }
+  else if (vix >= 28) { score-=1; signals.push(`VIX ${vix?.toFixed(0)} — elevated, risk-off hurts REITs`); }
+
+  // AUD — foreign capital flows into AUS property
+  if      (audChange >  0.004) { score+=1; signals.push('AUD rising — foreign REIT demand positive'); }
+  else if (audChange < -0.004) { score-=1; signals.push('AUD falling — foreign capital outflow risk'); }
+
+  const rating = score >= 4 ? 'STRONGLY FAVOURABLE' :
+                 score >= 2 ? 'FAVOURABLE' :
+                 score >= 0 ? 'NEUTRAL' :
+                 score >= -2 ? 'CAUTIOUS' : 'UNFAVOURABLE';
+
+  const emoji  = score >= 4 ? '🟢' : score >= 2 ? '🟢' : score >= 0 ? '🟡' : score >= -2 ? '🟠' : '🔴';
+
+  return { score, rating, emoji, signals };
 }
 
 // ── PRE-SCREEN FROM DB ────────────────────────────────────────────────────────
@@ -154,10 +238,10 @@ function getSectorSignals({ sp500Change, nasdaqChange, ironOreChange, goldChange
 
 // ── BUILD EMAIL ───────────────────────────────────────────────────────────────
 function buildEmail(data) {
-  const { market, macro, equityTrades, reitResults, headlines, reitHeadlines,
+  const { market, macro, reitMacro, equityTrades, reitResults, headlines, reitHeadlines,
           sectorSignals, nikkei, shanghai, futures } = data;
   const { sp500Change, nasdaqChange, vix, us10yr, aus10yr,
-          yieldCurve, aud, audChange, realYield } = market;
+          yieldCurve, aud, audChange, realYield, vnqChange } = market;
   const { score, signal, reasons } = macro;
 
   const sigColor  = signal==='RISK_ON'?'#2d5a2d':signal==='RISK_OFF'?'#8b2e2e':'#7a5500';
@@ -374,6 +458,15 @@ function buildEmail(data) {
 
 <div class="sec">
   <div class="sec-title">REIT Universe — Moelis Pure Landlords (${reitResults.length})</div>
+  ${reitMacro ? `<div style="background:${reitMacro.score>=2?'#f0f8f0':reitMacro.score>=-2?'#fffbf0':'#fdf8ee'};border:1px solid ${reitMacro.score>=2?'#2d5a2d':reitMacro.score>=-2?'#b8943f':'#8b2e2e'};border-radius:4px;padding:10px 14px;margin-bottom:12px;font-size:12px;font-family:sans-serif">
+    <strong style="font-size:13px">${reitMacro.emoji} REIT MACRO: ${reitMacro.rating}</strong>
+    <div style="margin-top:6px;color:#555;line-height:1.8">
+      AUS 10yr ${(market.aus10yr*100).toFixed(2)}% (${market.aus10yrChange>=0?'+':''}${Math.round(market.aus10yrChange*10000)}bps) &nbsp;·&nbsp;
+      US 10yr ${(market.us10yr*100).toFixed(2)}% (${market.us10yrChange>=0?'+':''}${Math.round(market.us10yrChange*10000)}bps) &nbsp;·&nbsp;
+      VNQ ${vnqChange>=0?'+':''}${(vnqChange*100).toFixed(1)}% overnight
+    </div>
+    <div style="margin-top:4px;color:#777;font-size:11px">${reitMacro.signals.slice(0,3).join(' · ')}</div>
+  </div>` : ''}
   ${reitResults.sort((a,b)=>(b.dps_yield||0)-(a.dps_yield||0)).map(reitCard).join('')}
 </div>
 
@@ -409,7 +502,7 @@ const run = async () => {
     // 1. US + Asian market data (Yahoo Finance — free, reliable for indices)
     const [sp500, nasdaq, dow, vixData, audData, us10yrData,
            nikkeiData, shanghaiData, futuresData,
-           ironOreData, goldData, oilData, copperData, gsbgData] = await Promise.all([
+           ironOreData, goldData, oilData, copperData, gsbgData, vnqData] = await Promise.all([
       fetchYahoo('^GSPC', '5d'), fetchYahoo('^IXIC', '5d'),
       fetchYahoo('^DJI',  '5d'), fetchYahoo('^VIX',  '5d'),
       fetchYahoo('AUDUSD=X', '5d'), fetchYahoo('^TNX', '5d'),
@@ -421,6 +514,7 @@ const run = async () => {
       fetchYahoo('CL=F',  '5d'),  // WTI oil
       fetchYahoo('HG=F',  '5d'),  // Copper
       fetchYahoo('GSBG37.AX', '5d'), // AUS govt bond — proxy for AUS 10yr
+      fetchYahoo('VNQ',   '5d'),  // US REIT ETF — lead indicator for ASX REITs
     ]);
     
     // Use GSBG37 price change as AUS 10yr direction proxy
@@ -444,7 +538,7 @@ const run = async () => {
       dowChange:     dow?.change    || 0,
       vix, us10yr, aus10yr,
       us10yrChange:  us10yrData?.change || 0,
-      aus10yrChange: Math.max(-0.002, Math.min(0.002, aus10yrChangeEst)), // capped ±20bps
+      aus10yrChange: Math.max(-0.002, Math.min(0.002, aus10yrChangeEst)),
       yieldCurve:    us10yr - 0.0474,
       aud, audChange: audData?.change || 0,
       realYield, breakeven,
@@ -455,10 +549,13 @@ const run = async () => {
       ironOreChange: ironOreData?.change || 0,
       goldChange:    goldData?.change    || 0,
       oilChange:     oilData?.change     || 0,
+      vnqChange:     vnqData?.change     || 0,
+      vnqPrice:      vnqData?.price      || null,
     };
 
-    const macro = scoreMacro(market);
-    console.log(`Macro: ${macro.signal} (${macro.score})`);
+    const macro     = scoreMacro(market);
+    const reitMacro = scoreREITMacro(market);
+    console.log(`Macro: ${macro.signal} (${macro.score}) | REIT Macro: ${reitMacro.rating} (${reitMacro.score})`);
 
     // 3. Fetch headlines in parallel
     const [headlines, reitHeadlines] = await Promise.all([
@@ -522,7 +619,7 @@ const run = async () => {
     for (const stock of stocksToAnalyse) {
       const lp = livePrices[stock.ticker]?.close;
       const r  = await analyseStock(stock, macro.score, settings, lp);
-      if (r && r.total_score >= 4) equityResults.push(r);
+      if (r && r.total_score >= 5) equityResults.push(r);
       await new Promise(res => setTimeout(res, 80));
     }
 
@@ -572,7 +669,7 @@ const run = async () => {
       ]);
 
       const newTrades = topEquities
-        .filter(t => t.total_score >= 4 && !skipTickers.has(t.ticker))
+        .filter(t => t.total_score >= 5 && !skipTickers.has(t.ticker))
         .map(t => ({
           ticker: t.ticker, company_name: t.name, universe: 'ASX500',
           trade_date: today, direction: 'LONG',
@@ -599,15 +696,17 @@ const run = async () => {
       yield_curve_us: market.yieldCurve, aud_usd: aud,
       aud_change: market.audChange, real_yield: realYield,
       macro_score: macro.score, macro_signal: macro.signal, signal: macro.signal,
+      reit_macro_score: reitMacro.score, reit_macro_signal: reitMacro.rating,
+      vnq_change: market.vnqChange,
       summary: macro.reasons.join('; '),
       equities_long: topEquities.map(t => t.ticker),
-      reits_long: reitResults.filter(r => r.total_score >= 4).map(r => r.ticker),
+      reits_long: reitResults.filter(r => r.total_score >= 5).map(r => r.ticker),
       reit_triggers: reitTriggers
     }, { onConflict: 'signal_date' });
 
     // 12. Send email
     const { subject, html } = buildEmail({
-      market, macro, equityTrades: topEquities, reitResults,
+      market, macro, reitMacro, equityTrades: topEquities, reitResults,
       headlines, reitHeadlines, sectorSignals,
       nikkei: nikkeiData, shanghai: shanghaiData, futures: futuresData
     });

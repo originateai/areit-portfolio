@@ -167,10 +167,10 @@ async function detectCandlesticks(db, ticker) {
   }
 }
 
-// ── 6-LAYER SCORING ───────────────────────────────────────────────────────────
+// ── 7-LAYER SCORING ───────────────────────────────────────────────────────────
 function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candles) {
   const reasons = [];
-  let l1=0, l2=0, l3=0, l4=0, l5=0, l6=0;
+  let l1=0, l2=0, l3=0, l4=0, l5=0, l6=0, l7=0;
 
   const { rsi14, ma20, ma50, ma200, bb_lower, bb_upper, macd, macd_signal, roc20 } = indicators;
   const price = indicators.price;
@@ -187,15 +187,13 @@ function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candl
   const above200 = ma200 && price > ma200;
   const above50  = ma50  && price > ma50;
   const golden   = ma50  && ma200 && ma50 > ma200;
-
+  // Tightened: require above 200DMA AND above 50DMA or golden cross
   if (above200 && above50) {
     l2 = 1; reasons.push('Above 200DMA + 50DMA — uptrend confirmed');
   } else if (above200 && golden) {
     l2 = 1; reasons.push('Golden cross — trend turning bullish');
-  } else if (above200) {
-    l2 = 1; reasons.push('Above 200DMA — long term uptrend');
   } else {
-    reasons.push('Below 200DMA — avoid');
+    reasons.push('Below 200DMA or weak trend — avoid');
   }
 
   // ── LAYER 3: MOMENTUM ─────────────────────────────────────────────────────
@@ -203,52 +201,66 @@ function scoreStock(indicators, macroScore, stock, currentYield, volRatio, candl
   if (ma20 && price > ma20) momScore++;
   if (roc20 && roc20 > 0.02) momScore++;
   if (macd && macd_signal && macd > macd_signal) momScore++;
-
+  // Tightened: require 2/3 momentum signals (was 1/3)
   if (momScore >= 2) {
     l3 = 1; reasons.push(`Momentum positive (${momScore}/3 signals)`);
-  } else if (momScore === 1 && ma20 && price > ma20) {
-    l3 = 1; reasons.push('Short term momentum building');
+  } else {
+    reasons.push(`Momentum weak (${momScore}/3 signals)`);
   }
 
   // ── LAYER 4: MEAN REVERSION ───────────────────────────────────────────────
-  const pctFromMa20 = ma20 ? (price - ma20) / ma20 : null;
-
+  const pctFromMa20  = ma20  ? (price - ma20)  / ma20  : null;
+  const pctFromMa200 = ma200 ? (price - ma200) / ma200 : null;
+  // Tightened: RSI <40 (was <45), >8% below 20DMA (was >5%), or RSI <40 + >10% below 200DMA
   if (rsi14 && rsi14 < 35) {
-    l4 = 1; reasons.push(`RSI ${rsi14.toFixed(0)} — oversold`);
-  } else if (bb_lower && price <= bb_lower) {
-    l4 = 1; reasons.push('At Bollinger lower band — oversold');
-  } else if (pctFromMa20 && pctFromMa20 < -0.05) {
-    l4 = 1; reasons.push(`${(pctFromMa20*100).toFixed(1)}% below 20DMA`);
-  } else if (rsi14 && rsi14 < 45) {
-    l4 = 1; reasons.push(`RSI ${rsi14.toFixed(0)} — approaching oversold`);
+    l4 = 1; reasons.push(`RSI ${rsi14.toFixed(0)} — strongly oversold`);
+  } else if (bb_lower && price <= bb_lower * 1.01) {
+    l4 = 1; reasons.push('At/near Bollinger lower band — oversold');
+  } else if (pctFromMa20 && pctFromMa20 < -0.08) {
+    l4 = 1; reasons.push(`${(pctFromMa20*100).toFixed(1)}% below 20DMA — stretched`);
+  } else if (rsi14 && rsi14 < 40 && pctFromMa200 && pctFromMa200 < -0.10) {
+    l4 = 1; reasons.push(`RSI ${rsi14.toFixed(0)} + ${(pctFromMa200*100).toFixed(1)}% below 200DMA`);
+  } else {
+    reasons.push(`RSI ${rsi14 ? rsi14.toFixed(0) : '--'} — not oversold enough`);
   }
 
   // ── LAYER 5: VOLUME ───────────────────────────────────────────────────────
-  if (volRatio && volRatio > 2.0) {
-    l5 = 1; reasons.push(`Volume ${volRatio.toFixed(1)}× average — strong interest`);
-  } else if (volRatio && volRatio > 1.5) {
+  // Tightened: require >1.8x (was >1.5x)
+  if (volRatio && volRatio > 2.5) {
+    l5 = 1; reasons.push(`Volume ${volRatio.toFixed(1)}× average — very strong`);
+  } else if (volRatio && volRatio > 1.8) {
     l5 = 1; reasons.push(`Volume ${volRatio.toFixed(1)}× average — elevated`);
-  } else if (volRatio && volRatio > 1.2) {
-    l5 = 1; reasons.push('Volume slightly above average');
+  } else {
+    reasons.push(`Volume ${volRatio ? volRatio.toFixed(1)+'×' : '--'} — insufficient`);
   }
 
   // ── LAYER 6: CANDLE ───────────────────────────────────────────────────────
   if (candles?.bullish) {
     l6 = 1; reasons.push(`Candle: ${candles.pattern}`);
   }
-  // REIT yield trigger
   if (stock?.is_reit && currentYield && currentYield >= (stock?.yield_trigger || 0.08)) {
     l6 = 1; reasons.push(`Yield trigger: ${(currentYield*100).toFixed(1)}% ≥ ${((stock?.yield_trigger||0.08)*100).toFixed(0)}%`);
   }
 
-  const total = l1 + l2 + l3 + l4 + l5 + l6;
-  const signal = total >= 6 ? 'STRONG_BUY' : total >= 5 ? 'BUY' : total >= 4 ? 'WATCH' : total >= 2 ? 'NEUTRAL' : 'AVOID';
+  // ── LAYER 7: ML CONFIRMATION ──────────────────────────────────────────────
+  // Rule-based proxy using top backtest features (lower_shadow, pct_from_sma200, roc5, bb_pos)
+  let mlSignals = 0;
+  if (pctFromMa200 && pctFromMa200 < -0.05) mlSignals++;        // Stretched below 200DMA
+  if (rsi14 && rsi14 < 40) mlSignals++;                          // RSI oversold
+  if (volRatio && volRatio > 1.8) mlSignals++;                   // Volume confirmation
+  if (candles?.bullish) mlSignals++;                             // Bullish reversal candle
+  if (roc20 && roc20 > -0.15 && roc20 < 0.01) mlSignals++;      // Recent weakness not crash
+  if (mlSignals >= 3) {
+    l7 = 1; reasons.push(`Layer 7 ML: ${mlSignals}/5 signals confirm`);
+  }
+
+  const total = l1 + l2 + l3 + l4 + l5 + l6 + l7;
+  const signal     = total >= 6 ? 'STRONG_BUY' : total >= 5 ? 'BUY' : total >= 4 ? 'WATCH' : 'AVOID';
   const conviction = total >= 6 ? 'EXCEPTIONAL' : total >= 5 ? 'STRONG' : total >= 4 ? 'MODERATE' : 'WEAK';
 
-  return { total, l1, l2, l3, l4, l5, l6, reasons, signal, conviction };
+  return { total, l1, l2, l3, l4, l5, l6, l7, reasons, signal, conviction };
 }
 
-// ── POSITION SIZE ─────────────────────────────────────────────────────────────
 function getPositionSize(conviction, settings, isReit=false) {
   const prefix = isReit ? 'reit' : 'equity';
   const sizes = {
@@ -307,8 +319,8 @@ async function analyseStock(stock, macroScore, settings, livePrice=null) {
     // 7. Score
     const scoring = scoreStock(indicators, macroScore, stock, currentYield, volRatio, candles);
 
-    // 8. Position size
-    const positionSize = scoring.total >= 4
+    // 8. Position size — minimum score 5 required (raised from 4)
+    const positionSize = scoring.total >= 5
       ? getPositionSize(scoring.conviction, settings, stock.is_reit) : 0;
 
     const stopPct   = parseFloat(settings.stop_loss_pct || '1.5') / 100;
@@ -352,6 +364,7 @@ async function analyseStock(stock, macroScore, settings, livePrice=null) {
       layer4_reversion: scoring.l4,
       layer5_volume:    scoring.l5,
       layer6_candle:    scoring.l6,
+      layer7_ml:        scoring.l7,
       total_score:      scoring.total,
       signal:           scoring.signal,
       conviction:       scoring.conviction,
