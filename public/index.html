@@ -37,6 +37,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);m
 .kv.teal{color:var(--teal)}.kv.gold{color:var(--gold)}.kv.red{color:var(--red)}.kv.green{color:var(--green)}
 .kn{font-size:10px;color:var(--muted);margin-top:2px}
 .kc.dk .kn{color:rgba(255,255,255,0.28)}
+/* Tooltips */
+.tip { position: relative; cursor: help; }
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: white;
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  max-width: 260px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  width: max-content;
+}
+.tip:hover::after { opacity: 1; }
+
 #signal-drawer.open{transform:translateX(0) !important}
 #drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:199;opacity:0;pointer-events:none;transition:opacity 0.25s}
 #drawer-overlay.open{opacity:1;pointer-events:all}
@@ -210,13 +238,43 @@ tfoot td.r{text-align:right}
   <div id="pg-screener" class="page">
     <div class="ph"><h1>Stock Screener</h1><p>Search any ASX ticker — runs live 6-layer analysis even if not in the top 400</p></div>
 
-    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
       <input id="screener-input" type="text" placeholder="Any ASX ticker e.g. NXT, PME, LNW"
         style="padding:9px 12px;border:1px solid var(--rule);border-radius:3px;font-size:13px;font-family:'DM Mono',monospace;width:220px;background:var(--paper);text-transform:uppercase"
         onkeydown="if(event.key==='Enter') screenStock()">
       <button class="btn btn-primary" onclick="screenStock()">Analyse</button>
       <button class="btn btn-secondary" onclick="loadWatchlist()">↻ Watchlist</button>
     </div>
+
+    <div class="sl">ASX500 — Sort & Filter</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <select id="sort-field" onchange="loadSortedStocks()"
+        style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
+        <option value="total_score">Score (highest)</option>
+        <option value="rsi14_asc">RSI (lowest — oversold)</option>
+        <option value="rsi14_desc">RSI (highest — overbought)</option>
+        <option value="vol_ratio">Volume ratio (highest)</option>
+        <option value="pct_52w_low">Near 52W low (closest)</option>
+        <option value="pct_52w_high">Near 52W high (closest)</option>
+        <option value="market_cap">Market cap (largest)</option>
+        <option value="yield_desc">Yield (highest)</option>
+      </select>
+      <select id="filter-universe" onchange="loadSortedStocks()"
+        style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
+        <option value="">All stocks</option>
+        <option value="ASX500">ASX500 only</option>
+        <option value="REIT">REITs only</option>
+      </select>
+      <select id="filter-min-score" onchange="loadSortedStocks()"
+        style="padding:8px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
+        <option value="0">Any score</option>
+        <option value="4">4+ (Moderate)</option>
+        <option value="5">5+ (Strong)</option>
+        <option value="6">6 (Exceptional)</option>
+      </select>
+      <span id="sorted-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div id="sorted-stocks-table"></div>
 
     <div id="screener-result"><div class="empty">Enter any ASX ticker above — pulls live data from EODHD even if the stock isn't in the top 400.</div></div>
 
@@ -359,7 +417,12 @@ tfoot td.r{text-align:right}
         <h1 id="sd-title" style="font-family:'Playfair Display',serif;font-size:24px;font-weight:700"></h1>
         <p id="sd-subtitle" style="font-size:12px;color:var(--muted);margin-top:2px"></p>
       </div>
-      <div id="sd-price-block" style="text-align:right"></div>
+      <div id="sd-price-block" style="text-align:right">
+        <button onclick="refreshLivePrice(currentTicker)" 
+          style="display:block;margin-bottom:6px;background:none;border:1px solid var(--rule);border-radius:3px;padding:4px 10px;font-size:10px;font-family:'DM Mono',monospace;cursor:pointer;color:var(--muted)">
+          ↻ Live price
+        </button>
+      </div>
     </div>
 
     <!-- Key metrics row -->
@@ -434,7 +497,7 @@ function go(page, el) {
   if (el) el.classList.add('active');
   const fns = {
     model: loadModel, real: loadReal, strategies: loadStrategies,
-    screener: loadWatchlist, reit: loadREIT, 'reit-trading': loadREITSignals,
+    screener: () => { loadWatchlist(); loadSortedStocks(); }, reit: loadREIT, 'reit-trading': loadREITSignals,
     income: loadIncome, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
   };
@@ -821,7 +884,99 @@ async function loadWatchlist() {
   `;
 }
 
-// ── REIT HOLDINGS ─────────────────────────────────────────────────────────────
+// ── SORTED STOCK BROWSER ──────────────────────────────────────────────────────
+async function loadSortedStocks() {
+  if (!db) return;
+  const sortField   = document.getElementById('sort-field')?.value || 'total_score';
+  const universe    = document.getElementById('filter-universe')?.value || '';
+  const minScore    = parseInt(document.getElementById('filter-min-score')?.value || '0');
+  const el          = document.getElementById('sorted-stocks-table');
+  if (!el) return;
+  el.innerHTML = '<div class="empty">Loading...</div>';
+
+  // Get latest analysis date
+  const { data: latest } = await db.from('daily_analysis')
+    .select('analysis_date').order('analysis_date', { ascending: false }).limit(1).maybeSingle();
+
+  if (!latest) { el.innerHTML = '<div class="empty">No analysis data yet — run morning scan first</div>'; return; }
+
+  // Build query
+  let query = db.from('daily_analysis')
+    .select('ticker,total_score,conviction,rsi14,vol_ratio,close,candle_pattern,signal_reasons,analysis_date,dps_yield')
+    .eq('analysis_date', latest.analysis_date)
+    .gte('total_score', minScore);
+
+  // Apply sort
+  switch(sortField) {
+    case 'total_score':   query = query.order('total_score', { ascending: false }); break;
+    case 'rsi14_asc':     query = query.order('rsi14',       { ascending: true  }); break;
+    case 'rsi14_desc':    query = query.order('rsi14',       { ascending: false }); break;
+    case 'vol_ratio':     query = query.order('vol_ratio',   { ascending: false }); break;
+    case 'yield_desc':    query = query.order('dps_yield',   { ascending: false }); break;
+    default:              query = query.order('total_score', { ascending: false }); break;
+  }
+
+  const { data: analysis } = await query.limit(100);
+  if (!analysis?.length) { el.innerHTML = '<div class="empty">No stocks match this filter</div>'; return; }
+
+  // Get stock metadata for 52W data
+  const tickers = analysis.map(a => a.ticker);
+  let stockQuery = db.from('stocks').select('ticker,name,sector,high_52w,low_52w,market_cap,pct_from_52w_low,pct_from_52w_high').in('ticker', tickers);
+  if (universe) stockQuery = stockQuery.eq('universe', universe);
+  const { data: stocks } = await stockQuery;
+  const stockMap = {};
+  (stocks||[]).forEach(s => { stockMap[s.ticker] = s; });
+
+  // Filter by universe if set
+  const filtered = universe
+    ? analysis.filter(a => stockMap[a.ticker])
+    : analysis;
+
+  // Sort by 52W fields (need stock data)
+  let sorted = [...filtered];
+  if (sortField === 'pct_52w_low')  sorted.sort((a,b) => (stockMap[a.ticker]?.pct_from_52w_low||999) - (stockMap[b.ticker]?.pct_from_52w_low||999));
+  if (sortField === 'pct_52w_high') sorted.sort((a,b) => (stockMap[b.ticker]?.pct_from_52w_high||0) - (stockMap[a.ticker]?.pct_from_52w_high||0));
+  if (sortField === 'market_cap')   sorted.sort((a,b) => (stockMap[b.ticker]?.market_cap||0) - (stockMap[a.ticker]?.market_cap||0));
+
+  document.getElementById('sorted-count').textContent = `${sorted.length} stocks`;
+
+  el.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Name</th><th class="r">Price</th>
+        <th>Score</th><th class="r">RSI</th><th class="r">Vol ×</th>
+        <th class="r">52W Low</th><th class="r">52W High</th>
+        <th class="r">Mkt Cap</th><th>Candle</th>
+      </tr></thead>
+      <tbody>
+        ${sorted.slice(0,50).map(a => {
+          const s  = stockMap[a.ticker] || {};
+          const sc = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod'}[a.conviction]||'b-hold';
+          const mcap = s.market_cap ? (s.market_cap >= 1e9 ? `$${(s.market_cap/1e9).toFixed(1)}B` : `$${(s.market_cap/1e6).toFixed(0)}M`) : '--';
+          return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
+            <td><span class="tkr">${a.ticker}</span></td>
+            <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||''}</td>
+            <td class="r">${a.close?f.$(a.close,3):'--'}</td>
+            <td><span class="badge ${sc}">${a.total_score||0}/6</span></td>
+            <td class="r" style="color:${a.rsi14<35?'var(--green)':a.rsi14>70?'var(--red)':'var(--muted)'}">${a.rsi14?parseFloat(a.rsi14).toFixed(0):'--'}</td>
+            <td class="r" style="color:${a.vol_ratio>1.5?'var(--teal)':'var(--muted)'}">${a.vol_ratio?parseFloat(a.vol_ratio).toFixed(1)+'×':'--'}</td>
+            <td class="r" style="color:${s.pct_from_52w_low<10?'var(--green)':'var(--muted)'}">
+              ${s.pct_from_52w_low!=null?'+'+parseFloat(s.pct_from_52w_low).toFixed(1)+'%':'--'}
+            </td>
+            <td class="r" style="color:${s.pct_from_52w_high>-5?'var(--teal)':'var(--muted)'}">
+              ${s.pct_from_52w_high!=null?parseFloat(s.pct_from_52w_high).toFixed(1)+'%':'--'}
+            </td>
+            <td class="r" style="font-size:11px">${mcap}</td>
+            <td style="font-size:10px;color:var(--amber)">${a.candle_pattern||''}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    ${sorted.length > 50 ? `<div style="font-size:11px;color:var(--muted);padding:8px 0">Showing top 50 of ${sorted.length}</div>` : ''}
+  `;
+}
+
+
 async function loadREIT() {
   if (!db) return;
   const { data: holdings } = await db.from('reit_income_holdings').select('*').gt('units_held',0);
@@ -1126,10 +1281,12 @@ async function loadAlerts() {
 }
 
 // ── STOCK DETAIL FULL PAGE ────────────────────────────────────────────────────
-let previousPage = 'model';
+let previousPage  = 'model';
+let currentTicker = null;
 
 async function openSignalDrawer(ticker) {
   if (!db) return;
+  currentTicker = ticker;
 
   // Remember which page we came from
   const activePage = document.querySelector('.page.active');
@@ -1259,19 +1416,32 @@ async function openSignalDrawer(ticker) {
 
   // Technical indicators
   const techItems = [
-    ['RSI 14',        analysis?.rsi14 ? parseFloat(analysis.rsi14).toFixed(1) : '--'],
-    ['ROC 20',        analysis?.roc20 ? (parseFloat(analysis.roc20)*100).toFixed(1)+'%' : '--'],
-    ['BB Position',   analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%' : '--'],
-    ['% from 20DMA',  analysis?.pct_from_ma20 ? (parseFloat(analysis.pct_from_ma20)*100).toFixed(1)+'%' : '--'],
-    ['Vol Ratio',     analysis?.vol_ratio ? parseFloat(analysis.vol_ratio).toFixed(2)+'×' : '--'],
-    ['Above 20DMA',   analysis?.above_ma20 != null ? (analysis.above_ma20 ? 'Yes ✓' : 'No ✗') : '--'],
-    ['Above 200DMA',  analysis?.above_ma200 != null ? (analysis.above_ma200 ? 'Yes ✓' : 'No ✗') : '--'],
-    ['Golden Cross',  analysis?.golden_cross != null ? (analysis.golden_cross ? 'Yes ✓' : 'No') : '--'],
-    ['Yield',         analysis?.dps_yield ? (analysis.dps_yield*100).toFixed(1)+'%' : '--'],
-    ['Yield Trigger', analysis?.yield_trigger_fired != null ? (analysis.yield_trigger_fired ? '🟢 FIRED' : 'Watching') : '--'],
+    ['RSI 14',        analysis?.rsi14 ? parseFloat(analysis.rsi14).toFixed(1) : '--',
+      'Relative Strength Index. Under 30 = oversold (buy signal). Over 70 = overbought (sell signal). We look for RSI under 45.'],
+    ['ROC 20',        analysis?.roc20 ? (parseFloat(analysis.roc20)*100).toFixed(1)+'%' : '--',
+      'Rate of Change over 20 days. Positive = stock is accelerating upward. Negative = losing momentum.'],
+    ['BB Position',   analysis?.bb_position ? (parseFloat(analysis.bb_position)*100).toFixed(0)+'%' : '--',
+      'Bollinger Band position. 0% = at lower band (oversold). 100% = at upper band (overbought). We look for under 30%.'],
+    ['% from 20DMA',  analysis?.pct_from_ma20 ? (parseFloat(analysis.pct_from_ma20)*100).toFixed(1)+'%' : '--',
+      'How far price is from the 20-day moving average. Negative = below the MA, potential mean reversion opportunity.'],
+    ['Vol Ratio',     analysis?.vol_ratio ? parseFloat(analysis.vol_ratio).toFixed(2)+'×' : '--',
+      'Today's volume vs 20-day average. 1.5× means 50% more volume than usual — something is happening.'],
+    ['Above 20DMA',   analysis?.above_ma20 != null ? (analysis.above_ma20 ? 'Yes ✓' : 'No ✗') : '--',
+      '20-day moving average. Short-term trend indicator. Price above = short term uptrend.'],
+    ['Above 200DMA',  analysis?.above_ma200 != null ? (analysis.above_ma200 ? 'Yes ✓' : 'No ✗') : '--',
+      '200-day moving average. Long-term trend. Price above = stock in a long-term uptrend. We only buy above 200DMA.'],
+    ['Golden Cross',  analysis?.golden_cross != null ? (analysis.golden_cross ? 'Yes ✓' : 'No') : '--',
+      'Golden Cross = 50DMA crossed above 200DMA. Strong bullish signal. Death Cross = opposite, bearish.'],
+    ['Yield',         analysis?.dps_yield ? (analysis.dps_yield*100).toFixed(1)+'%' : '--',
+      'Annual dividend yield at current price. DPS ÷ price. For REITs we look for 8%+ to trigger a buy.'],
+    ['Yield Trigger', analysis?.yield_trigger_fired != null ? (analysis.yield_trigger_fired ? '🟢 FIRED' : 'Watching') : '--',
+      'Fires when yield reaches the target threshold (usually 8%). Means the stock is cheap enough to buy for income.'],
   ];
-  document.getElementById('sd-technicals').innerHTML = techItems.map(([l,v]) =>
-    `<div class="kc"><div class="kl">${l}</div><div class="kv" style="font-size:15px">${v}</div></div>`
+  document.getElementById('sd-technicals').innerHTML = techItems.map(([l,v,tip]) =>
+    `<div class="kc tip" data-tip="${tip}">
+      <div class="kl">${l} <span style="color:var(--muted);font-size:9px">(?)</span></div>
+      <div class="kv" style="font-size:15px">${v}</div>
+    </div>`
   ).join('');
 
   // Price history table
@@ -1285,7 +1455,7 @@ async function openSignalDrawer(ticker) {
       <td class="r">$${parseFloat(p.open||p.close).toFixed(3)}</td>
       <td class="r" style="color:var(--green)">$${parseFloat(p.high||p.close).toFixed(3)}</td>
       <td class="r" style="color:var(--red)">$${parseFloat(p.low||p.close).toFixed(3)}</td>
-      <td class="r" style="font-weight:600">$${parseFloat(p.close).toFixed(3)}</td>
+      <td class="r">$${parseFloat(p.close).toFixed(3)}</td>
       <td class="r" style="font-family:'DM Mono',monospace">${parseInt(p.volume||0).toLocaleString()}</td>
       <td class="r" style="color:${chg>=0?'var(--green)':'var(--red)'}">${chg>=0?'+':''}${(chg*100).toFixed(2)}%</td>
     `;
@@ -1293,7 +1463,40 @@ async function openSignalDrawer(ticker) {
   });
 }
 
-function closeStockDetail() {
+// ── LIVE PRICE REFRESH ────────────────────────────────────────────────────────
+async function refreshLivePrice(ticker) {
+  if (!ticker) return;
+  const btn = document.querySelector('#sd-price-block button');
+  if (btn) btn.textContent = '↻ Fetching...';
+
+  try {
+    // Call EODHD live price via our env function
+    const res  = await fetch(`/.netlify/functions/live-price?ticker=${ticker}`);
+    const data = await res.json();
+
+    if (data.price) {
+      const priceBlock = document.getElementById('sd-price-block');
+      const chg  = data.change || 0;
+      const chgP = data.changePct || 0;
+      priceBlock.innerHTML = `
+        <button onclick="refreshLivePrice('${ticker}')"
+          style="display:block;margin-bottom:6px;background:none;border:1px solid var(--rule);border-radius:3px;padding:4px 10px;font-size:10px;font-family:'DM Mono',monospace;cursor:pointer;color:var(--muted)">
+          ↻ Live price
+        </button>
+        <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700">$${parseFloat(data.price).toFixed(3)}</div>
+        <div style="font-size:12px;color:${chg>=0?'var(--green)':'var(--red)'};font-family:'DM Mono',monospace">
+          ${chg>=0?'+':''}${chg.toFixed(3)} (${chgP>=0?'+':''}${chgP.toFixed(2)}%)
+        </div>
+        <div style="font-size:10px;color:var(--muted)">15-min delayed · EODHD</div>
+      `;
+    }
+  } catch(e) {
+    if (btn) btn.textContent = '↻ Live price';
+    console.error('Live price error:', e.message);
+  }
+}
+
+
   document.getElementById('pg-stock-detail').classList.remove('active');
   const navItem = document.getElementById('nav-stock-detail');
   if (navItem) { navItem.style.display = 'none'; navItem.classList.remove('active'); }
@@ -1448,6 +1651,23 @@ function buildFullChart(prices, trade) {
   // Divider line between chart and volume
   const divider = `<line x1="${padL}" y1="${h-padB-volH}" x2="${w-padR}" y2="${h-padB-volH}" stroke="#c8c2b4" stroke-width="0.5"/>`;
 
+  // Invisible hover zones over each candle for tooltips
+  const hoverZones = prices.map((p, i) => {
+    const x    = px(i);
+    const date = p.market_date || '';
+    const o    = parseFloat(p.open  || p.close);
+    const c    = parseFloat(p.close);
+    const hi   = parseFloat(p.high  || p.close);
+    const lo   = parseFloat(p.low   || p.close);
+    const vol  = parseInt(p.volume  || 0);
+    const chg  = parseFloat(p.change_pct || 0);
+    const tip  = `${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`;
+    return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" 
+      fill="transparent" style="cursor:crosshair">
+      <title>${tip}</title>
+    </rect>`;
+  }).join('');
+
   return `<div style="overflow-x:auto">
     <svg width="100%" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background:#f9f7f4;border-radius:4px;min-width:600px">
       <rect width="${w}" height="${h}" fill="#f9f7f4" rx="4"/>
@@ -1462,6 +1682,7 @@ function buildFullChart(prices, trade) {
       ${maPath(ma20arr,  '#1a5f6e', '')}
       ${tradeLines}
       ${candles}
+      ${hoverZones}
       ${dateLabels}
       ${legend}
     </svg>
