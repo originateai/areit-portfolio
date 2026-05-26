@@ -146,6 +146,142 @@ function scoreREITMacro({ us10yr, aus10yr, us10yrChange, aus10yrChange,
   return { score, rating, emoji, signals };
 }
 
+// ── BREAKOUT SCANNER ──────────────────────────────────────────────────────────
+// Finds stocks making 52W highs or breaking key resistance on strong volume
+// Separate strategy from mean reversion — momentum/breakout approach
+async function scanBreakouts(db, stocks, livePrices, macroScore) {
+  const breakouts = [];
+
+  try {
+    // Get 52W high data from stocks table
+    const tickers = stocks.map(s => s.ticker);
+
+    // Get recent price history for resistance and volume analysis
+    const { data: recentPrices } = await db.from('prices')
+      .select('ticker,market_date,close,high,volume')
+      .in('ticker', tickers)
+      .gte('market_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .order('market_date', { ascending: false });
+
+    if (!recentPrices?.length) return breakouts;
+
+    // Group by ticker
+    const priceMap = {};
+    recentPrices.forEach(p => {
+      if (!priceMap[p.ticker]) priceMap[p.ticker] = [];
+      priceMap[p.ticker].push(p);
+    });
+
+    for (const stock of stocks) {
+      try {
+        const ticker   = stock.ticker;
+        const live     = livePrices[ticker];
+        const prices   = priceMap[ticker] || [];
+        if (!live || prices.length < 10) continue;
+
+        const price    = live.close || live.price;
+        if (!price) continue;
+
+        // 52W high from stocks table
+        const high52w  = stock.high_52w;
+        const low52w   = stock.low_52w;
+
+        // Volume ratio
+        const todayVol = live.volume || 0;
+        const avgVol   = prices.slice(1, 21).reduce((s, p) => s + parseInt(p.volume || 0), 0) / Math.min(prices.length - 1, 20);
+        const volRatio = avgVol > 0 ? todayVol / avgVol : 0;
+
+        // Recent resistance — highest close in last 20 days (excluding today)
+        const recentHigh = Math.max(...prices.slice(1, 21).map(p => parseFloat(p.close || 0)));
+
+        // Breakout conditions
+        const signals = [];
+        let breakoutScore = 0;
+
+        // Macro must be positive for breakout trades
+        if (macroScore < 0) continue;
+
+        // 1. Near or breaking 52W high
+        if (high52w && price >= high52w * 0.98) {
+          signals.push(`Near 52W high $${high52w.toFixed(3)}`);
+          breakoutScore += 2;
+        }
+        if (high52w && price > high52w) {
+          signals.push(`🚀 NEW 52W HIGH $${price.toFixed(3)}`);
+          breakoutScore += 2; // extra for actual new high
+        }
+
+        // 2. Breaking recent resistance (20-day high)
+        if (recentHigh > 0 && price > recentHigh * 1.01) {
+          signals.push(`Breaking 20d resistance $${recentHigh.toFixed(3)}`);
+          breakoutScore += 2;
+        }
+
+        // 3. Volume confirmation — critical for breakout validity
+        if (volRatio > 3.0) {
+          signals.push(`Volume ${volRatio.toFixed(1)}× avg — very strong`);
+          breakoutScore += 3;
+        } else if (volRatio > 2.0) {
+          signals.push(`Volume ${volRatio.toFixed(1)}× avg — strong`);
+          breakoutScore += 2;
+        } else if (volRatio > 1.5) {
+          signals.push(`Volume ${volRatio.toFixed(1)}× avg — elevated`);
+          breakoutScore += 1;
+        }
+
+        // 4. Not too extended from 52W low (avoid chasing exhausted moves)
+        if (low52w && high52w) {
+          const pctOfRange = (price - low52w) / (high52w - low52w);
+          if (pctOfRange > 0.85) {
+            signals.push(`${(pctOfRange*100).toFixed(0)}% of 52W range`);
+            breakoutScore += 1;
+          }
+        }
+
+        // 5. Positive day (price up)
+        if (live.change > 0) {
+          const changePct = live.change / (price - live.change);
+          if (changePct > 0.02) {
+            signals.push(`Up ${(changePct*100).toFixed(1)}% today`);
+            breakoutScore += 1;
+          }
+        }
+
+        // Minimum threshold — need price action + volume confirmation
+        if (breakoutScore < 4) continue;
+        if (volRatio < 1.5) continue; // must have volume
+
+        // Dynamic stop — just below breakout point (previous resistance)
+        const stopPrice  = parseFloat((Math.max(recentHigh * 0.98, price * 0.97)).toFixed(3));
+        const targetPrice = parseFloat((price * 1.06).toFixed(3)); // 6% target for breakouts
+
+        breakouts.push({
+          ticker,
+          name:         stock.name,
+          price,
+          breakout_score: breakoutScore,
+          signals,
+          stop_price:   stopPrice,
+          target_price: targetPrice,
+          vol_ratio:    parseFloat(volRatio.toFixed(2)),
+          high_52w:     high52w,
+          strategy:     'BREAKOUT',
+        });
+
+      } catch(e) {
+        // skip this stock silently
+      }
+    }
+
+    // Sort by score then volume
+    return breakouts.sort((a, b) => b.breakout_score - a.breakout_score || b.vol_ratio - a.vol_ratio);
+
+  } catch(e) {
+    console.error('Breakout scan error:', e.message);
+    return [];
+  }
+}
+
 // ── PRE-SCREEN FROM DB ────────────────────────────────────────────────────────
 // Reads yesterday's prices and daily_analysis from Supabase
 // Returns tickers worth doing full analysis on
@@ -238,7 +374,7 @@ function getSectorSignals({ sp500Change, nasdaqChange, ironOreChange, goldChange
 
 // ── BUILD EMAIL ───────────────────────────────────────────────────────────────
 function buildEmail(data) {
-  const { market, macro, reitMacro, equityTrades, reitResults, headlines, reitHeadlines,
+  const { market, macro, reitMacro, equityTrades, breakouts, reitResults, headlines, reitHeadlines,
           sectorSignals, nikkei, shanghai, futures } = data;
   const { sp500Change, nasdaqChange, vix, us10yr, aus10yr,
           yieldCurve, aud, audChange, realYield, vnqChange } = market;
@@ -457,6 +593,34 @@ function buildEmail(data) {
 </div>
 
 <div class="sec">
+  <div class="sec-title">🚀 Breakout Signals — Momentum Strategy</div>
+  ${!breakouts?.length
+    ? '<p style="color:#888;font-size:14px;padding:8px 0">No breakouts today — no stocks at 52W highs with volume confirmation.</p>'
+    : breakouts.map(b => `
+      <div style="border:1px solid #e8e4dc;border-left:3px solid #b8943f;border-radius:3px;padding:12px 14px;margin-bottom:8px;background:#fff">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <span style="font-family:monospace;font-weight:700;font-size:15px;color:#1a5f6e">${b.ticker}</span>
+            <span style="font-size:12px;color:#666;margin-left:8px">${b.name}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:16px;font-weight:700">$${b.price.toFixed(3)}</div>
+            <div style="font-size:11px;color:#b8943f;font-weight:600">BREAKOUT ${b.breakout_score}/8</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:#555">${b.signals.join(' · ')}</div>
+        <div style="margin-top:8px;display:flex;gap:16px;font-size:12px">
+          <span>Entry: <strong>$${b.price.toFixed(3)}</strong></span>
+          <span style="color:#8b2e2e">Stop: <strong>$${b.stop_price.toFixed(3)}</strong></span>
+          <span style="color:#2d5a2d">Target: <strong>$${b.target_price.toFixed(3)}</strong> (+6%)</span>
+          <span style="color:#1a5f6e">Vol: <strong>${b.vol_ratio.toFixed(1)}×</strong></span>
+        </div>
+        <div style="margin-top:4px;font-size:11px;color:#aaa">52W High: $${b.high_52w?.toFixed(3)||'--'} · Momentum breakout — wider stop, higher target</div>
+      </div>`).join('')}
+  <p style="font-size:11px;color:#aaa;margin-top:6px">Breakout trades: Enter on open, 6% target, stop just below breakout level · Different sizing to mean reversion</p>
+</div>
+
+<div class="sec">
   <div class="sec-title">REIT Universe — Moelis Pure Landlords (${reitResults.length})</div>
   ${reitMacro ? `<div style="background:${reitMacro.score>=2?'#f0f8f0':reitMacro.score>=-2?'#fffbf0':'#fdf8ee'};border:1px solid ${reitMacro.score>=2?'#2d5a2d':reitMacro.score>=-2?'#b8943f':'#8b2e2e'};border-radius:4px;padding:10px 14px;margin-bottom:12px;font-size:12px;font-family:sans-serif">
     <strong style="font-size:13px">${reitMacro.emoji} REIT MACRO: ${reitMacro.rating}</strong>
@@ -635,6 +799,11 @@ const run = async () => {
     const reitTriggers = reitResults.filter(r => r.yield_trigger_fired).map(r => r.ticker);
     console.log(`Analysis complete — equities:${topEquities.length} reits:${reitResults.length} triggers:${reitTriggers.length}`);
 
+    // 8b. Breakout scanner — runs across all 400 equity stocks
+    const breakoutResults = await scanBreakouts(db, equityStocks||[], livePrices, macro.score);
+    const topBreakouts = breakoutResults.slice(0, 6);
+    console.log(`Breakouts found: ${breakoutResults.length}, top: ${topBreakouts.length}`);
+
     // 9. Save analysis
     const allAnalysis = [...equityResults, ...reitResults].map(r => ({
       ticker: r.ticker, analysis_date: today, close: r.price,
@@ -653,8 +822,19 @@ const run = async () => {
       conviction: r.conviction, signal_reasons: r.signal_reasons
     }));
 
-    if (allAnalysis.length > 0) {
-      await db.from('daily_analysis').upsert(allAnalysis, { onConflict: 'ticker,analysis_date' });
+    // Add breakout results to daily_analysis
+    const breakoutAnalysis = (topBreakouts||[]).map(b => ({
+      ticker: b.ticker, analysis_date: today, close: b.price,
+      vol_ratio: b.vol_ratio,
+      total_score: b.breakout_score,
+      signal: 'BREAKOUT',
+      conviction: b.breakout_score >= 6 ? 'EXCEPTIONAL' : 'STRONG',
+      signal_reasons: b.signals,
+    }));
+
+    const combined = [...allAnalysis, ...breakoutAnalysis];
+    if (combined.length > 0) {
+      await db.from('daily_analysis').upsert(combined, { onConflict: 'ticker,analysis_date' });
     }
 
     // 10. Save model trades — no duplicates
@@ -706,7 +886,7 @@ const run = async () => {
 
     // 12. Send email
     const { subject, html } = buildEmail({
-      market, macro, reitMacro, equityTrades: topEquities, reitResults,
+      market, macro, reitMacro, equityTrades: topEquities, breakouts: topBreakouts, reitResults,
       headlines, reitHeadlines, sectorSignals,
       nikkei: nikkeiData, shanghai: shanghaiData, futures: futuresData
     });
