@@ -390,4 +390,4 @@ exports.handler = schedule('15 0 * * 1-5', async () => {
     console.error('ORB scan failed:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
-};
+});

@@ -89,4 +89,4 @@ exports.handler = schedule('5 6 * * 1-5', async () => {
     console.error('yield-triggers failed:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
-};
+});

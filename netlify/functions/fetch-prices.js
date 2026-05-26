@@ -196,4 +196,4 @@ exports.handler = schedule('0 6 * * 1-5', async () => {
     console.error('fetch-prices failed:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
-};
+});
