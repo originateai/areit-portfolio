@@ -312,6 +312,8 @@ tfoot td.r{text-align:right}
         style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
         <option value="yield">Yield (highest)</option>
         <option value="discount">Discount to NTA (deepest)</option>
+        <option value="price">Price (highest)</option>
+        <option value="target8">8% Target price</option>
         <option value="score">Strategy score</option>
         <option value="ticker">Ticker A-Z</option>
         <option value="sector">Sector</option>
@@ -334,10 +336,17 @@ tfoot td.r{text-align:right}
     </div>
 
     <table>
-      <thead><tr>
-        <th>Ticker</th><th>Name</th><th>Sector</th><th class="r">Price</th>
-        <th class="r">NTA</th><th class="r">Disc NTA</th><th class="r">Yield</th>
-        <th class="r">8% Target</th><th>Score</th><th>Status</th>
+      <thead><tr id="reit-thead">
+        <th onclick="reitSortBy('ticker')" style="cursor:pointer">Ticker ↕</th>
+        <th>Name</th>
+        <th onclick="reitSortBy('sector')" style="cursor:pointer">Sector ↕</th>
+        <th class="r" onclick="reitSortBy('price')" style="cursor:pointer">Price ↕</th>
+        <th class="r">NTA</th>
+        <th class="r" onclick="reitSortBy('discount')" style="cursor:pointer">Disc NTA ↕</th>
+        <th class="r" onclick="reitSortBy('yield')" style="cursor:pointer">Yield ↕</th>
+        <th class="r" onclick="reitSortBy('target8')" style="cursor:pointer">8% Target ↕</th>
+        <th onclick="reitSortBy('score')" style="cursor:pointer">Score ↕</th>
+        <th>Status</th>
       </tr></thead>
       <tbody id="reit-signals-tbody"><tr><td colspan="10" class="empty">Loading REIT signals...</td></tr></tbody>
     </table>
@@ -1049,6 +1058,12 @@ async function loadREIT() {
 }
 
 // ── REIT SIGNALS ──────────────────────────────────────────────────────────────
+function reitSortBy(field) {
+  const sel = document.getElementById('reit-sort');
+  if (sel) sel.value = field;
+  loadREITSignals();
+}
+
 async function loadREITSignals() {
   if (!db) return;
 
@@ -1092,10 +1107,12 @@ async function loadREITSignals() {
   reitList.sort((a, b) => {
     switch(sortBy) {
       case 'yield':    return (b.y||0) - (a.y||0);
-      case 'discount': return (a.disc||0) - (b.disc||0); // most negative = biggest discount
+      case 'discount': return (a.disc||0) - (b.disc||0);
       case 'score':    return (b.a?.total_score||0) - (a.a?.total_score||0);
       case 'ticker':   return a.s.ticker.localeCompare(b.s.ticker);
       case 'sector':   return (a.s.sector||'').localeCompare(b.s.sector||'');
+      case 'price':    return (b.p||0) - (a.p||0);
+      case 'target8':  return (b.t8||0) - (a.t8||0);
       default:         return (b.y||0) - (a.y||0);
     }
   });
