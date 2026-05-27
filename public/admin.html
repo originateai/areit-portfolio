@@ -583,6 +583,7 @@ td.r { text-align: right; font-family: 'DM Mono', monospace; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 'use strict';
 
@@ -890,22 +891,26 @@ async function handleResearchUpload(file) {
   try {
     let fileData, fileType;
 
-    showStatus('research-status', `Compressing ${file.name}...`, 'info');
-
-    // Read file as ArrayBuffer, gzip compress with pako, then base64 encode
-    // This gets large Excel/PDF files well under Netlify's 6MB body limit
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
-    const compressed = pako.gzip(uint8);
-    fileData = btoa(String.fromCharCode(...compressed));
-    fileType = isPDF ? 'application/pdf' : 'excel';
-
-    showStatus('research-status', `Sending ${file.name} to Claude for analysis...`, 'info');
+    if (isPDF) {
+      // PDF: extract text in browser with PDF.js, send text only
+      showStatus('research-status', `Extracting text from ${file.name}...`, 'info');
+      const text = await pdfToText(file);
+      fileData = text;
+      fileType = 'pdf_text';
+      showStatus('research-status', `Sending extracted data to Claude...`, 'info');
+    } else {
+      // Excel: parse in browser with SheetJS, send text only
+      showStatus('research-status', `Parsing ${file.name} in browser...`, 'info');
+      const text = await excelToText(file);
+      fileData = text;
+      fileType = 'excel_text';
+      showStatus('research-status', `Sending extracted data to Claude...`, 'info');
+    }
 
     const res = await fetch('/.netlify/functions/parse-research', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileData, fileType, fileName: file.name, compressed: true })
+      body: JSON.stringify({ fileData, fileType, fileName: file.name, compressed: false })
     });
 
     const result = await res.json();
@@ -936,6 +941,23 @@ function toBase64(file) {
     r.onerror = () => reject(new Error('File read failed'));
     r.readAsDataURL(file);
   });
+}
+
+async function pdfToText(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    text += `
+
+--- Page ${i} ---
+${pageText}`;
+  }
+  return text.trim();
 }
 
 async function excelToText(file) {
