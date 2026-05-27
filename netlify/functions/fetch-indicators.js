@@ -164,7 +164,7 @@ const run = async () => {
 
     // Load ALL price history in parallel batches of 25
     const priceMap = {};
-    const BATCH = 25;
+    const BATCH = 10;  // smaller batches so row limit isn't hit (10 × 270 = 2700 rows per query)
     const PARALLEL = 4;
     const batches = [];
     for (let i = 0; i < tickers.length; i += BATCH) batches.push(tickers.slice(i, i+BATCH));
@@ -177,6 +177,7 @@ const run = async () => {
           .in('ticker', batch)
           .gte('market_date', cutoff)
           .order('market_date', { ascending: true })
+          .limit(batch.length * 270)  // 270 days per ticker
       ));
       results.forEach(({ data }) => {
         (data||[]).forEach(p => {
