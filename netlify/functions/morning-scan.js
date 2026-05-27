@@ -822,62 +822,16 @@ const run = async () => {
       .eq('is_manager', false)
       .eq('is_developer', false);
 
-    // 6. Pre-screen equities from DB — cross-sectional ranking
-    let candidateTickers = await preScreenFromDB(db, macro.score);
-    let stocksToAnalyse;
+    // 6. Score full universe — no pre-screen
+    // fetch-indicators already calculated all indicators for all 510 stocks.
+    // No need to pre-screen — just read daily_analysis and score everything.
+    console.log(`Scoring full universe from daily_analysis`);
 
-    if (candidateTickers && candidateTickers.length > 0) {
-      // Use pre-screened top 40 by cross-sectional ranking
-      const candSet = new Set(candidateTickers);
-      stocksToAnalyse = (equityStocks||[]).filter(s => candSet.has(s.ticker));
-      console.log(`Using ${stocksToAnalyse.length} pre-screened candidates from cross-sectional ranking`);
-    } else {
-      // No pre-screen data yet — run full universe
-      stocksToAnalyse = equityStocks || [];
-      console.log(`Running full universe: ${stocksToAnalyse.length} stocks`);
-    }
-
-    // 7. Get bulk live prices from EODHD (one API call for all)
-    const allTickers   = [...stocksToAnalyse, ...(reitStocks||[])]
+    // 7. Get bulk live prices for ALL stocks (equities + REITs)
+    const allTickers = [...(equityStocks||[]), ...(reitStocks||[])]
       .map(s => s.ticker).filter(t => t !== 'GSBG37');
-    const livePrices   = await getBulkPrices(allTickers);
+    const livePrices = await getBulkPrices(allTickers);
     console.log(`Live prices fetched: ${Object.keys(livePrices).length}`);
-
-    // 8. Pre-load ALL price history in parallel batches — full universe
-    const allAnalysisTickers = [
-      ...stocksToAnalyse.map(s => s.ticker),
-      ...(reitStocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => s.ticker)
-    ];
-
-    const priceHistoryMap = {};
-    const BATCH = 25; // 25 tickers per query
-    const cutoffDate = new Date(Date.now() - 25*24*60*60*1000).toISOString().split('T')[0]; // 25 days for vol ratio only
-
-    // Run batches in parallel groups of 4
-    const batches = [];
-    for (let i = 0; i < allAnalysisTickers.length; i += BATCH) {
-      batches.push(allAnalysisTickers.slice(i, i + BATCH));
-    }
-
-    // Process 4 batches at a time in parallel
-    const PARALLEL = 4;
-    for (let i = 0; i < batches.length; i += PARALLEL) {
-      const group = batches.slice(i, i + PARALLEL);
-      const results = await Promise.all(group.map(batch =>
-        db.from('prices')
-          .select('ticker,market_date,open,high,low,close,adjusted_close,volume')
-          .in('ticker', batch)
-          .gte('market_date', cutoffDate)
-          .order('market_date', { ascending: true })
-      ));
-      results.forEach(({ data }) => {
-        (data||[]).forEach(p => {
-          if (!priceHistoryMap[p.ticker]) priceHistoryMap[p.ticker] = [];
-          priceHistoryMap[p.ticker].push(p);
-        });
-      });
-    }
-    console.log(`Price history loaded for ${Object.keys(priceHistoryMap).length} tickers`);
 
     // 8b. Read pre-calculated indicators from daily_analysis (populated by fetch-indicators at 6:50am)
     const { data: todayIndicators } = await db.from('daily_analysis')
@@ -904,12 +858,9 @@ const run = async () => {
       const price = lp?.close || parseFloat(a.close) || 0;
       if (!price) continue;
 
-      // Volume ratio from recent price history
-      const ph       = priceHistoryMap[ticker] || [];
-      const vols     = ph.map(r => parseInt(r.volume||0));
-      const todayV   = vols[vols.length-1] || 0;
-      const avgV     = vols.slice(-21,-1).reduce((s,v)=>s+v,0) / Math.max(vols.slice(-21,-1).length,1) || 1;
-      const volRatio = todayV / avgV;
+      // Volume ratio — use pre-calculated value from fetch-indicators (full history)
+      // priceHistoryMap only has data for pre-screened candidates, not all 510 stocks
+      const volRatio = parseFloat(a.vol_ratio) || 0;
 
       // Current yield for REITs
       const currentYield = stock.dps_fy26 && price ? stock.dps_fy26 / price : null;
