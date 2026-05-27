@@ -56,38 +56,37 @@ async function getEODPrice(ticker) {
 // ── BULK EOD PRICES ───────────────────────────────────────────────────────────
 // Fetch multiple tickers at once — much more efficient
 async function getBulkPrices(tickers) {
-  try {
-    // EODHD bulk endpoint accepts comma-separated tickers
-    const symbols = tickers.map(asxTicker).join(',');
-    const data    = await eodFetch(`real-time/${asxTicker(tickers[0])}`, {
-      s: symbols
-    });
-    
-    // Returns array when multiple tickers
-    const arr = Array.isArray(data) ? data : [data];
-    const map = {};
-    arr.forEach(d => {
-      const ticker = d.code?.replace('.AU','');
-      if (ticker) {
-        map[ticker] = {
-          ticker,
-          price:     parseFloat(d.close || d.previousClose || 0),
-          open:      parseFloat(d.open  || 0),
-          high:      parseFloat(d.high  || 0),
-          low:       parseFloat(d.low   || 0),
-          close:     parseFloat(d.close || d.previousClose || 0),
-          volume:    parseInt(d.volume  || 0),
-          change:    parseFloat(d.change   || 0),
-          changePct: parseFloat(d.change_p || 0) / 100,
-          timestamp: d.timestamp
-        };
-      }
-    });
-    return map;
-  } catch(e) {
-    console.error('EODHD bulk price error:', e.message);
-    return {};
+  const map = {};
+  // Chunk into 50 tickers per request to avoid URL length limits
+  const CHUNK = 50;
+  for (let i = 0; i < tickers.length; i += CHUNK) {
+    const chunk = tickers.slice(i, i + CHUNK);
+    try {
+      const symbols = chunk.map(asxTicker).join(',');
+      const data    = await eodFetch(`real-time/${asxTicker(chunk[0])}`, { s: symbols });
+      const arr     = Array.isArray(data) ? data : [data];
+      arr.forEach(d => {
+        const ticker = d.code?.replace('.AU','');
+        if (ticker) {
+          map[ticker] = {
+            ticker,
+            price:     parseFloat(d.close || d.previousClose || 0),
+            open:      parseFloat(d.open  || 0),
+            high:      parseFloat(d.high  || 0),
+            low:       parseFloat(d.low   || 0),
+            close:     parseFloat(d.close || d.previousClose || 0),
+            volume:    parseInt(d.volume  || 0),
+            change:    parseFloat(d.change   || 0),
+            changePct: parseFloat(d.change_p || 0) / 100,
+            timestamp: d.timestamp
+          };
+        }
+      });
+    } catch(e) {
+      console.error('EODHD bulk price error:', e.message);
+    }
   }
+  return map;
 }
 
 // ── HISTORICAL OHLCV ──────────────────────────────────────────────────────────
