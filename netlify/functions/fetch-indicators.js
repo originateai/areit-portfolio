@@ -162,22 +162,22 @@ const run = async () => {
 
     const tickers = stocks.map(s => s.ticker);
 
-    // Load ALL price history in parallel batches of 25
+    // Load price history per-ticker to avoid Supabase's 1000-row default limit.
+    // Fetching multi-ticker batches with .limit(N*270) silently caps at 1000 rows,
+    // giving only ~100 rows per ticker instead of 270 — not enough for MA200/RSI.
+    // Per-ticker fetch with .limit(270) guarantees each ticker gets its full history.
     const priceMap = {};
-    const BATCH = 10;  // smaller batches so row limit isn't hit (10 × 270 = 2700 rows per query)
-    const PARALLEL = 4;
-    const batches = [];
-    for (let i = 0; i < tickers.length; i += BATCH) batches.push(tickers.slice(i, i+BATCH));
+    const PARALLEL = 8; // concurrent per-ticker fetches
 
-    for (let i = 0; i < batches.length; i += PARALLEL) {
-      const group = batches.slice(i, i+PARALLEL);
-      const results = await Promise.all(group.map(batch =>
+    for (let i = 0; i < tickers.length; i += PARALLEL) {
+      const group = tickers.slice(i, i + PARALLEL);
+      const results = await Promise.all(group.map(ticker =>
         db.from('prices')
           .select('ticker,market_date,open,high,low,close,adjusted_close,volume')
-          .in('ticker', batch)
+          .eq('ticker', ticker)
           .gte('market_date', cutoff)
           .order('market_date', { ascending: true })
-          .limit(batch.length * 270)  // 270 days per ticker
+          .limit(270)  // exactly 270 days per ticker — well under 1000-row cap
       ));
       results.forEach(({ data }) => {
         (data||[]).forEach(p => {
