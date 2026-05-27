@@ -290,12 +290,13 @@ async function scanBreakouts(db, stocks, livePrices, macroScore) {
           }
         }
 
-        // Backtest optimal: 52W high break + vol >2x = 42.3% WR, +1.38% exp
-        // Must have actual 52W break (not just near) AND volume >2x
-        const actual52wBreak = high52w && price > high52w;
-        if (!actual52wBreak) continue;       // require actual new high, not just near
-        if (volRatio < 2.0) continue;        // require vol >2x (backtest optimal)
-        if (breakoutScore < 4) continue;
+        // For morning scan: flag stocks within 3% of 52W high as candidates for ORB scan
+        // The ORB scan at 10:30am confirms the actual breakout with live intraday prices
+        // Don't require actual break here — that's the ORB scan's job
+        const near52wHigh = high52w && price >= high52w * 0.97;
+        if (!near52wHigh) continue;          // must be within 3% of 52W high
+        if (volRatio < 1.5) continue;        // some volume confirmation
+        if (breakoutScore < 3) continue;
 
         // Dynamic stop — just below breakout point (previous resistance)
         const stopPrice  = parseFloat((Math.max(recentHigh * 0.98, price * 0.97)).toFixed(3));
