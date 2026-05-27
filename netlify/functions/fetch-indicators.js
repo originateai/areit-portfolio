@@ -146,7 +146,9 @@ function calcIndicators(ticker, priceRows, today) {
 const run = async () => {
   const db    = getSupabase();
   const today = new Date(Date.now() + 10*60*60*1000).toISOString().split('T')[0];
-  const cutoff = new Date(Date.now() - 260*24*60*60*1000).toISOString().split('T')[0];
+  // Need 400 calendar days to guarantee 200+ trading days (ASX ~250 trading days/year)
+  // 260 calendar days = only ~186 trading days — not enough for MA200
+  const cutoff = new Date(Date.now() - 400*24*60*60*1000).toISOString().split('T')[0];
   console.log(`Fetch indicators starting: ${today}`);
 
   try {
@@ -163,9 +165,8 @@ const run = async () => {
     const tickers = stocks.map(s => s.ticker);
 
     // Load price history per-ticker to avoid Supabase's 1000-row default limit.
-    // Fetching multi-ticker batches with .limit(N*270) silently caps at 1000 rows,
-    // giving only ~100 rows per ticker instead of 270 — not enough for MA200/RSI.
-    // Per-ticker fetch with .limit(270) guarantees each ticker gets its full history.
+    // No cutoff date — fetch all available history so MA200 always has enough rows.
+    // .limit(550) covers 2+ years of trading days (ASX ~250/year) safely under 1000-row cap.
     const priceMap = {};
     const PARALLEL = 8; // concurrent per-ticker fetches
 
@@ -175,9 +176,8 @@ const run = async () => {
         db.from('prices')
           .select('ticker,market_date,open,high,low,close,adjusted_close,volume')
           .eq('ticker', ticker)
-          .gte('market_date', cutoff)
           .order('market_date', { ascending: true })
-          .limit(270)  // exactly 270 days per ticker — well under 1000-row cap
+          .limit(550)  // 550 rows = ~2.2 years of trading days, well under 1000-row cap
       ));
       results.forEach(({ data }) => {
         (data||[]).forEach(p => {
