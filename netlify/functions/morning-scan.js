@@ -757,7 +757,9 @@ const run = async () => {
       nasdaqChange:  nasdaq?.change || 0,
       dowChange:     dow?.change    || 0,
       vix, us10yr, aus10yr,
-      us10yrChange:  us10yrData?.change || 0,
+      us10yrChange:  us10yrData?.price && us10yrData?.prev
+        ? (us10yrData.price - us10yrData.prev) / 100  // TNX in %, convert to decimal yield move
+        : 0,
       aus10yrChange: Math.max(-0.002, Math.min(0.002, aus10yrChangeEst)),
       yieldCurve:    us10yr - 0.0474,
       aud, audChange: audData?.change || 0,
