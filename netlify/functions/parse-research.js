@@ -18,6 +18,18 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
+  // Decompress if client sent gzip-compressed data
+  if (body.compressed && body.fileData) {
+    try {
+      const zlib = require('zlib');
+      const compressed = Buffer.from(body.fileData, 'base64');
+      const decompressed = zlib.gunzipSync(compressed);
+      body.fileData = decompressed.toString('base64');
+    } catch(e) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Decompression failed: ' + e.message }) };
+    }
+  }
+
   const { fileData, fileType, fileName } = body;
   if (!fileData || !fileType) {
     return { statusCode: 400, body: JSON.stringify({ error: 'fileData and fileType required' }) };
