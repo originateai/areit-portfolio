@@ -463,260 +463,322 @@ function getSectorSignals({ sp500Change, nasdaqChange, ironOreChange, goldChange
 
 // ── BUILD EMAIL ───────────────────────────────────────────────────────────────
 function buildEmail(data) {
-  const { market, macro, reitMacro, equityTrades, breakouts, reitResults, headlines, reitHeadlines, rateNews,
-          sectorSignals, nikkei, shanghai, futures } = data;
-  const { sp500Change, nasdaqChange, vix, us10yr, aus10yr,
-          yieldCurve, aud, audChange, realYield, vnqChange } = market;
+  const { market, macro, reitMacro, equityTrades, breakouts, reitResults, headlines, reitHeadlines, rateNews } = data;
+  const { sp500Change, nasdaqChange, vix, us10yr, aus10yr, aud, audChange, vnqChange } = market;
   const { score, signal, reasons } = macro;
 
-  const sigColor = signal==='RISK_ON'?'#2d5a2d':signal==='RISK_OFF'?'#8b2e2e':'#7a5500';
-  const sigBg    = signal==='RISK_ON'?'#eef6ee':signal==='RISK_OFF'?'#fdf8f8':'#fdf8ee';
-  const sigEmoji = signal==='RISK_ON'?'🟢':signal==='RISK_OFF'?'🔴':'⚪';
-  const reitTrig = reitResults.filter(r=>r.yield_trigger_fired);
-  const exc      = equityTrades.filter(t=>t.total_score>=6);
-  const rawBps   = Math.round((market.us10yrChange||0)*10000);
-  const bpsMove  = Math.max(-20, Math.min(20, rawBps));
-  const dateStr  = new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
+  const rawBps    = Math.round((market.us10yrChange||0)*10000);
+  const bpsMove   = Math.max(-20, Math.min(20, rawBps));
+  const dateStr   = new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const reitTrig  = reitResults.filter(r=>r.yield_trigger_fired);
+  const exc       = equityTrades.filter(t=>t.total_score>=6);
 
-  const subject = `${sigEmoji} ASX Morning Scan — ${signal.replace('_',' ')} (${score>0?'+':''}${score})`
-    + (reitTrig.length?` | 🚨 REIT Triggers: ${reitTrig.map(r=>r.ticker).join(',')}` : '')
-    + (exc.length ? ` | 🔥 ${exc.length} Exceptional` : '');
+  const macroLabel = signal==='RISK_ON' ? 'RISK ON' : signal==='RISK_OFF' ? 'RISK OFF' : 'NEUTRAL';
+  const macroColor = signal==='RISK_ON' ? '#1a6b2e' : signal==='RISK_OFF' ? '#8b1a1a' : '#5a5a5a';
 
-  const fmt = {
-    pct:  v => v==null?'--':(v>0?'+':'')+(v*100).toFixed(2)+'%',
-    pct1: v => v==null?'--':(v*100).toFixed(1)+'%',
-    bps:  v => v==null?'--':(v>0?'+':'')+Math.round(v*10000)+'bps',
-    $3:   v => v==null?'--':'$'+parseFloat(v).toFixed(3),
-    $2:   v => v==null?'--':'$'+parseFloat(v).toFixed(2),
-    $k:   v => v==null?'--':'$'+Math.abs(parseFloat(v)).toFixed(0),
-  };
-
-  const chgColor = v => v>0?'color:#2d5a2d':v<0?'color:#8b2e2e':'color:#555';
-  const chgSign  = v => v>0?'+':'';
-
-  // Score dots
-  const dots = (score, max=7) => Array.from({length:max},(_, i)=>
-    `<span style="display:inline-block;width:16px;height:16px;border-radius:2px;background:${i<score?'#1a3a5c':'#d0d8e0'};margin-right:2px;text-align:center;font-size:9px;color:#fff;line-height:16px;">${i<score?'✓':''}</span>`
-  ).join('');
-
-  // Exit day label
   const exitDay = new Date();
   exitDay.setDate(exitDay.getDate() + 3);
   const exitDayStr = exitDay.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
 
-  const tradeCard = t => {
-    const conv = t.conviction === 'EXCEPTIONAL' ? 'EXCEPTIONAL' : t.conviction === 'STRONG' ? 'STRONG' : 'MODERATE';
-    const convColor = conv==='EXCEPTIONAL'?'#1a3a5c':conv==='STRONG'?'#2d5a2d':'#7a5500';
-    return `
-    <div style="border:1px solid #e0e6ed;border-left:3px solid #1a3a5c;margin:0 0 10px;padding:14px;background:#fff;">
-      <div style="display:table;width:100%">
-        <div style="display:table-cell;vertical-align:top">
-          <span style="font-size:17px;font-weight:700;color:#1a3a5c;font-family:monospace">${t.ticker}</span>
-          <span style="margin-left:8px;padding:2px 8px;background:${conv==='EXCEPTIONAL'?'#1a3a5c':'#f0f4f8'};color:${convColor};font-size:10px;font-weight:700;letter-spacing:1px;border-radius:2px">${conv} ${t.total_score}/7</span>
-        </div>
-        <div style="display:table-cell;vertical-align:top;text-align:right">
-          <span style="font-size:17px;font-weight:700;font-family:monospace">${fmt.$3(t.price)}</span>
-        </div>
-      </div>
-      <div style="font-size:11px;color:#888;margin-top:3px">${t.name||''}</div>
-      <div style="margin:8px 0 0;font-size:11px;color:#555;line-height:1.7">${(t.signal_reasons||[]).slice(0,4).join('<br>')}</div>
-      <div style="display:table;width:100%;margin-top:12px;border-top:1px solid #e8ecf0;padding-top:10px">
-        <div style="display:table-cell;text-align:center">
-          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Stop Loss</div>
-          <div style="font-size:14px;font-weight:700;font-family:monospace;color:#8b2e2e">${fmt.$3(t.stop_price)}</div>
-          <div style="font-size:9px;color:#aaa">-2%</div>
-        </div>
-        <div style="display:table-cell;text-align:center">
-          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Target</div>
-          <div style="font-size:14px;font-weight:700;font-family:monospace;color:#2d5a2d">${fmt.$3(t.target_price)}</div>
-          <div style="font-size:9px;color:#aaa">+5%</div>
-        </div>
-        <div style="display:table-cell;text-align:center">
-          <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Size</div>
-          <div style="font-size:14px;font-weight:700;font-family:monospace;color:#1a3a5c">$${(t.position_size||0).toLocaleString()}</div>
-          <div style="font-size:9px;color:#aaa">${t.units||0} units</div>
-        </div>
-      </div>
-      <div style="background:#f0f4f8;border-left:3px solid #1a3a5c;padding:10px 12px;margin-top:10px;font-size:11px;color:#444;line-height:1.9">
-        <div style="font-size:9px;color:#1a3a5c;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">CommSec Order Instructions</div>
-        1. <strong>BUY</strong> ${t.ticker} · Market order · ${t.units||0} units · Place at <strong>10:00am AEST</strong><br>
-        2. Once filled → <strong>Stop Loss Sell</strong> · ${t.units||0} units · Trigger <strong>${fmt.$3(t.stop_price)}</strong> · Good Till Cancel<br>
-        3. If price hits <strong>${fmt.$3(t.target_price)}</strong> → cancel stop → <strong>Sell at Market</strong><br>
-        4. <strong>${exitDayStr}</strong>: if still open → sell at market on open
-      </div>
-    </div>`;
+  const subject = `ASX Morning Scan — ${macroLabel} (${score>0?'+':''}${score})`
+    + (reitTrig.length ? ` | REIT Triggers: ${reitTrig.map(r=>r.ticker).join(', ')}` : '')
+    + (exc.length ? ` | ${exc.length} Exceptional` : '');
+
+  const pct  = v => v==null?'--':(v>=0?'+':'')+((v)*100).toFixed(2)+'%';
+  const $3   = v => v==null?'--':'$'+parseFloat(v).toFixed(3);
+  const $2   = v => v==null?'--':'$'+parseFloat(v).toFixed(2);
+  const chgColor = v => v>0?'#1a6b2e':v<0?'#8b1a1a':'#666';
+  const bpsColor = v => v<-3?'#1a6b2e':v>3?'#8b1a1a':'#666';
+
+  // ── STYLES ────────────────────────────────────────────────────────────────
+  const S = {
+    wrap:     'max-width:680px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;background:#ffffff;',
+    header:   'background:#0a1628;padding:24px 32px;',
+    h_firm:   'font-size:11px;color:#8899aa;letter-spacing:2px;text-transform:uppercase;margin:0 0 4px;',
+    h_title:  'font-size:20px;font-weight:700;color:#ffffff;margin:0 0 2px;letter-spacing:-0.3px;',
+    h_sub:    'font-size:11px;color:#6688aa;margin:0;',
+    divider:  'height:1px;background:#e8e8e8;margin:0;border:none;',
+    sec:      'padding:20px 32px;border-bottom:1px solid #efefef;',
+    sec_sm:   'padding:12px 32px;border-bottom:1px solid #efefef;',
+    label:    'font-size:10px;font-weight:700;color:#888;letter-spacing:1.5px;text-transform:uppercase;margin:0 0 12px;',
+    th:       'font-size:10px;font-weight:700;color:#888;letter-spacing:1px;text-transform:uppercase;padding:6px 8px;text-align:left;border-bottom:2px solid #e8e8e8;white-space:nowrap;',
+    th_r:     'font-size:10px;font-weight:700;color:#888;letter-spacing:1px;text-transform:uppercase;padding:6px 8px;text-align:right;border-bottom:2px solid #e8e8e8;white-space:nowrap;',
+    td:       'font-size:12px;color:#333;padding:7px 8px;border-bottom:1px solid #f0f0f0;vertical-align:middle;',
+    td_r:     'font-size:12px;color:#333;padding:7px 8px;text-align:right;border-bottom:1px solid #f0f0f0;vertical-align:middle;font-family:Courier New,monospace;',
+    mono:     'font-family:Courier New,monospace;',
+    footer:   'padding:20px 32px;background:#f8f8f8;border-top:1px solid #e8e8e8;',
+    disc:     'font-size:10px;color:#aaa;line-height:1.6;margin:8px 0 0;',
   };
 
-  const reitCard = r => {
-    const yield_pct = r.dps_yield ? (r.dps_yield*100).toFixed(1)+'%' : '--';
-    const ntaDisc   = r.nta && r.price ? ((r.price/r.nta - 1)*100).toFixed(1)+'%' : '--';
+  // ── MACRO TABLE ───────────────────────────────────────────────────────────
+  const macroRows = [
+    ['S&P 500',   sp500Change!=null?pct(sp500Change):'--',   sp500Change!=null?pct(sp500Change):'--',   chgColor(sp500Change),  sp500Change>0.005?'Positive':sp500Change<-0.005?'Negative':'Flat'],
+    ['Nasdaq',    nasdaqChange!=null?pct(nasdaqChange):'--', nasdaqChange!=null?pct(nasdaqChange):'--', chgColor(nasdaqChange), nasdaqChange>0.005?'Positive':nasdaqChange<-0.005?'Negative':'Flat'],
+    ['VIX',       vix?vix.toFixed(1):'--',                  '--',                                       '#666',                 vix<15?'Low':vix<22?'Normal':vix<28?'Elevated':'High'],
+    ['US 10yr',   us10yr?(us10yr*100).toFixed(2)+'%':'--',  bpsMove?(bpsMove>0?'+':'')+bpsMove+'bps':'--', bpsColor(bpsMove), bpsMove<-3?'Falling':bpsMove>3?'Rising':'Stable'],
+    ['AUS 10yr',  aus10yr?(aus10yr*100).toFixed(2)+'%':'--','--',                                       '#666',                 'Proxy GSBG37'],
+    ['AUD/USD',   aud?aud.toFixed(4):'--',                  audChange!=null?pct(audChange):'--',        chgColor(audChange),    audChange>0.003?'Rising':audChange<-0.003?'Falling':'Stable'],
+    ['VNQ',       '--',                                      vnqChange!=null?pct(vnqChange):'--',        chgColor(vnqChange),    vnqChange>0.005?'Positive':vnqChange<-0.005?'Negative':'Flat'],
+  ].map(([ind, val, chg, col, sig]) => `
+    <tr>
+      <td style="${S.td}">${ind}</td>
+      <td style="${S.td_r}">${val}</td>
+      <td style="${S.td_r};color:${col};font-weight:600;">${chg}</td>
+      <td style="${S.td};color:#888;font-size:11px;">${sig}</td>
+    </tr>`).join('');
+
+  // ── REIT TRIGGER ROWS ─────────────────────────────────────────────────────
+  const reitTrigRows = reitTrig.map(r => {
+    const yld = r.dps_yield ? (r.dps_yield*100).toFixed(1)+'%' : '--';
+    const nta = r.nta ? $3(r.nta) : '--';
+    const disc = r.nta && r.price ? ((r.price/r.nta-1)*100).toFixed(1)+'%' : '--';
     return `
     <tr>
-      <td class="tkr">${r.ticker}</td>
-      <td style="font-size:11px;color:#555">${r.name||''}</td>
-      <td class="r mono">${fmt.$3(r.price)}</td>
-      <td class="r mono" style="${r.dps_yield>=(r.yield_trigger||0.08)?'color:#2d5a2d;font-weight:700':'color:#555'}">${yield_pct}</td>
-      <td class="r mono">${r.nta?fmt.$3(r.nta):'--'}</td>
-      <td class="r" style="font-size:11px;${r.dps_yield>=(r.yield_trigger||0.08)?'color:#2d5a2d;font-weight:700':'color:#555'}">${r.dps_yield>=(r.yield_trigger||0.08)?'🚨 TRIGGER':r.total_score>4?'WATCH':'--'}</td>
+      <td style="${S.td};font-weight:700;font-family:Courier New,monospace;">${r.ticker}</td>
+      <td style="${S.td};font-size:11px;">${r.name||''}</td>
+      <td style="${S.td_r}">${$3(r.price)}</td>
+      <td style="${S.td_r};color:#1a6b2e;font-weight:700;">${yld}</td>
+      <td style="${S.td_r}">${nta}</td>
+      <td style="${S.td_r};font-size:11px;color:#888;">${disc}</td>
     </tr>`;
-  };
+  }).join('');
 
+  // ── REIT UNIVERSE ROWS ────────────────────────────────────────────────────
+  const reitAllRows = reitResults
+    .filter(r=>!r.yield_trigger_fired)
+    .sort((a,b)=>(b.dps_yield||0)-(a.dps_yield||0))
+    .map(r => {
+      const yld = r.dps_yield ? (r.dps_yield*100).toFixed(1)+'%' : '--';
+      const nta = r.nta ? $3(r.nta) : '--';
+      return `
+      <tr>
+        <td style="${S.td};font-family:Courier New,monospace;">${r.ticker}</td>
+        <td style="${S.td};font-size:11px;color:#555;">${r.name||''}</td>
+        <td style="${S.td_r}">${$3(r.price)}</td>
+        <td style="${S.td_r}">${yld}</td>
+        <td style="${S.td_r}">${nta}</td>
+        <td style="${S.td_r};font-size:11px;color:#aaa;">--</td>
+      </tr>`;
+    }).join('');
+
+  // ── EQUITY TRADE CARDS ────────────────────────────────────────────────────
+  const tradeRows = equityTrades.map(t => `
+    <tr style="border-top:2px solid #0a1628;">
+      <td colspan="6" style="padding:16px 0 8px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="vertical-align:top;">
+              <span style="font-size:16px;font-weight:700;font-family:Courier New,monospace;color:#0a1628;">${t.ticker}</span>
+              <span style="font-size:11px;color:#888;margin-left:8px;">${t.name||''}</span><br>
+              <span style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;">${t.conviction||''} &nbsp;${t.total_score}/7</span>
+            </td>
+            <td style="text-align:right;vertical-align:top;">
+              <span style="font-size:18px;font-weight:700;font-family:Courier New,monospace;">${$3(t.price)}</span>
+            </td>
+          </tr>
+        </table>
+        <div style="font-size:11px;color:#555;margin:6px 0;line-height:1.8;">${(t.signal_reasons||[]).slice(0,4).join(' &nbsp;·&nbsp; ')}</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:10px 0;border-top:1px solid #efefef;border-bottom:1px solid #efefef;">
+          <tr>
+            <td style="padding:10px 16px 10px 0;text-align:center;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Entry</div>
+              <div style="font-size:15px;font-weight:700;font-family:Courier New,monospace;">${$3(t.price)}</div>
+              <div style="font-size:10px;color:#888;">Market open</div>
+            </td>
+            <td style="padding:10px 16px;text-align:center;border-left:1px solid #efefef;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Stop Loss</div>
+              <div style="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:#8b1a1a;">${$3(t.stop_price)}</div>
+              <div style="font-size:10px;color:#888;">&#8209;2%</div>
+            </td>
+            <td style="padding:10px 16px;text-align:center;border-left:1px solid #efefef;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Target</div>
+              <div style="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:#1a6b2e;">${$3(t.target_price)}</div>
+              <div style="font-size:10px;color:#888;">+5%</div>
+            </td>
+            <td style="padding:10px 0 10px 16px;text-align:center;border-left:1px solid #efefef;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Size</div>
+              <div style="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:#0a1628;">$${(t.position_size||0).toLocaleString()}</div>
+              <div style="font-size:10px;color:#888;">${t.units||0} units</div>
+            </td>
+          </tr>
+        </table>
+        <div style="background:#f8f9fa;border-left:3px solid #0a1628;padding:10px 14px;font-size:11px;color:#444;line-height:2;">
+          <strong>CommSec:</strong> BUY ${t.ticker} · Market · ${t.units||0} units · 10:00am AEST &nbsp;|&nbsp;
+          Set stop sell ${$3(t.stop_price)} GTC &nbsp;|&nbsp;
+          Target ${$3(t.target_price)} · Day 3 exit ${exitDayStr}
+        </div>
+      </td>
+    </tr>`).join('');
+
+  // ── BREAKOUT CARDS ────────────────────────────────────────────────────────
+  const breakoutRows = breakouts.map(b => `
+    <tr style="border-top:2px solid #8b6a00;">
+      <td colspan="6" style="padding:16px 0 8px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="vertical-align:top;">
+              <span style="font-size:16px;font-weight:700;font-family:Courier New,monospace;color:#8b6a00;">${b.ticker}</span>
+              <span style="font-size:11px;color:#888;margin-left:8px;">${b.name||''}</span><br>
+              <span style="font-size:10px;color:#8b6a00;letter-spacing:1px;text-transform:uppercase;">BREAKOUT &nbsp;${b.breakout_score}/8 &nbsp;·&nbsp; Vol ${b.vol_ratio?b.vol_ratio.toFixed(1)+'x':'--'}</span>
+            </td>
+            <td style="text-align:right;vertical-align:top;">
+              <span style="font-size:18px;font-weight:700;font-family:Courier New,monospace;">${$3(b.price)}</span>
+            </td>
+          </tr>
+        </table>
+        <div style="font-size:11px;color:#555;margin:6px 0;line-height:1.8;">${(b.signals||[]).slice(0,3).join(' &nbsp;·&nbsp; ')}</div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:10px 0;border-top:1px solid #efefef;border-bottom:1px solid #efefef;">
+          <tr>
+            <td style="padding:10px 16px 10px 0;text-align:center;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">52W High</div>
+              <div style="font-size:15px;font-weight:700;font-family:Courier New,monospace;">${b.high52w?$3(b.high52w):'--'}</div>
+            </td>
+            <td style="padding:10px 16px;text-align:center;border-left:1px solid #efefef;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Stop</div>
+              <div style="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:#8b1a1a;">${$3(b.stop_price)}</div>
+            </td>
+            <td style="padding:10px 16px;text-align:center;border-left:1px solid #efefef;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Target</div>
+              <div style="font-size:15px;font-weight:700;font-family:Courier New,monospace;color:#1a6b2e;">${$3(b.target_price)}</div>
+              <div style="font-size:10px;color:#888;">+6%</div>
+            </td>
+            <td style="padding:10px 0 10px 16px;text-align:center;border-left:1px solid #efefef;">
+              <div style="font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">Entry</div>
+              <div style="font-size:13px;font-weight:700;color:#8b6a00;">10:45am AEST</div>
+              <div style="font-size:10px;color:#888;">After ORB confirm</div>
+            </td>
+          </tr>
+        </table>
+        <div style="background:#fffdf0;border-left:3px solid #8b6a00;padding:10px 14px;font-size:11px;color:#555;line-height:1.8;">
+          Confirm price still above ${$3(b.price)} at 10:45am before entering. Wait for ORB confirmation email at 10:30am.
+        </div>
+      </td>
+    </tr>`).join('');
+
+  // ── HTML ──────────────────────────────────────────────────────────────────
   const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>${emailStyles}</style></head>
-<body>
-<div class="wrap">
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:20px;background:#f0f0f0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto;">
+<tr><td>
 
 <!-- HEADER -->
-<div class="header">
-  <div class="header-logo">ASX <span>TRADING PLATFORM</span></div>
-  <div class="header-sub">Daily Strategy Briefing · James Storey</div>
-  <div class="header-date">${dateStr} · 7:00AM AEST</div>
-</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="${S.wrap}">
+<tr><td style="${S.header}">
+  <p style="${S.h_firm}">ASX Trading Platform &nbsp;/&nbsp; James Storey</p>
+  <p style="${S.h_title}">Morning Strategy Briefing</p>
+  <p style="${S.h_sub}">${dateStr} &nbsp;·&nbsp; 7:00am AEST</p>
+</td></tr>
 
-<!-- MACRO STATUS -->
-<div class="sec-label">Market Macro — ${signal.replace('_',' ')}</div>
-<div class="pad">
-  <div style="padding:12px 16px;border-left:4px solid ${sigColor};background:${sigBg};margin-bottom:14px">
-    <div style="font-size:14px;font-weight:700;color:${sigColor}">${sigEmoji} ${signal.replace('_',' ')} — Score ${score>0?'+':''}${score}</div>
-    <div style="font-size:12px;color:#555;margin-top:4px;line-height:1.7">${reasons.slice(0,5).join(' · ')}</div>
-  </div>
-  <table>
+<!-- MACRO -->
+<tr><td style="${S.sec}">
+  <p style="${S.label}">Market Macro</p>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
     <tr>
-      <th>Indicator</th><th class="r">Value</th><th class="r">Change</th><th>Signal</th>
+      <td style="padding:12px 16px;background:${signal==='RISK_ON'?'#f0f7f0':signal==='RISK_OFF'?'#fdf0f0':'#f8f8f8'};border-left:3px solid ${macroColor};">
+        <span style="font-size:13px;font-weight:700;color:${macroColor};">${macroLabel} &nbsp; Score: ${score>0?'+':''}${score}</span><br>
+        <span style="font-size:11px;color:#666;line-height:1.8;">${reasons.slice(0,5).join(' &nbsp;·&nbsp; ')}</span>
+      </td>
     </tr>
-    <tr><td>S&P 500</td><td class="r mono">${sp500Change!=null?fmt.pct(sp500Change):'--'}</td><td class="r" style="${chgColor(sp500Change)}">${chgSign(sp500Change)}${sp500Change!=null?fmt.pct(sp500Change):'--'}</td><td style="font-size:11px">${sp500Change>0.01?'🟢 Positive':sp500Change<-0.01?'🔴 Negative':'⚪ Flat'}</td></tr>
-    <tr><td>Nasdaq</td><td class="r mono">${nasdaqChange!=null?fmt.pct(nasdaqChange):'--'}</td><td class="r" style="${chgColor(nasdaqChange)}">${chgSign(nasdaqChange)}${nasdaqChange!=null?fmt.pct(nasdaqChange):'--'}</td><td style="font-size:11px">${nasdaqChange>0.01?'🟢 Positive':nasdaqChange<-0.01?'🔴 Negative':'⚪ Flat'}</td></tr>
-    <tr><td>VIX</td><td class="r mono">${vix?vix.toFixed(1):'--'}</td><td class="r"></td><td style="font-size:11px">${vix<15?'🟢 Low':vix<22?'⚪ Normal':vix<28?'🟡 Elevated':'🔴 High'}</td></tr>
-    <tr><td>US 10yr</td><td class="r mono">${us10yr?(us10yr*100).toFixed(2)+'%':'--'}</td><td class="r" style="${chgColor(-bpsMove)}">${bpsMove!=0?(bpsMove>0?'+':'')+bpsMove+'bps':'--'}</td><td style="font-size:11px">${bpsMove<-3?'🟢 Falling':bpsMove>3?'🔴 Rising':'⚪ Stable'}</td></tr>
-    <tr><td>AUS 10yr</td><td class="r mono">${aus10yr?(aus10yr*100).toFixed(2)+'%':'--'}</td><td class="r"></td><td style="font-size:11px;color:#555">Proxy via GSBG37</td></tr>
-    <tr><td>AUD/USD</td><td class="r mono">${aud?aud.toFixed(4):'--'}</td><td class="r" style="${chgColor(audChange)}">${audChange!=null?fmt.pct(audChange):'--'}</td><td style="font-size:11px">${audChange>0.003?'🟢 Rising':audChange<-0.003?'🔴 Falling':'⚪ Stable'}</td></tr>
-    ${vnqChange!=null?`<tr><td>VNQ (US REITs)</td><td class="r mono">${fmt.pct(vnqChange)}</td><td class="r" style="${chgColor(vnqChange)}">${chgSign(vnqChange)}${fmt.pct(vnqChange)}</td><td style="font-size:11px">${vnqChange>0.005?'🟢 US REITs up':vnqChange<-0.005?'🔴 US REITs down':'⚪ Flat'}</td></tr>`:''}
   </table>
-  <p class="source">Sources: <a href="https://finance.yahoo.com">Yahoo Finance</a> · <a href="https://fred.stlouisfed.org">FRED</a> · <a href="https://eodhd.com">EODHD</a></p>
-</div>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <th style="${S.th}">Indicator</th>
+      <th style="${S.th_r}">Level</th>
+      <th style="${S.th_r}">Change</th>
+      <th style="${S.th}">Signal</th>
+    </tr>
+    ${macroRows}
+  </table>
+  <p style="font-size:10px;color:#aaa;margin:8px 0 0;">Sources: Yahoo Finance &nbsp;·&nbsp; FRED &nbsp;·&nbsp; EODHD</p>
+</td></tr>
 
 ${reitTrig.length?`
-<div class="sec-label-green">🚨 REIT Yield Triggers Fired — ${reitTrig.map(r=>r.ticker).join(', ')}</div>
-<div class="pad-sm">
-  ${reitTrig.map(r=>`<div style="padding:8px 0;border-bottom:1px solid #e8ecf0;font-size:13px"><strong style="color:#1a3a5c;font-family:monospace">${r.ticker}</strong> <span style="color:#555">${r.name||''}</span> — Yield <strong style="color:#2d5a2d">${r.dps_yield?(r.dps_yield*100).toFixed(1)+'%':'--'}</strong> vs trigger ${r.yield_trigger?(r.yield_trigger*100).toFixed(0)+'%':'8%'} · Price ${fmt.$3(r.price)} · NTA ${r.nta?fmt.$3(r.nta):'--'}</div>`).join('')}
-</div>`:''
-}
+<!-- REIT TRIGGERS -->
+<tr><td style="${S.sec}">
+  <p style="${S.label}">REIT Yield Triggers &mdash; ${reitTrig.length} Fired</p>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <th style="${S.th}">Ticker</th>
+      <th style="${S.th}">Name</th>
+      <th style="${S.th_r}">Price</th>
+      <th style="${S.th_r}">Yield</th>
+      <th style="${S.th_r}">NTA</th>
+      <th style="${S.th_r}">Disc/Prem</th>
+    </tr>
+    ${reitTrigRows}
+  </table>
+  <p style="font-size:10px;color:#aaa;margin:8px 0 0;">Yield trigger: DPS FY26 / price &ge; 8.0% &nbsp;·&nbsp; NTA from Moelis broker research</p>
+</td></tr>`:''}
 
-<!-- EQUITY TRADES -->
-<div class="sec-label">ASX Strategy Signals — Mean Reversion</div>
-<div class="pad">
-  ${equityTrades.length===0
-    ? `<p style="color:#888;font-size:13px;margin:0">No equity signals today — macro conditions or insufficient setups.</p>`
-    : equityTrades.map(tradeCard).join('')}
-  <p class="source">Strategy: 7-layer scoring (Macro · Trend · Momentum · Reversion · Volume · Candle · ML) · Min score 5/7 · ML threshold 55% · <a href="https://areit.netlify.app">Dashboard</a></p>
-</div>
+${equityTrades.length?`
+<!-- EQUITY SIGNALS -->
+<tr><td style="${S.sec}">
+  <p style="${S.label}">Equity Signals &mdash; ${equityTrades.length} Signal${equityTrades.length>1?'s':''}</p>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    ${tradeRows}
+  </table>
+</td></tr>`:`
+<!-- NO EQUITY SIGNALS -->
+<tr><td style="${S.sec}">
+  <p style="${S.label}">Equity Signals</p>
+  <p style="font-size:12px;color:#888;margin:0;">No signals today &mdash; macro conditions or insufficient setups. Min score 5/7 required.</p>
+  <p style="font-size:10px;color:#aaa;margin:6px 0 0;">Strategy: 7-layer scoring (Macro &middot; Trend &middot; Momentum &middot; Reversion &middot; Volume &middot; Candle &middot; ML) &nbsp;·&nbsp; <a href="https://areit.netlify.app" style="color:#0a1628;">Dashboard</a></p>
+</td></tr>`}
 
-${breakouts?.length?`
-<div class="sec-label-amber">🚀 Breakout Signals — Enter at 10:45am AEST</div>
-<div class="pad">
-  ${breakouts.map(b=>`
-  <div style="border:1px solid #e0e6ed;border-left:3px solid #b8943f;margin:0 0 10px;padding:14px;background:#fff;">
-    <div style="display:table;width:100%">
-      <div style="display:table-cell;vertical-align:top">
-        <span style="font-size:17px;font-weight:700;color:#1a3a5c;font-family:monospace">${b.ticker}</span>
-        <span style="margin-left:8px;padding:2px 8px;background:#fdf8ee;color:#7a5500;font-size:10px;font-weight:700;letter-spacing:1px;border-radius:2px">BREAKOUT ${b.breakout_score}/8</span>
-      </div>
-      <div style="display:table-cell;vertical-align:top;text-align:right">
-        <span style="font-size:17px;font-weight:700;font-family:monospace">${fmt.$3(b.price)}</span>
-      </div>
-    </div>
-    <div style="font-size:11px;color:#888;margin-top:3px">${b.name||''} · Vol ${b.vol_ratio?.toFixed(1)}× avg · 52W High $${b.high_52w?.toFixed(3)||'--'}</div>
-    <div style="font-size:11px;color:#555;margin-top:6px;line-height:1.7">${(b.signals||[]).join(' · ')}</div>
-    <div style="display:table;width:100%;margin-top:10px;border-top:1px solid #e8ecf0;padding-top:10px">
-      <div style="display:table-cell;text-align:center">
-        <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Stop</div>
-        <div style="font-size:14px;font-weight:700;font-family:monospace;color:#8b2e2e">${fmt.$3(b.stop_price)}</div>
-      </div>
-      <div style="display:table-cell;text-align:center">
-        <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Target</div>
-        <div style="font-size:14px;font-weight:700;font-family:monospace;color:#2d5a2d">${fmt.$3(b.target_price)}</div>
-        <div style="font-size:9px;color:#aaa">+6%</div>
-      </div>
-      <div style="display:table-cell;text-align:center">
-        <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Entry</div>
-        <div style="font-size:13px;font-weight:700;color:#b8943f">⏰ 10:45am</div>
-      </div>
-    </div>
-    <div style="background:#fffbf0;border-left:3px solid #b8943f;padding:8px 12px;margin-top:10px;font-size:11px;color:#555">
-      ⚠ Confirm price still above <strong>${fmt.$3(b.price)}</strong> and volume elevated before entering. False breakouts fade in first 30 mins.
-    </div>
-  </div>`).join('')}
-  <p class="source">Breakout strategy: 52W high break + volume >2× avg · Backtest: 42.3% WR, +1.38% exp/trade · <a href="https://areit.netlify.app">Dashboard</a></p>
-</div>`:''}
-
-<!-- REIT MACRO -->
-${reitMacro?`
-<div class="sec-label">REIT Macro Environment</div>
-<div class="pad-sm">
-  <div style="padding:12px 16px;border-left:4px solid ${reitMacro.score>=2?'#2d5a2d':reitMacro.score>=-2?'#b8943f':'#8b2e2e'};background:${reitMacro.score>=2?'#eef6ee':reitMacro.score>=-2?'#fffbf0':'#fdf8f8'};margin-bottom:0">
-    <div style="font-size:13px;font-weight:700;color:${reitMacro.score>=2?'#2d5a2d':reitMacro.score>=-2?'#7a5500':'#8b2e2e'}">${reitMacro.emoji} ${reitMacro.rating} (Score ${reitMacro.score>0?'+':''}${reitMacro.score})</div>
-    <div style="font-size:12px;color:#555;margin-top:4px;line-height:1.7">
-      AUS 10yr: ${aus10yr?(aus10yr*100).toFixed(2)+'%':'--'} &nbsp;·&nbsp;
-      US 10yr: ${us10yr?(us10yr*100).toFixed(2)+'%':'--'} &nbsp;·&nbsp;
-      VNQ: ${vnqChange!=null?(vnqChange>=0?'+':'')+fmt.pct(vnqChange)+' overnight':'--'}
-    </div>
-    <div style="font-size:11px;color:#777;margin-top:4px">${(reitMacro.signals||[]).slice(0,3).join(' · ')}</div>
-  </div>
-</div>`:''}
+${breakouts.length?`
+<!-- BREAKOUTS -->
+<tr><td style="${S.sec}">
+  <p style="${S.label}">Breakout Signals &mdash; Enter at 10:45am after ORB confirmation</p>
+  <table width="100%" cellpadding="0" cellspacing="0">
+    ${breakoutRows}
+  </table>
+</td></tr>`:''}
 
 <!-- REIT UNIVERSE -->
-<div class="sec-label">REIT Universe — Moelis Pure Landlords (${reitResults.length})</div>
-<div class="pad-sm">
-  <table>
+<tr><td style="${S.sec}">
+  <p style="${S.label}">REIT Universe &mdash; Moelis Coverage (${reitResults.length})</p>
+  <table width="100%" cellpadding="0" cellspacing="0">
     <tr>
-      <th>Ticker</th><th>Name</th><th class="r">Price</th>
-      <th class="r">Yield</th><th class="r">NTA</th><th>Signal</th>
+      <th style="${S.th}">Ticker</th>
+      <th style="${S.th}">Name</th>
+      <th style="${S.th_r}">Price</th>
+      <th style="${S.th_r}">Yield</th>
+      <th style="${S.th_r}">NTA</th>
+      <th style="${S.th_r}">Disc/Prem</th>
     </tr>
-    ${reitResults.sort((a,b)=>(b.dps_yield||0)-(a.dps_yield||0)).map(reitCard).join('')}
+    ${reitTrigRows}
+    ${reitAllRows}
   </table>
-  <p class="source">Data: <a href="https://moelis.com.au">Moelis Australia</a> broker research · NTA, DPS and gearing from latest broker reports · Yield = DPS FY26 / price</p>
-</div>
+  <p style="font-size:10px;color:#aaa;margin:8px 0 0;">NTA and DPS from Moelis Australia broker research &nbsp;·&nbsp; Yield = DPS FY26 / last price</p>
+</td></tr>
 
-<!-- CTA -->
-<div class="cta-wrap">
-  <a href="https://areit.netlify.app" class="cta-btn">📊 View Dashboard</a>
-  <a href="https://areit.netlify.app/admin" class="cta-btn">⚙ Admin Portal</a>
-</div>
-
-<!-- HEADLINES -->
 ${headlines?.length?`
-<div class="sec-label">Market News</div>
-<div class="pad-sm">
-  ${headlines.map(h=>`<div class="hl">→ ${h}</div>`).join('')}
-  <p class="source">Sources: <a href="https://news.google.com/rss/search?q=site:reuters.com&hl=en-US&gl=US&ceid=US:en">Reuters via Google News</a> · <a href="https://afr.com">AFR</a></p>
-</div>`:''}
+<!-- NEWS -->
+<tr><td style="${S.sec_sm}">
+  <p style="${S.label}">Market News</p>
+  ${headlines.map(h=>`<p style="font-size:12px;color:#333;margin:0 0 6px;line-height:1.6;">${h}</p>`).join('')}
+</td></tr>`:''}
 
-${(reitHeadlines?.length || rateNews?.length)?`
-<div class="sec-label">REIT &amp; Rate News</div>
-<div class="pad-sm">
-  ${(rateNews||[]).map(h=>`<div class="hl" style="color:#1a3a5c;font-weight:600">→ ${h}</div>`).join('')}
-  ${(reitHeadlines||[]).map(h=>`<div class="hl">→ ${h}</div>`).join('')}
-  <p class="source">Sources: <a href="https://www.rba.gov.au/rss/rss-cb-media-releases.xml">RBA Media Releases</a> · <a href="https://www.rba.gov.au/rss/rss-cb-speeches.xml">RBA Speeches</a> · Reuters</p>
-</div>`:''}
+${rateNews?.length?`
+<tr><td style="${S.sec_sm}">
+  <p style="${S.label}">RBA &amp; Rates</p>
+  ${rateNews.map(h=>`<p style="font-size:12px;color:#333;margin:0 0 6px;line-height:1.6;">${h}</p>`).join('')}
+</td></tr>`:''}
 
 <!-- FOOTER -->
-<div class="footer">
-  <div class="footer-text">
-    <strong style="color:#fff">James Storey</strong> — ASX Trading Platform<br>
-    <a href="https://areit.netlify.app">areit.netlify.app</a> · Powered by EODHD · FRED · Yahoo Finance · XGBoost ML
-  </div>
-  <hr class="footer-divider">
-  <div class="footer-disclaimer">
-    This is a personal automated trading system for paper trading and research purposes only. Not financial advice. Past performance is not indicative of future results. All signals are generated algorithmically and should be reviewed before execution. Data sources: EODHD (price/technical), Yahoo Finance (indices/FX), FRED (rates), Moelis Australia (REIT fundamentals), RBA (rate news).
-  </div>
-</div>
+<tr><td style="${S.footer}">
+  <p style="font-size:11px;color:#888;margin:0 0 4px;"><a href="https://areit.netlify.app" style="color:#0a1628;font-weight:700;">areit.netlify.app</a> &nbsp;&middot;&nbsp; Data: EODHD &middot; Yahoo Finance &middot; FRED &middot; Moelis Australia</p>
+  <p style="${S.disc}">This is a personal automated research tool for paper trading purposes only. Not financial advice. Signals are generated algorithmically and should be reviewed before execution. Past performance is not indicative of future results.</p>
+</td></tr>
 
-</div>
+</table>
+</td></tr></table>
 </body></html>`;
 
   return { subject, html };
 }
+
 
 
 const { schedule } = require('@netlify/functions');
