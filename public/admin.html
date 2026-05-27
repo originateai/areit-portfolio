@@ -582,6 +582,7 @@ td.r { text-align: right; font-family: 'DM Mono', monospace; }
 </div><!-- /main -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script>
 'use strict';
 
@@ -889,21 +890,22 @@ async function handleResearchUpload(file) {
   try {
     let fileData, fileType;
 
-    if (isPDF) {
-      fileData = await toBase64(file);
-      fileType = 'application/pdf';
-      showStatus('research-status', `Sending ${file.name} to Claude for analysis...`, 'info');
-    } else {
-      // Send Excel as base64 — server parses it with xlsx library
-      fileData = await toBase64(file);
-      fileType = 'excel';
-      showStatus('research-status', `Sending ${file.name} to Claude for analysis...`, 'info');
-    }
+    showStatus('research-status', `Compressing ${file.name}...`, 'info');
+
+    // Read file as ArrayBuffer, gzip compress with pako, then base64 encode
+    // This gets large Excel/PDF files well under Netlify's 6MB body limit
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuffer);
+    const compressed = pako.gzip(uint8);
+    fileData = btoa(String.fromCharCode(...compressed));
+    fileType = isPDF ? 'application/pdf' : 'excel';
+
+    showStatus('research-status', `Sending ${file.name} to Claude for analysis...`, 'info');
 
     const res = await fetch('/.netlify/functions/parse-research', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileData, fileType, fileName: file.name })
+      body: JSON.stringify({ fileData, fileType, fileName: file.name, compressed: true })
     });
 
     const result = await res.json();
