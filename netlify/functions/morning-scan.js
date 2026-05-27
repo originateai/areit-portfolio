@@ -189,10 +189,10 @@ async function scanBreakouts(db, stocks, livePrices, macroScore) {
   try {
     const tickers = stocks.map(s => s.ticker);
 
-    // Fetch 260 days per-ticker to calculate 52W high/low from prices table.
+    // Fetch 365 calendar days per-ticker = ~252 trading days = exactly 1 year (52 weeks)
     // stocks.high_52w is never populated (all null) so we calculate it ourselves.
     // Per-ticker fetch avoids Supabase's 1000-row cap on multi-ticker queries.
-    const cutoff52w = new Date(Date.now() - 260 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const cutoff52w = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const priceMap = {};
     const PARALLEL = 8;
     for (let i = 0; i < tickers.length; i += PARALLEL) {
@@ -203,7 +203,7 @@ async function scanBreakouts(db, stocks, livePrices, macroScore) {
           .eq('ticker', ticker)
           .gte('market_date', cutoff52w)
           .order('market_date', { ascending: false })
-          .limit(260)
+          .limit(280)  // 280 rows covers 365 calendar days of trading
       ));
       results.forEach(({ data }) => {
         (data||[]).forEach(p => {

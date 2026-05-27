@@ -74,37 +74,62 @@ function calcIndicators(ticker, priceRows, today) {
   if (!priceRows || priceRows.length < 30) return null;
 
   // Sort chronologically, use adjusted_close for calculations
-  const rows   = [...priceRows].sort((a,b) => a.market_date.localeCompare(b.market_date));
-  const closes = rows.map(r => parseFloat(r.adjusted_close || r.close));
-  const highs  = rows.map(r => parseFloat(r.high  || r.close));
-  const lows   = rows.map(r => parseFloat(r.low   || r.close));
-  const opens  = rows.map(r => parseFloat(r.open  || r.close));
-  const vols   = rows.map(r => parseInt(r.volume  || 0));
-  const n      = rows.length;
-  const price  = parseFloat(rows[n-1].close); // display price = raw close
-  const adjPx  = closes[n-1];
+  const rows      = [...priceRows].sort((a,b) => a.market_date.localeCompare(b.market_date));
+  const adjCloses = rows.map(r => parseFloat(r.adjusted_close || r.close)); // adjusted for RSI/MA/MACD
+  const closes    = rows.map(r => parseFloat(r.close));                     // raw close for candles/display
+  const highs     = rows.map(r => parseFloat(r.high  || r.close));
+  const lows      = rows.map(r => parseFloat(r.low   || r.close));
+  const opens     = rows.map(r => parseFloat(r.open  || r.close));
+  const vols      = rows.map(r => parseInt(r.volume  || 0));
+  const n         = rows.length;
+  const price     = closes[n-1];   // raw close for display
+  const adjPx     = adjCloses[n-1]; // adjusted close for indicator comparisons
 
-  const rsi14   = wilderRSI(closes, 14);
-  const ma20    = sma(closes, 20);
-  const ma50    = sma(closes, 50);
-  const ma200   = sma(closes, 200);
-  const bb      = bollingerBands(closes, 20);
-  const macdRes = macdCalc(closes);
-  const atr14   = atrCalc(highs, lows, closes, 14);
-  const roc20   = roc(closes, 20);
-  const roc5    = roc(closes, 5);
+  // Use adjusted closes for all indicator calculations (continuity across dividends/splits)
+  const rsi14   = wilderRSI(adjCloses, 14);
+  const ma20    = sma(adjCloses, 20);
+  const ma50    = sma(adjCloses, 50);
+  const ma200   = sma(adjCloses, 200);
+  const bb      = bollingerBands(adjCloses, 20);
+  const macdRes = macdCalc(adjCloses);
+  const atr14   = atrCalc(highs, lows, adjCloses, 14);
+  const roc20   = roc(adjCloses, 20);
+  const roc5    = roc(adjCloses, 5);
 
   // Volume ratio
   const avgVol20  = vols.slice(-21,-1).reduce((a,b)=>a+b,0) / 20;
   const vol_ratio = avgVol20 > 0 ? vols[n-1] / avgVol20 : 1;
 
-  // Candle features
-  const body         = Math.abs(price - opens[n-1]);
-  const range        = highs[n-1] - lows[n-1];
-  const lower_shadow = Math.min(opens[n-1], price) - lows[n-1];
-  const upper_shadow = highs[n-1] - Math.max(opens[n-1], price);
-  const hammer       = lower_shadow > body * 2 && upper_shadow < body * 0.5;
-  const bull_candle  = price > opens[n-1];
+  // Candle detection — use RAW closes only (not adjusted), all on same price scale
+  // Candle 0 = today, Candle 1 = yesterday, Candle 2 = day before
+  const c0_close = closes[n-1], c0_open = opens[n-1], c0_high = highs[n-1], c0_low = lows[n-1];
+  const c1_close = closes[n-2], c1_open = opens[n-2], c1_high = highs[n-2], c1_low = lows[n-2];
+  const c2_close = n >= 3 ? closes[n-3] : c1_close;
+  const c2_open  = n >= 3 ? opens[n-3]  : c1_open;
+
+  const body0  = Math.abs(c0_close - c0_open);
+  const body1  = Math.abs(c1_close - c1_open);
+  const range0 = c0_high - c0_low;
+  const range1 = c1_high - c1_low;
+  const lower_shadow = Math.min(c0_open, c0_close) - c0_low;
+  const upper_shadow = c0_high - Math.max(c0_open, c0_close);
+  const bull0  = c0_close > c0_open;
+  const bull1  = c1_close > c1_open;
+  const bear1  = !bull1;
+  const bear2  = c2_close < c2_open;
+
+  // Hammer: bearish prev day, long lower shadow > 2x body, small upper shadow
+  const hammer = bear1 && lower_shadow > body0 * 2 && upper_shadow < body0 * 0.5 && range0 > 0;
+
+  // Bullish Engulfing: bearish prev day, today bullish and engulfs prev body
+  const bull_engulfing = bear1 && bull0 && c0_open < c1_close && c0_close > c1_open && body0 > body1;
+
+  // Morning Star: bearish 2 days ago, doji/small body yesterday, bullish today above midpoint
+  const doji1 = range1 > 0 && body1 / range1 < 0.1;
+  const morning_star = bear2 && doji1 && bull0 && c0_close > (c2_open + c2_close) / 2;
+
+  const body   = body0;
+  const range  = range0;
 
   const bb_pos = bb ? (adjPx - bb.lower) / (bb.upper - bb.lower) : null;
   const pct_from_ma20  = ma20  ? (adjPx - ma20)  / ma20  : null;
@@ -136,9 +161,10 @@ function calcIndicators(ticker, priceRows, today) {
     golden_cross,
     pct_from_ma20:   pct_from_ma20  ? parseFloat(pct_from_ma20.toFixed(6))  : null,
     pct_from_ma200:  pct_from_ma200 ? parseFloat(pct_from_ma200.toFixed(6)) : null,
-    candle_hammer:   hammer,
-    candle_engulfing_bull: bull_candle && body > 0.01 * price,
-    candle_doji:     body < range * 0.1,
+    candle_hammer:        hammer,
+    candle_engulfing_bull: bull_engulfing,
+    candle_morning_star:  morning_star,
+    candle_doji:          body < range * 0.1,
   };
 }
 
