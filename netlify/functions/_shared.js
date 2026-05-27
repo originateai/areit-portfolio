@@ -78,7 +78,7 @@ async function sendEmail(subject, html) {
   const resend = getResend();
   const { data, error } = await resend.emails.send({
     from: `ASX Trading Platform <${FROM_EMAIL}>`,
-    to:   [ALERT_EMAIL],
+    to:   ALERT_EMAIL.split(',').map(e => e.trim()).filter(Boolean),
     subject, html
   });
   if (error) { console.error('Resend error:', error); throw new Error(error.message); }
