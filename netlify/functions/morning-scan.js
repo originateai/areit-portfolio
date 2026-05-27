@@ -187,24 +187,33 @@ async function scanBreakouts(db, stocks, livePrices, macroScore) {
   const breakouts = [];
 
   try {
-    // Get 52W high data from stocks table
     const tickers = stocks.map(s => s.ticker);
 
-    // Get recent price history for resistance and volume analysis
-    const { data: recentPrices } = await db.from('prices')
-      .select('ticker,market_date,close,high,volume')
-      .in('ticker', tickers)
-      .gte('market_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-      .order('market_date', { ascending: false });
-
-    if (!recentPrices?.length) return breakouts;
-
-    // Group by ticker
+    // Fetch 260 days per-ticker to calculate 52W high/low from prices table.
+    // stocks.high_52w is never populated (all null) so we calculate it ourselves.
+    // Per-ticker fetch avoids Supabase's 1000-row cap on multi-ticker queries.
+    const cutoff52w = new Date(Date.now() - 260 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const priceMap = {};
-    recentPrices.forEach(p => {
-      if (!priceMap[p.ticker]) priceMap[p.ticker] = [];
-      priceMap[p.ticker].push(p);
-    });
+    const PARALLEL = 8;
+    for (let i = 0; i < tickers.length; i += PARALLEL) {
+      const group = tickers.slice(i, i + PARALLEL);
+      const results = await Promise.all(group.map(ticker =>
+        db.from('prices')
+          .select('ticker,market_date,close,high,low,volume')
+          .eq('ticker', ticker)
+          .gte('market_date', cutoff52w)
+          .order('market_date', { ascending: false })
+          .limit(260)
+      ));
+      results.forEach(({ data }) => {
+        (data||[]).forEach(p => {
+          if (!priceMap[p.ticker]) priceMap[p.ticker] = [];
+          priceMap[p.ticker].push(p);
+        });
+      });
+    }
+
+    if (!Object.keys(priceMap).length) return breakouts;
 
     for (const stock of stocks) {
       try {
@@ -216,9 +225,9 @@ async function scanBreakouts(db, stocks, livePrices, macroScore) {
         const price    = live.close || live.price;
         if (!price) continue;
 
-        // 52W high from stocks table
-        const high52w  = stock.high_52w;
-        const low52w   = stock.low_52w;
+        // Calculate 52W high/low from price history (prices are desc order)
+        const high52w = Math.max(...prices.map(p => parseFloat(p.high || p.close || 0)));
+        const low52w  = Math.min(...prices.filter(p => parseFloat(p.low || p.close) > 0).map(p => parseFloat(p.low || p.close)));
 
         // Volume ratio
         const todayVol = live.volume || 0;
@@ -998,25 +1007,22 @@ const run = async () => {
     const topBreakouts = breakoutResults.slice(0, 6);
     console.log(`Breakouts found: ${breakoutResults.length}, top: ${topBreakouts.length}`);
 
-    // 9. Save analysis
-    const allAnalysis = [...equityResults, ...reitResults].map(r => ({
-      ticker: r.ticker, analysis_date: today, close: r.price,
-      ma20: r.ma20, ma50: r.ma50, ma200: r.ma200,
-      above_ma20: r.above_ma20, above_ma200: r.above_ma200, golden_cross: r.golden_cross,
-      rsi14: r.rsi14, roc20: r.roc20, bb_position: r.bb_position,
-      vol_ratio: r.vol_ratio, pct_from_ma20: r.pct_from_ma20,
-      candle_pattern: r.candle_pattern, candle_hammer: r.candle_hammer,
-      candle_engulfing_bull: r.candle_engulfing_bull, candle_doji: r.candle_doji,
-      candle_morning_star: r.candle_morning_star,
-      dps_yield: r.dps_yield, yield_trigger_fired: r.yield_trigger_fired,
+    // 9. Save scoring results back to daily_analysis
+    // IMPORTANT: only write scoring/signal columns — never overwrite the indicator columns
+    // (rsi14, ma200, above_ma200, bb_position etc) that fetch-indicators already populated.
+    // Writing nulls for those columns via upsert would destroy the indicator data.
+    const scoringUpdates = [...equityResults, ...reitResults].map(r => ({
+      ticker: r.ticker, analysis_date: today,
+      // Scoring output only — no indicator columns
       layer1_macro: r.layer1_macro, layer2_trend: r.layer2_trend,
       layer3_momentum: r.layer3_momentum, layer4_reversion: r.layer4_reversion,
       layer5_volume: r.layer5_volume, layer6_candle: r.layer6_candle,
       total_score: r.total_score, signal: r.signal,
-      conviction: r.conviction, signal_reasons: r.signal_reasons
+      conviction: r.conviction, signal_reasons: r.signal_reasons,
+      dps_yield: r.dps_yield, yield_trigger_fired: r.yield_trigger_fired,
     }));
 
-    // Add breakout results to daily_analysis
+    // Breakout signals — these are new rows so safe to write all columns
     const breakoutAnalysis = (topBreakouts||[]).map(b => ({
       ticker: b.ticker, analysis_date: today, close: b.price,
       vol_ratio: b.vol_ratio,
@@ -1026,10 +1032,17 @@ const run = async () => {
       signal_reasons: b.signals,
     }));
 
-    const combined = [...allAnalysis, ...breakoutAnalysis];
-    if (combined.length > 0) {
-      await db.from('daily_analysis').upsert(combined, { onConflict: 'ticker,analysis_date' });
+    // Write scoring updates in chunks — these upsert only scoring columns onto existing indicator rows
+    const SCORE_CHUNK = 50;
+    for (let i = 0; i < scoringUpdates.length; i += SCORE_CHUNK) {
+      await db.from('daily_analysis')
+        .upsert(scoringUpdates.slice(i, i + SCORE_CHUNK), { onConflict: 'ticker,analysis_date' });
     }
+    if (breakoutAnalysis.length > 0) {
+      await db.from('daily_analysis')
+        .upsert(breakoutAnalysis, { onConflict: 'ticker,analysis_date' });
+    }
+    console.log(`Scoring saved: ${scoringUpdates.length} stocks, ${breakoutAnalysis.length} breakouts`);
 
     // 10. Save model trades — no duplicates
     // Auto-expire trades older than hold_days (default 3)
