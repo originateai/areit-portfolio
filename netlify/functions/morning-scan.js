@@ -978,7 +978,8 @@ const run = async () => {
     const breakoutAnalysis = (topBreakouts||[]).map(b => ({
       ticker: b.ticker, analysis_date: today, close: b.price,
       vol_ratio: b.vol_ratio,
-      total_score: b.breakout_score,
+      breakout_score: b.breakout_score,  // separate from 7-layer total_score
+      total_score: null,                 // never overwrite 7-layer score with breakout score
       signal: 'BREAKOUT',
       conviction: b.breakout_score >= 6 ? 'EXCEPTIONAL' : 'STRONG',
       signal_reasons: b.signals,
