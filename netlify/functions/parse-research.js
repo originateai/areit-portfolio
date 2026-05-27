@@ -35,17 +35,32 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'fileData and fileType required' }) };
   }
 
-  const isPDF   = fileType === 'application/pdf' || fileType === 'pdf' || fileName?.match(/\.pdf$/i);
-  const isExcel = fileType === 'excel' || fileType.includes('spreadsheet') || fileType.includes('ms-excel') || fileName?.match(/\.(xlsx|xls|xlsm)$/i);
+  const isPDFText   = fileType === 'pdf_text';    // pre-extracted in browser by PDF.js
+  const isExcelText = fileType === 'excel_text';  // pre-parsed in browser by SheetJS
+  const isPDF      = fileType === 'application/pdf' || fileType === 'pdf';
+  const isExcel    = fileType === 'excel' || fileType.includes('spreadsheet') || fileType.includes('ms-excel');
 
-  if (!isPDF && !isExcel) {
+  if (!isPDF && !isExcel && !isExcelText && !isPDFText) {
     return { statusCode: 400, body: JSON.stringify({ error: `Unsupported file type: ${fileType}` }) };
   }
 
   let messageContent;
 
-  if (isPDF) {
-    // Send PDF directly to Claude
+  if (isPDFText || isExcelText) {
+    // Pre-extracted text from browser — just send to Claude as text
+    messageContent = [
+      {
+        type: 'text',
+        text: `File: ${fileName}
+
+Extracted content:
+${fileData.slice(0, 40000)}
+
+${buildPrompt(fileName)}`
+      }
+    ];
+  } else if (isPDF) {
+    // PDF sent as base64 — send directly to Claude
     messageContent = [
       {
         type: 'document',
@@ -53,8 +68,21 @@ exports.handler = async (event) => {
       },
       { type: 'text', text: buildPrompt(fileName) }
     ];
+  } else if (isExcelText) {
+    // Excel pre-parsed in browser — fileData is plain text CSV
+    messageContent = [
+      {
+        type: 'text',
+        text: `File: ${fileName}
+
+Extracted spreadsheet content:
+${fileData.slice(0, 40000)}
+
+${buildPrompt(fileName)}`
+      }
+    ];
   } else {
-    // Excel: decode base64, parse with xlsx library
+    // Excel sent as base64 — parse server-side with xlsx
     try {
       const XLSX = require('xlsx');
       const buf  = Buffer.from(fileData, 'base64');
@@ -64,13 +92,21 @@ exports.handler = async (event) => {
         const ws  = wb.Sheets[sheetName];
         const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
         if (csv.trim().length > 100) {
-          text += `\n\n=== Sheet: ${sheetName} ===\n${csv.slice(0, 8000)}`;
+          text += `
+
+=== Sheet: ${sheetName} ===
+${csv.slice(0, 8000)}`;
         }
       }
       messageContent = [
         {
           type: 'text',
-          text: `File: ${fileName}\n\nExtracted spreadsheet content:\n${text}\n\n${buildPrompt(fileName)}`
+          text: `File: ${fileName}
+
+Extracted spreadsheet content:
+${text}
+
+${buildPrompt(fileName)}`
         }
       ];
     } catch(e) {
