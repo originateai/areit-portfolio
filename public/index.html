@@ -477,10 +477,14 @@ tfoot td.r{text-align:right}
     <div class="ph"><h1>Record Trade</h1><p>Enter contract note details after placing trade in CommSec</p></div>
     <div class="tab-row">
       <button class="tab active" onclick="switchTab('trade-type','equity',this)">ASX Equity</button>
-      <button class="tab" onclick="switchTab('trade-type','reit',this)">REIT (Income)</button>
+      <button class="tab" onclick="switchTab('trade-type','reit',this)">REIT</button>
+      <button class="tab" onclick="switchTab('trade-type','credit',this)">Credit Fund</button>
+      <button class="tab" onclick="switchTab('trade-type','hybrid',this)">Hybrid / Bond</button>
     </div>
+
+    <!-- EQUITY -->
     <div id="tt-equity" style="display:block">
-      <div class="sl">CommSec contract note details</div>
+      <div class="sl">CommSec contract note — ASX equity</div>
       <div class="form-grid">
         <div class="form-group"><label>ASX Ticker</label><input id="t-ticker" type="text" placeholder="BHP" style="text-transform:uppercase"></div>
         <div class="form-group"><label>Direction</label><select id="t-dir"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
@@ -493,11 +497,14 @@ tfoot td.r{text-align:right}
       <div style="background:var(--cream);border:1px solid var(--rule);padding:12px 14px;margin-bottom:14px;font-size:12px" id="trade-calc">Enter details above to see total cost.</div>
       <button class="btn btn-primary" onclick="saveRealTrade('equity')">Record trade</button>
     </div>
+
+    <!-- REIT -->
     <div id="tt-reit" style="display:none">
-      <div class="sl">REIT purchase — income portfolio</div>
+      <div class="sl">CommSec contract note — REIT income</div>
       <div class="form-grid">
         <div class="form-group"><label>REIT Ticker</label><input id="ri-ticker" type="text" placeholder="HDN" style="text-transform:uppercase"></div>
-        <div class="form-group"><label>Units bought</label><input id="ri-units" type="number" placeholder="5000"></div>
+        <div class="form-group"><label>Direction</label><select id="ri-dir"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+        <div class="form-group"><label>Units</label><input id="ri-units" type="number" placeholder="5000"></div>
         <div class="form-group"><label>Price ($)</label><input id="ri-price" type="number" step="0.001" placeholder="1.08"></div>
         <div class="form-group"><label>Trade Date</label><input id="ri-date" type="date"></div>
         <div class="form-group"><label>Brokerage ($)</label><input id="ri-brok" type="number" value="19.95"></div>
@@ -505,6 +512,52 @@ tfoot td.r{text-align:right}
       </div>
       <div style="background:var(--cream);border:1px solid var(--rule);padding:12px 14px;margin-bottom:14px;font-size:12px" id="reit-calc">Enter details above to see income impact.</div>
       <button class="btn btn-primary" onclick="saveRealTrade('reit')">Record REIT purchase</button>
+    </div>
+
+    <!-- CREDIT FUND -->
+    <div id="tt-credit" style="display:none">
+      <div class="sl">CommSec contract note — listed credit fund</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ticker</label><input id="cf-ticker" type="text" placeholder="MXT" style="text-transform:uppercase"></div>
+        <div class="form-group"><label>Direction</label><select id="cf-dir"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+        <div class="form-group"><label>Units</label><input id="cf-units" type="number" placeholder="10000"></div>
+        <div class="form-group"><label>Price ($)</label><input id="cf-price" type="number" step="0.001" placeholder="1.93"></div>
+        <div class="form-group"><label>NTA at purchase ($)</label><input id="cf-nta" type="number" step="0.001" placeholder="2.01"></div>
+        <div class="form-group"><label>Trade Date</label><input id="cf-date" type="date"></div>
+        <div class="form-group"><label>Brokerage ($)</label><input id="cf-brok" type="number" value="19.95"></div>
+        <div class="form-group"><label>Target Return p.a.</label><input id="cf-target" type="text" placeholder="RBA + 3.25%"></div>
+        <div class="form-group"><label>Contract Note #</label><input id="cf-note" type="text" placeholder="Optional"></div>
+      </div>
+      <div style="background:var(--cream);border:1px solid var(--rule);padding:12px 14px;margin-bottom:14px;font-size:12px" id="credit-calc">Enter details above to see income impact.</div>
+      <button class="btn btn-primary" onclick="saveRealTrade('credit')">Record credit fund purchase</button>
+    </div>
+
+    <!-- HYBRID / BOND -->
+    <div id="tt-hybrid" style="display:none">
+      <div class="sl">CommSec contract note — hybrid or bond</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ticker</label><input id="hb-ticker" type="text" placeholder="AN3PI" style="text-transform:uppercase"></div>
+        <div class="form-group"><label>Issuer</label><input id="hb-issuer" type="text" placeholder="ANZ Banking Group"></div>
+        <div class="form-group"><label>Type</label><select id="hb-type">
+          <option value="hybrid">Bank Hybrid / Capital Note</option>
+          <option value="listed_note">Listed Note</option>
+          <option value="corporate_bond">Corporate Bond</option>
+          <option value="govt_bond">Government Bond</option>
+        </select></div>
+        <div class="form-group"><label>Direction</label><select id="hb-dir"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+        <div class="form-group"><label>Face Value ($)</label><input id="hb-face" type="number" step="0.01" placeholder="100.00"></div>
+        <div class="form-group"><label>Purchase Price ($)</label><input id="hb-price" type="number" step="0.01" placeholder="103.17"></div>
+        <div class="form-group"><label>Units / Securities</label><input id="hb-units" type="number" placeholder="100"></div>
+        <div class="form-group"><label>Issue Margin (%)</label><input id="hb-margin" type="number" step="0.01" placeholder="3.00"></div>
+        <div class="form-group"><label>First Call Date</label><input id="hb-call" type="date"></div>
+        <div class="form-group"><label>Maturity Date</label><input id="hb-maturity" type="date"></div>
+        <div class="form-group"><label>Franking (%)</label><input id="hb-franking" type="number" value="100" placeholder="100"></div>
+        <div class="form-group"><label>Trade Date</label><input id="hb-date" type="date"></div>
+        <div class="form-group"><label>Brokerage ($)</label><input id="hb-brok" type="number" value="19.95"></div>
+        <div class="form-group"><label>Contract Note #</label><input id="hb-note" type="text" placeholder="Optional"></div>
+      </div>
+      <div style="background:var(--cream);border:1px solid var(--rule);padding:12px 14px;margin-bottom:14px;font-size:12px" id="hybrid-calc">Enter details above to see running yield and YTM.</div>
+      <button class="btn btn-primary" onclick="saveRealTrade('hybrid')">Record hybrid / bond purchase</button>
     </div>
   </div>
 
@@ -1680,6 +1733,59 @@ async function saveRealTrade(type) {
     });
     alert(`✓ ${units} ${ticker} @ $${price.toFixed(3)} added to REIT income portfolio`);
     go('reit', document.querySelector('.nav a'));
+
+  } else if (type === 'credit') {
+    const ticker  = document.getElementById('cf-ticker').value.toUpperCase().trim();
+    const dir     = document.getElementById('cf-dir').value;
+    const units   = parseFloat(document.getElementById('cf-units').value);
+    const price   = parseFloat(document.getElementById('cf-price').value);
+    const nta     = parseFloat(document.getElementById('cf-nta').value||0);
+    const date    = document.getElementById('cf-date').value;
+    const brok    = parseFloat(document.getElementById('cf-brok').value||19.95);
+    const target  = document.getElementById('cf-target').value;
+    const note    = document.getElementById('cf-note').value;
+    if (!ticker||!units||!price||!date) { alert('Please fill ticker, units, price and date'); return; }
+    const total   = units * price + brok;
+    const disc    = nta > 0 ? ((price - nta) / nta * 100).toFixed(1) : null;
+    await db.from('real_trades').insert({
+      ticker, universe: 'CREDIT', trade_date: date,
+      direction: dir, units, price, brokerage: brok, total_cost: total,
+      contract_note: note, broker: 'CommSec',
+      notes: `NTA: $${nta||'--'} | Disc: ${disc||'--'}% | Target: ${target||'--'}`
+    });
+    alert(`✓ ${dir} ${units} ${ticker} @ $${price.toFixed(3)} recorded${disc ? ` (${disc}% ${parseFloat(disc)<0?'disc':'prem'} to NTA)` : ''}`);
+    go('credit-signals', document.querySelector('.nav a'));
+
+  } else if (type === 'hybrid') {
+    const ticker   = document.getElementById('hb-ticker').value.toUpperCase().trim();
+    const issuer   = document.getElementById('hb-issuer').value;
+    const hbtype   = document.getElementById('hb-type').value;
+    const dir      = document.getElementById('hb-dir').value;
+    const face     = parseFloat(document.getElementById('hb-face').value||100);
+    const price    = parseFloat(document.getElementById('hb-price').value);
+    const units    = parseFloat(document.getElementById('hb-units').value);
+    const margin   = parseFloat(document.getElementById('hb-margin').value||0);
+    const callDate = document.getElementById('hb-call').value;
+    const matDate  = document.getElementById('hb-maturity').value;
+    const franking = parseFloat(document.getElementById('hb-franking').value||100);
+    const date     = document.getElementById('hb-date').value;
+    const brok     = parseFloat(document.getElementById('hb-brok').value||19.95);
+    const note     = document.getElementById('hb-note').value;
+    if (!ticker||!units||!price||!date) { alert('Please fill ticker, units, price and date'); return; }
+    const total    = units * price + brok;
+    // Running yield = (margin + RBA 4.35%) / price * face, grossed for franking
+    const rba      = 4.35;
+    const grossDist = (margin + rba) / 100 * face;
+    const frankingCredit = franking > 0 ? grossDist * (franking/100) * (0.30/0.70) : 0;
+    const grossYield = price > 0 ? ((grossDist + frankingCredit) / price * 100).toFixed(2) : '--';
+    await db.from('real_trades').insert({
+      ticker, company_name: issuer, universe: hbtype.toUpperCase(), trade_date: date,
+      direction: dir, units, price, brokerage: brok, total_cost: total,
+      contract_note: note, broker: 'CommSec',
+      notes: `Margin: ${margin}% | Franking: ${franking}% | Gross yield: ${grossYield}% | Call: ${callDate||'--'} | Maturity: ${matDate||'--'}`
+    });
+    alert(`✓ ${dir} ${units} ${ticker} @ $${price.toFixed(2)} recorded | Gross yield ~${grossYield}%`);
+    go('bond-signals', document.querySelector('.nav a'));
   }
 }
 
