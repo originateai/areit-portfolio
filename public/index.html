@@ -337,11 +337,17 @@ tfoot td.r{text-align:right}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
       <select id="reit-sort" onchange="loadREITSignals()"
         style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
-        <option value="yield">Yield (highest)</option>
+        <option value="yield">DPS Yield (highest)</option>
         <option value="mktcap">Mkt Cap (largest)</option>
-        <option value="discount">Discount to NTA (deepest)</option>
+        <option value="gross_assets">Gross Assets (largest)</option>
+        <option value="discount">Disc to NTA (deepest)</option>
+        <option value="disc_nav">Disc to NAV (deepest)</option>
+        <option value="disc_ga">Disc to Gross Assets (deepest)</option>
+        <option value="implied_wacr">Implied WACR (highest)</option>
+        <option value="wacr">Portfolio WACR (highest)</option>
         <option value="price">Price (highest)</option>
         <option value="target8">8% Target price</option>
+        <option value="eps_yield">EPS Yield (highest)</option>
         <option value="score">Strategy score</option>
         <option value="ticker">Ticker A-Z</option>
         <option value="sector">Sector</option>
@@ -366,24 +372,31 @@ tfoot td.r{text-align:right}
       <span id="reit-count" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
     </div>
 
-    <table>
+    <table style="font-size:11px">
       <thead><tr id="reit-thead">
         <th onclick="reitSortBy('ticker')" style="cursor:pointer">Ticker ↕</th>
         <th>Name</th>
         <th onclick="reitSortBy('sector')" style="cursor:pointer">Sector ↕</th>
         <th class="r" onclick="reitSortBy('mktcap')" style="cursor:pointer">Mkt Cap ↕</th>
+        <th class="r" onclick="reitSortBy('gross_assets')" style="cursor:pointer">Gross Assets ↕</th>
         <th class="r" onclick="reitSortBy('price')" style="cursor:pointer">Price ↕</th>
         <th class="r">NTA</th>
         <th class="r" onclick="reitSortBy('discount')" style="cursor:pointer">Disc NTA ↕</th>
-        <th class="r" onclick="reitSortBy('yield')" style="cursor:pointer">Yield ↕</th>
+        <th class="r">NAV</th>
+        <th class="r" onclick="reitSortBy('disc_nav')" style="cursor:pointer">Disc NAV ↕</th>
+        <th class="r" onclick="reitSortBy('disc_ga')" style="cursor:pointer">Disc GA ↕</th>
+        <th class="r" onclick="reitSortBy('yield')" style="cursor:pointer">DPS Yld ↕</th>
+        <th class="r" onclick="reitSortBy('eps_yield')" style="cursor:pointer">EPS Yld ↕</th>
         <th class="r" onclick="reitSortBy('target8')" style="cursor:pointer">8% Target ↕</th>
+        <th class="r" onclick="reitSortBy('wacr')" style="cursor:pointer">WACR ↕</th>
+        <th class="r" onclick="reitSortBy('implied_wacr')" style="cursor:pointer">Impl WACR ↕</th>
         <th class="r" onclick="reitSortBy('gearing')" style="cursor:pointer">Gearing ↕</th>
         <th class="r" onclick="reitSortBy('wale')" style="cursor:pointer">WALE ↕</th>
         <th class="r">Occ.</th>
         <th onclick="reitSortBy('score')" style="cursor:pointer">Score ↕</th>
         <th>Status</th>
       </tr></thead>
-      <tbody id="reit-signals-tbody"><tr><td colspan="14" class="empty">Loading REIT signals...</td></tr></tbody>
+      <tbody id="reit-signals-tbody"><tr><td colspan="21" class="empty">Loading REIT signals...</td></tr></tbody>
     </table>
   </div>
 
@@ -1406,15 +1419,18 @@ async function loadREITSignals() {
 
   // Build enriched list
   let reitList = (stocks||[]).filter(s => s.ticker !== 'GSBG37').map(s => {
-    const pd   = prices[s.ticker];
-    const a    = analysisMap[s.ticker];
-    const p    = pd?.price;
-    const y    = s.dps_fy26 && p ? s.dps_fy26 / p : null;
-    const t8   = s.dps_fy26 ? s.dps_fy26 / 0.08 : null;
-    const disc = s.nta && p ? (p - s.nta) / s.nta : null;
-    const fired = y && y >= (s.yield_trigger || 0.08);
-    const close = !fired && t8 && p && (t8 - p) / p > -0.12;
-    return { s, a, p, y, t8, disc, fired, close };
+    const pd      = prices[s.ticker];
+    const a       = analysisMap[s.ticker];
+    const p       = pd?.price;
+    const y       = s.dps_fy26 && p ? s.dps_fy26 / p : null;
+    const eps_y   = s.eps_fy26 && p ? s.eps_fy26 / p : null;
+    const t8      = s.dps_fy26 ? s.dps_fy26 / 0.08 : null;
+    const disc    = s.nta && p ? (p - s.nta) / s.nta : null;
+    const disc_nav = s.nav && p ? (p - s.nav) / s.nav : null;
+    const disc_ga  = s.gross_assets && s.market_cap ? (s.market_cap / s.gross_assets - 1) : null;
+    const fired   = y && y >= (s.yield_trigger || 0.08);
+    const close   = !fired && t8 && p && (t8 - p) / p > -0.12;
+    return { s, a, p, y, eps_y, t8, disc, disc_nav, disc_ga, fired, close };
   });
 
   // Filter
@@ -1424,17 +1440,23 @@ async function loadREITSignals() {
   // Sort
   reitList.sort((a, b) => {
     switch(sortBy) {
-      case 'yield':    return (b.y||0) - (a.y||0);
-      case 'discount': return (a.disc||0) - (b.disc||0);
-      case 'score':    return (b.a?.total_score||0) - (a.a?.total_score||0);
-      case 'ticker':   return a.s.ticker.localeCompare(b.s.ticker);
-      case 'sector':   return (a.s.sector||'').localeCompare(b.s.sector||'');
-      case 'price':    return (b.p||0) - (a.p||0);
-      case 'target8':  return (b.t8||0) - (a.t8||0);
-      case 'mktcap':   return (b.s.market_cap||0) - (a.s.market_cap||0);
-      case 'gearing':  return (a.s.gearing||0) - (b.s.gearing||0);
-      case 'wale':     return (b.s.wale||0) - (a.s.wale||0);
-      default:         return (b.y||0) - (a.y||0);
+      case 'yield':         return (b.y||0) - (a.y||0);
+      case 'discount':      return (a.disc||0) - (b.disc||0);
+      case 'disc_nav':      return (a.disc_nav||0) - (b.disc_nav||0);
+      case 'disc_ga':       return (a.disc_ga||0) - (b.disc_ga||0);
+      case 'score':         return (b.a?.total_score||0) - (a.a?.total_score||0);
+      case 'ticker':        return a.s.ticker.localeCompare(b.s.ticker);
+      case 'sector':        return (a.s.sector||'').localeCompare(b.s.sector||'');
+      case 'price':         return (b.p||0) - (a.p||0);
+      case 'target8':       return (b.t8||0) - (a.t8||0);
+      case 'mktcap':        return (b.s.market_cap||0) - (a.s.market_cap||0);
+      case 'gross_assets':  return (b.s.gross_assets||0) - (a.s.gross_assets||0);
+      case 'gearing':       return (a.s.gearing||0) - (b.s.gearing||0);
+      case 'wale':          return (b.s.wale||0) - (a.s.wale||0);
+      case 'wacr':          return (b.s.wacr||0) - (a.s.wacr||0);
+      case 'implied_wacr':  return (b.s.implied_wacr||0) - (a.s.implied_wacr||0);
+      case 'eps_yield':     return (b.eps_y||0) - (a.eps_y||0);
+      default:              return (b.y||0) - (a.y||0);
     }
   });
 
@@ -1448,23 +1470,30 @@ async function loadREITSignals() {
     tr.addEventListener('click', () => openSignalDrawer(s.ticker));
     if (fired) tr.style.background = '#f0f8f0';
     if (close) tr.style.background = '#fffbf0';
-    const mcap = s.market_cap
-      ? (s.market_cap >= 1e9 ? `$${(s.market_cap/1e9).toFixed(1)}B` : `$${(s.market_cap/1e6).toFixed(0)}M`)
-      : '--';
+    const fmt_mc  = v => v ? (v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`) : '--';
+    const fmt_pct = v => v != null ? (v>=0?'+':''+(v*100).toFixed(1)+'%') : '--';
+    const disc_color = v => v==null?'var(--muted)':v<-0.1?'var(--green)':v<0?'var(--teal)':'var(--red)';
     tr.innerHTML = `
       <td><span class="tkr">${s.ticker}</span></td>
       <td style="font-size:11px">${s.name}</td>
       <td style="font-size:10px;color:var(--muted)">${s.sector||''}</td>
-      <td class="r" style="font-size:11px;color:var(--muted)">${mcap}</td>
+      <td class="r" style="color:var(--muted)">${fmt_mc(s.market_cap)}</td>
+      <td class="r" style="color:var(--muted)">${fmt_mc(s.gross_assets)}</td>
       <td class="r">${p ? f.$(p,3) : '--'}</td>
       <td class="r">${s.nta ? f.$(s.nta,2) : '--'}</td>
-      <td class="r" style="color:${disc==null?'var(--muted)':disc<-0.1?'var(--green)':disc<0?'var(--teal)':'var(--red)'}">
-        ${disc != null ? (disc*100).toFixed(1)+'%' : '--'}
-      </td>
+      <td class="r" style="color:${disc_color(disc)}">${disc != null ? (disc*100).toFixed(1)+'%' : '--'}</td>
+      <td class="r">${s.nav ? f.$(s.nav,2) : '--'}</td>
+      <td class="r" style="color:${disc_color(disc_nav)}">${disc_nav != null ? (disc_nav*100).toFixed(1)+'%' : '--'}</td>
+      <td class="r" style="color:${disc_color(disc_ga)}">${disc_ga != null ? (disc_ga*100).toFixed(1)+'%' : '--'}</td>
       <td class="r" style="color:${y>=0.08?'var(--green)':y>=0.07?'var(--teal)':'var(--muted)'};font-weight:${y>=0.07?600:400}">
         ${y ? (y*100).toFixed(1)+'%' : '--'}
       </td>
+      <td class="r" style="color:var(--muted)">${eps_y ? (eps_y*100).toFixed(1)+'%' : '--'}</td>
       <td class="r">${t8 ? f.$(t8,3) : '--'}</td>
+      <td class="r" style="color:var(--muted)">${s.wacr != null ? (s.wacr*100).toFixed(2)+'%' : '--'}</td>
+      <td class="r" style="color:${s.implied_wacr&&s.wacr&&s.implied_wacr>s.wacr?'var(--green)':'var(--muted)'}">
+        ${s.implied_wacr != null ? (s.implied_wacr*100).toFixed(2)+'%' : '--'}
+      </td>
       <td class="r" style="color:${s.gearing>0.4?'var(--red)':s.gearing>0.35?'var(--amber)':'var(--muted)'}">
         ${s.gearing != null ? (s.gearing*100).toFixed(0)+'%' : '--'}
       </td>
