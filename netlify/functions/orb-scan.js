@@ -266,10 +266,10 @@ exports.handler = schedule('30 0 * * 1-5', async () => {
     // Get overnight breakout candidates — both 52W breakouts and high-score mean reversion
     const { data: breakoutCandidates } = await db
       .from('daily_analysis')
-      .select('ticker, total_score, conviction, signal_reasons, signal')
+      .select('ticker, total_score, breakout_score, conviction, signal_reasons, signal')
       .eq('analysis_date', today)
       .eq('signal', 'BREAKOUT')
-      .order('total_score', { ascending: false })
+      .order('breakout_score', { ascending: false })
       .limit(10);
 
     const { data: mRevCandidates } = await db
