@@ -19,8 +19,14 @@ const KEY  = () => process.env.EODHD_API_KEY;
 async function getIntraday(ticker) {
   try {
     const epic = `${ticker}.AU`;
-    // Get today's intraday data from midnight
-    const from = Math.floor(new Date().setHours(0,0,0,0) / 1000);
+    // Get today's intraday data from AEST midnight (UTC+10)
+    // Netlify runs in UTC so we subtract 10 hours to get AEST midnight
+    const now  = new Date();
+    const aestMidnight = new Date(now);
+    aestMidnight.setUTCHours(0,0,0,0); // UTC midnight = AEST 10am (market open)
+    // Go back to previous UTC midnight (= AEST 10am yesterday) then add 0h
+    // Actually just use 24h ago from now to ensure we get today's bars
+    const from = Math.floor((Date.now() - 24*60*60*1000) / 1000);
     const url  = `${BASE}/intraday/${epic}?interval=5m&from=${from}&api_token=${KEY()}&fmt=json`;
     const res  = await fetch(url);
     if (!res.ok) return null;
