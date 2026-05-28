@@ -137,9 +137,11 @@ tfoot td.r{text-align:right}
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="strategies">⚡ Strategy Engine</a>
     <a data-page="screener">⬡ Stock Screener</a>
-    <div class="nav-sec">REIT Income</div>
+    <div class="nav-sec">Income</div>
     <a data-page="reit">⬡ REIT Holdings</a>
     <a data-page="reit-trading">~ REIT Signals</a>
+    <a data-page="credit-signals">◈ Credit Signals</a>
+    <a data-page="bond-signals">⬡ Bond Signals</a>
     <a data-page="income">$ Income Tracker</a>
     <div class="nav-sec">Analysis</div>
     <a data-page="stock-detail" id="nav-stock-detail" style="display:none">◉ Stock Detail</a>
@@ -329,23 +331,26 @@ tfoot td.r{text-align:right}
 
   <!-- REIT TRADING SIGNALS -->
   <div id="pg-reit-trading" class="page">
-    <div class="ph"><h1>REIT Strategy Signals</h1><p>All Moelis-covered pure landlords · 7-layer strategy + yield triggers · No managers, no developers</p></div>
+    <div class="ph"><h1>REIT Signals</h1><p>Moelis-covered landlords · Yield triggers · NTA discount · Strategy scoring</p></div>
     <div id="reit-macro-bar" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:4px;font-size:12px;border:1px solid var(--rule)"></div>
 
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
       <select id="reit-sort" onchange="loadREITSignals()"
         style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
         <option value="yield">Yield (highest)</option>
+        <option value="mktcap">Mkt Cap (largest)</option>
         <option value="discount">Discount to NTA (deepest)</option>
         <option value="price">Price (highest)</option>
         <option value="target8">8% Target price</option>
         <option value="score">Strategy score</option>
         <option value="ticker">Ticker A-Z</option>
         <option value="sector">Sector</option>
+        <option value="gearing">Gearing (lowest)</option>
+        <option value="wale">WALE (longest)</option>
       </select>
       <select id="reit-filter" onchange="loadREITSignals()"
         style="padding:7px 10px;border:1px solid var(--rule);border-radius:3px;font-size:12px;background:white">
-        <option value="">All pure landlords</option>
+        <option value="">All REITs</option>
         <option value="Retail REIT">Retail</option>
         <option value="Office REIT">Office</option>
         <option value="Industrial REIT">Industrial</option>
@@ -358,6 +363,7 @@ tfoot td.r{text-align:right}
         <input type="checkbox" id="reit-triggers-only" onchange="loadREITSignals()">
         Triggers only (8%+)
       </label>
+      <span id="reit-count" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
     </div>
 
     <table>
@@ -365,19 +371,48 @@ tfoot td.r{text-align:right}
         <th onclick="reitSortBy('ticker')" style="cursor:pointer">Ticker ↕</th>
         <th>Name</th>
         <th onclick="reitSortBy('sector')" style="cursor:pointer">Sector ↕</th>
+        <th class="r" onclick="reitSortBy('mktcap')" style="cursor:pointer">Mkt Cap ↕</th>
         <th class="r" onclick="reitSortBy('price')" style="cursor:pointer">Price ↕</th>
         <th class="r">NTA</th>
         <th class="r" onclick="reitSortBy('discount')" style="cursor:pointer">Disc NTA ↕</th>
         <th class="r" onclick="reitSortBy('yield')" style="cursor:pointer">Yield ↕</th>
         <th class="r" onclick="reitSortBy('target8')" style="cursor:pointer">8% Target ↕</th>
-        <th class="r">Gearing</th>
-        <th class="r">WALE</th>
+        <th class="r" onclick="reitSortBy('gearing')" style="cursor:pointer">Gearing ↕</th>
+        <th class="r" onclick="reitSortBy('wale')" style="cursor:pointer">WALE ↕</th>
         <th class="r">Occ.</th>
         <th onclick="reitSortBy('score')" style="cursor:pointer">Score ↕</th>
         <th>Status</th>
       </tr></thead>
-      <tbody id="reit-signals-tbody"><tr><td colspan="13" class="empty">Loading REIT signals...</td></tr></tbody>
+      <tbody id="reit-signals-tbody"><tr><td colspan="14" class="empty">Loading REIT signals...</td></tr></tbody>
     </table>
+  </div>
+
+  <!-- CREDIT SIGNALS — placeholder -->
+  <div id="pg-credit-signals" class="page">
+    <div class="ph"><h1>Credit Signals</h1><p>Listed credit funds · Ord Minnett coverage · NTA discount triggers · Yield signals</p></div>
+    <div style="padding:48px 0;text-align:center;color:var(--muted);">
+      <div style="font-size:32px;margin-bottom:16px;opacity:0.3">◈</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">Coming Soon</div>
+      <div style="font-size:12px;line-height:1.8;max-width:400px;margin:0 auto;">
+        Credit fund data ingestion is being built. Upload Ord Minnett weekly PDF via Admin → Upload Data to populate this section.<br><br>
+        Covers: MXT, GCI, QRI, KKC, MOT, MA1, REV, MRE, LF1, PCX, KIT, TCF and Listed Notes.
+      </div>
+    </div>
+  </div>
+
+  <!-- BOND SIGNALS — placeholder -->
+  <div id="pg-bond-signals" class="page">
+    <div class="ph"><h1>Bond &amp; Hybrid Signals</h1><p>ASX-listed bonds · Bank hybrids · Listed notes · Yield to maturity · Margin over swap</p></div>
+    <div style="padding:48px 0;text-align:center;color:var(--muted);">
+      <div style="font-size:32px;margin-bottom:16px;opacity:0.3">⬡</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">Coming Soon</div>
+      <div style="font-size:12px;line-height:1.8;max-width:400px;margin:0 auto;">
+        Bond and hybrid data requires EODHD All-In-One plan upgrade. Once upgraded, this section will show:<br><br>
+        • Major bank hybrids (AN3PI, CBAPI, NABPF, WBCPJ etc) — yield to call, margin to swap<br>
+        • Listed notes (CIMHA, DN1, DMNHA etc) — YTM, running yield<br>
+        • Upload MST Hybrid Monitor PDF via Admin → Upload Data
+      </div>
+    </div>
   </div>
 
   <!-- INCOME TRACKER -->
@@ -584,7 +619,7 @@ function go(page, el) {
   if (el) el.classList.add('active');
   const fns = {
     model: loadModel, real: loadReal, strategies: loadStrategies,
-    screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals,
+    screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     income: loadIncome, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
   };
@@ -1396,6 +1431,9 @@ async function loadREITSignals() {
       case 'sector':   return (a.s.sector||'').localeCompare(b.s.sector||'');
       case 'price':    return (b.p||0) - (a.p||0);
       case 'target8':  return (b.t8||0) - (a.t8||0);
+      case 'mktcap':   return (b.s.market_cap||0) - (a.s.market_cap||0);
+      case 'gearing':  return (a.s.gearing||0) - (b.s.gearing||0);
+      case 'wale':     return (b.s.wale||0) - (a.s.wale||0);
       default:         return (b.y||0) - (a.y||0);
     }
   });
@@ -1410,10 +1448,14 @@ async function loadREITSignals() {
     tr.addEventListener('click', () => openSignalDrawer(s.ticker));
     if (fired) tr.style.background = '#f0f8f0';
     if (close) tr.style.background = '#fffbf0';
+    const mcap = s.market_cap
+      ? (s.market_cap >= 1e9 ? `$${(s.market_cap/1e9).toFixed(1)}B` : `$${(s.market_cap/1e6).toFixed(0)}M`)
+      : '--';
     tr.innerHTML = `
       <td><span class="tkr">${s.ticker}</span></td>
       <td style="font-size:11px">${s.name}</td>
       <td style="font-size:10px;color:var(--muted)">${s.sector||''}</td>
+      <td class="r" style="font-size:11px;color:var(--muted)">${mcap}</td>
       <td class="r">${p ? f.$(p,3) : '--'}</td>
       <td class="r">${s.nta ? f.$(s.nta,2) : '--'}</td>
       <td class="r" style="color:${disc==null?'var(--muted)':disc<-0.1?'var(--green)':disc<0?'var(--teal)':'var(--red)'}">
