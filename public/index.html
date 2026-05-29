@@ -166,7 +166,7 @@ tfoot td.r{text-align:right}
       <div class="kc"><div class="kl">Invested</div><div class="kv teal" id="m-inv">--</div><div class="kn">Deployed</div></div>
       <div class="kc"><div class="kl">Cash</div><div class="kv" id="m-cash">--</div><div class="kn">Available</div></div>
       <div class="kc"><div class="kl">Open Trades</div><div class="kv" id="m-open">--</div></div>
-      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn" id="m-price-status">Loading live prices...</div></div>
+      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn" id="m-price-status">Loading live prices...</div><button id="refresh-prices-btn" onclick="clearAndRefreshPrices()" style="font-size:10px;padding:2px 8px;border:1px solid var(--rule);border-radius:3px;background:white;cursor:pointer;color:var(--muted);margin-top:4px;">↻ Refresh</button></div>
       <div class="kc"><div class="kl">Total P&L</div><div class="kv" id="m-pnl">--</div></div>
       <div class="kc"><div class="kl">Win Rate</div><div class="kv gold" id="m-win">--</div></div>
     </div>
@@ -803,6 +803,16 @@ let livePriceCache = {};
 let livePriceLastFetch = 0;
 let livePriceFetching = false;
 
+async function clearAndRefreshPrices() {
+  livePriceCache = {};
+  livePriceLastFetch = 0;
+  livePriceFetching = false;
+  const btn = document.getElementById('refresh-prices-btn');
+  if (btn) { btn.textContent = '↻ Refreshing...'; btn.disabled = true; }
+  await refreshLivePrices();
+  if (btn) { btn.textContent = '↻ Refresh prices'; btn.disabled = false; }
+}
+
 async function refreshLivePrices() {
   if (livePriceFetching) return;
   livePriceFetching = true;
@@ -815,7 +825,16 @@ async function refreshLivePrices() {
       const data = await res.json();
       // Support both old format (plain object) and new paginated format
       const prices = data.prices || data;
-      Object.assign(livePriceCache, prices);
+      // Sanitise before caching — reject prices >500x face or zero
+      // EODHD occasionally returns corrupt data (e.g. $702 for a $6 stock)
+      Object.keys(prices).forEach(ticker => {
+        const p = prices[ticker];
+        if (p && p.price > 0 && p.price < 50000) {
+          livePriceCache[ticker] = p;
+        } else if (p) {
+          console.warn(`Rejected bad price for ${ticker}: $${p.price}`);
+        }
+      });
       hasMore = data.hasMore || false;
       offset  = data.nextOffset || offset + 100;
     }
@@ -846,8 +865,17 @@ async function getPrices(tickers) {
     const map = {};
     (tickers || []).forEach(t => {
       if (livePriceCache[t]) {
+        const p = livePriceCache[t].price;
+        // Sanity check — reject prices that are >10x or <0.1x the open price
+        // This filters corrupt EODHD data points (e.g. $702 instead of $6.86)
+        const o = livePriceCache[t].open;
+        const isSane = !o || !p || (p > 0 && p < o * 10 && p > o * 0.1);
+        if (!isSane) {
+          console.warn(`Suspicious price for ${t}: $${p} (open $${o}) — skipping cache`);
+          return;
+        }
         map[t] = {
-          price:     livePriceCache[t].price,
+          price:     p,
           open:      livePriceCache[t].open,
           high:      livePriceCache[t].high,
           low:       livePriceCache[t].low,
