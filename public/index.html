@@ -1699,7 +1699,7 @@ async function saveRealTrade(type) {
     });
     alert(`✓ ${dir} ${units} ${ticker} @ $${price.toFixed(3)} recorded`);
     go('real', document.querySelector('.nav a:nth-child(2)'));
-  } else {
+  } else if (type === 'reit') {
     const ticker = document.getElementById('ri-ticker').value.toUpperCase().trim();
     const units  = parseFloat(document.getElementById('ri-units').value);
     const price  = parseFloat(document.getElementById('ri-price').value);
