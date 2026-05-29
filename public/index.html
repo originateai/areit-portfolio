@@ -831,9 +831,10 @@ async function refreshLivePrices() {
         const p = prices[ticker];
         if (p && p.price > 0 && p.price < 50000) {
           livePriceCache[ticker] = p;
-        } else if (p) {
+        } else if (p && p.price !== null && p.price !== undefined) {
           console.warn(`Rejected bad price for ${ticker}: $${p.price}`);
         }
+        // null price = delisted/suspended — silently skip
       });
       hasMore = data.hasMore || false;
       offset  = data.nextOffset || offset + 100;
