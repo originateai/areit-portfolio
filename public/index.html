@@ -1517,7 +1517,7 @@ async function loadREITSignals() {
   const countEl = document.getElementById('reit-count');
   if (countEl) countEl.textContent = `${reitList.length} REITs`;
 
-  reitList.forEach(({ s, a, p, y, t8, disc, fired, close }) => {
+  reitList.forEach(({ s, a, p, y, eps_y, t8, disc, disc_nav, disc_ga, fired, close }) => {
     const tr = document.createElement('tr');
     tr.className = 'clickable';
     tr.addEventListener('click', () => openSignalDrawer(s.ticker));
