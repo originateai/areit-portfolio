@@ -76,13 +76,17 @@ async function fetchFRED(seriesId) {
 
 async function sendEmail(subject, html) {
   const resend = getResend();
+  const recipients = ALERT_EMAIL.split(',').map(e => e.trim()).filter(Boolean);
+  // Recipients go in BCC so they are never exposed to one another.
+  // `to` is set to the from-address so the message is well-formed with a single visible recipient.
   const { data, error } = await resend.emails.send({
-    from: `ASX Trading Platform <${FROM_EMAIL}>`,
-    to:   ALERT_EMAIL.split(',').map(e => e.trim()).filter(Boolean),
+    from: `Morning Update <${FROM_EMAIL}>`,
+    to:   [FROM_EMAIL],
+    bcc:  recipients,
     subject, html
   });
   if (error) { console.error('Resend error:', error); throw new Error(error.message); }
-  console.log('Email sent:', data?.id);
+  console.log('Email sent:', data?.id, '->', recipients.length, 'bcc recipient(s)');
   return data;
 }
 
