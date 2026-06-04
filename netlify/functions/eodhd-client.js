@@ -220,6 +220,70 @@ async function searchTicker(query) {
   }
 }
 
+// ── MACRO (replaces fetchYahoo) ───────────────────────────────────────────────
+// Maps Yahoo-style macro symbols to their EODHD equivalents and returns the SAME
+// shape as the old fetchYahoo(), so morning-scan's scoring logic is unchanged.
+//
+// VERIFY ON FIRST RUN (EODHD naming differs from Yahoo for a few of these — check
+// the logs; any that come back null fall through to the hardcoded defaults in
+// morning-scan, so a wrong symbol degrades gracefully rather than crashing):
+//   ^TNX (US 10yr) scale, 000001.SS (Shanghai), GC/CL/HG .COMM continuous contracts.
+const MACRO_MAP = {
+  '^GSPC':    'GSPC.INDX',     // S&P 500
+  '^IXIC':    'IXIC.INDX',     // Nasdaq Composite
+  '^DJI':     'DJI.INDX',      // Dow
+  '^VIX':     'VIX.INDX',      // VIX
+  'AUDUSD=X': 'AUDUSD.FOREX',  // AUD/USD
+  '^TNX':     'TNX.INDX',      // US 10yr yield index
+  '^N225':    'N225.INDX',     // Nikkei 225
+  '000001.SS':'000001.SHG',    // Shanghai Composite (verify symbol)
+  '^AXJO':    'AXJO.INDX',     // ASX 200
+  'GC=F':     'GC.COMM',       // Gold
+  'CL=F':     'CL.COMM',       // WTI oil
+  'HG=F':     'HG.COMM',       // Copper
+  'GSBG37.AX':'GSBG37.AU',     // AUS govt bond ETF (10yr proxy)
+  'VNQ':      'VNQ.US',        // US REIT ETF
+};
+
+async function fetchMacro(yahooSymbol) {
+  const sym = MACRO_MAP[yahooSymbol] || yahooSymbol;
+  try {
+    const to   = new Date().toISOString().split('T')[0];
+    const from = new Date(Date.now() - 14 * 864e5).toISOString().split('T')[0];
+    const data = await eodFetch(`eod/${sym}`, { from, to, period: 'd' });
+    if (!Array.isArray(data) || data.length < 2) {
+      console.error(`EODHD macro: no data for ${yahooSymbol} (${sym})`);
+      return null;
+    }
+    const closes  = data.map(d => parseFloat(d.close)).filter(v => !isNaN(v));
+    const opens   = data.map(d => parseFloat(d.open)).filter(v => !isNaN(v));
+    const highs   = data.map(d => parseFloat(d.high)).filter(v => !isNaN(v));
+    const lows    = data.map(d => parseFloat(d.low)).filter(v => !isNaN(v));
+    const volumes = data.map(d => parseInt(d.volume || 0));
+    if (closes.length < 2) return null;
+    let price = closes[closes.length - 1];
+    let prev  = closes[closes.length - 2];
+    // ^TNX convention guard: Yahoo quotes ~4.31; some feeds quote ~43.1 (×10).
+    // Normalise so the downstream `price/100` yields a sane decimal.
+    if (yahooSymbol === '^TNX' && price > 20) { price /= 10; prev /= 10; }
+    return {
+      ticker: yahooSymbol,
+      price:  parseFloat(price.toFixed(4)),
+      prev:   parseFloat(prev.toFixed(4)),
+      open:   opens[opens.length - 1]  || price,
+      high:   highs[highs.length - 1]  || price,
+      low:    lows[lows.length - 1]    || price,
+      volume: volumes[volumes.length - 1] || 0,
+      change:    (price - prev) / prev,
+      changePct: parseFloat(((price - prev) / prev).toFixed(6)),
+      closes, opens, highs, lows, volumes,
+    };
+  } catch (e) {
+    console.error(`EODHD macro error ${yahooSymbol} (${sym}):`, e.message);
+    return null;
+  }
+}
+
 // ── MARKET STATUS ─────────────────────────────────────────────────────────────
 function isASXOpen() {
   const now   = new Date();
@@ -243,5 +307,6 @@ module.exports = {
   getDividends,
   searchTicker,
   isASXOpen,
-  asxTicker
+  asxTicker,
+  fetchMacro
 };

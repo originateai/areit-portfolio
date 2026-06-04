@@ -10,7 +10,7 @@ const {
   BOND_YIELD, VIX_TRIGGER, emailStyles
 } = require('./_shared.js');
 const { analyseStock, scoreStock, getPositionSize } = require('./strategy-engine.js');
-const { getBulkPrices }  = require('./eodhd-client.js');
+const { getBulkPrices, fetchMacro }  = require('./eodhd-client.js');
 
 // ── FETCH HEADLINES ───────────────────────────────────────────────────────────
 async function fetchHeadlines() {
@@ -684,20 +684,21 @@ const run = async () => {
     // 1. US + Asian market data (Yahoo Finance — free, reliable for indices)
     const [sp500, nasdaq, dow, vixData, audData, us10yrData,
            nikkeiData, shanghaiData, futuresData,
-           ironOreData, goldData, oilData, copperData, gsbgData, vnqData] = await Promise.all([
-      fetchYahoo('^GSPC', '5d'), fetchYahoo('^IXIC', '5d'),
-      fetchYahoo('^DJI',  '5d'), fetchYahoo('^VIX',  '5d'),
-      fetchYahoo('AUDUSD=X', '5d'), fetchYahoo('^TNX', '5d'),
-      fetchYahoo('^N225',    '5d'),
-      fetchYahoo('000001.SS','5d'),
-      fetchYahoo('^AXJO',   '5d'),
-      fetchYahoo('GC=F',  '5d'),  // Gold futures
-      fetchYahoo('GC=F',  '5d'),  // Gold (duplicate — iron ore has no free ticker)
-      fetchYahoo('CL=F',  '5d'),  // WTI oil
-      fetchYahoo('HG=F',  '5d'),  // Copper
-      fetchYahoo('GSBG37.AX', '5d'), // AUS govt bond — proxy for AUS 10yr
-      fetchYahoo('VNQ',   '5d'),  // US REIT ETF — lead indicator for ASX REITs
+           goldData, oilData, copperData, gsbgData, vnqData] = await Promise.all([
+      fetchMacro('^GSPC'), fetchMacro('^IXIC'),
+      fetchMacro('^DJI'),  fetchMacro('^VIX'),
+      fetchMacro('AUDUSD=X'), fetchMacro('^TNX'),
+      fetchMacro('^N225'),
+      fetchMacro('000001.SS'),
+      fetchMacro('^AXJO'),
+      fetchMacro('GC=F'),   // Gold
+      fetchMacro('CL=F'),   // WTI oil
+      fetchMacro('HG=F'),   // Copper
+      fetchMacro('GSBG37.AX'), // AUS govt bond — proxy for AUS 10yr
+      fetchMacro('VNQ'),    // US REIT ETF — lead indicator for ASX REITs
     ]);
+    // Iron ore has no clean ticker on this plan — reuse gold as the prior code did.
+    const ironOreData = goldData;
     
     // Use GSBG37 price change as AUS 10yr direction proxy
     // Bond price moves inverse to yield — price up = yield down
@@ -1043,12 +1044,28 @@ const run = async () => {
     const { error: claimErr } = await db
       .from('email_log')
       .insert({ email_type: 'morning_scan', send_date: sendDate });
-    if (claimErr) {
-      // Unique-constraint violation => another invocation already sent today. Skip.
-      console.log(`Morning email already sent for ${sendDate} — skipping duplicate. (${claimErr.message})`);
+
+    if (claimErr && claimErr.code === '23505') {
+      // TRUE duplicate: a prior invocation already claimed today. Skip silently.
+      console.log(`Morning email already sent for ${sendDate} — skipping duplicate.`);
     } else {
-      await sendEmail(subject, html);
-      console.log('Morning scan complete — email sent');
+      // Either we claimed cleanly (no error) OR the claim failed for a NON-duplicate
+      // reason (e.g. table missing, transient DB error). In the latter case we send
+      // anyway — a possible duplicate is far better than silently missing the email.
+      if (claimErr) {
+        console.error(`email_log claim failed (sending anyway): ${claimErr.message}`);
+      }
+      try {
+        await sendEmail(subject, html);
+        console.log('Morning scan complete — email sent');
+      } catch (sendErr) {
+        // Send failed AFTER we claimed the row — roll it back so a retry can re-send.
+        if (!claimErr) {
+          await db.from('email_log').delete()
+            .eq('email_type', 'morning_scan').eq('send_date', sendDate);
+        }
+        throw sendErr;
+      }
     }
 
     return { statusCode: 200, body: JSON.stringify({
