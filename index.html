@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ASX Trading Platform</title>
+<title>Morning Update</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--ink:#0e1117;--paper:#f5f2ec;--cream:#ede9e0;--rule:#c8c2b4;--gold:#b8943f;--gold-lt:#d4b06a;--teal:#1a5f6e;--red:#8b2e2e;--green:#2d5a2d;--amber:#7a5500;--muted:#6b6660;--purple:#5c3d8f}
+:root{--ink:#00273E;--paper:#f4f8fa;--cream:#e6eef2;--rule:#d7e0e5;--gold:#063D58;--gold-lt:#00B0F0;--teal:#4B97B2;--red:#c0392b;--green:#1f8a4c;--amber:#a05a00;--muted:#5a7682;--purple:#4B97B2}
 body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);margin:0}
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:195px;background:var(--ink);padding:18px 12px;z-index:100;overflow-y:auto;display:flex;flex-direction:column}
 .logo{font-family:'Playfair Display',serif;font-size:14px;color:var(--gold-lt);margin-bottom:24px;line-height:1.3}
@@ -130,10 +130,12 @@ tfoot td.r{text-align:right}
 <body>
 
 <div class="sidebar">
-  <div class="logo">ASX Trading Platform<span>James Storey · Live</span></div>
+  <div class="logo">Morning Update<span>ASX Trading Platform · Live</span></div>
   <nav class="nav">
+    <div class="nav-sec">Overview</div>
+    <a class="active" data-page="dashboard">▣ Dashboard</a>
     <div class="nav-sec">Trading</div>
-    <a class="active" data-page="model">◈ Model Portfolio</a>
+    <a data-page="model">◈ Model Portfolio</a>
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="strategies">⚡ Strategy Engine</a>
     <a data-page="screener">⬡ Stock Screener</a>
@@ -153,20 +155,26 @@ tfoot td.r{text-align:right}
     <a data-page="settings">⚙ Settings</a>
     <a data-page="alerts">◎ Alerts</a>
   </nav>
-  <div class="sf"><span class="live"></span>Live · Yahoo Finance · FRED<br>8:00am · 4:00pm AEST</div>
+  <div class="sf"><span class="live"></span>Live · EODHD · FRED<br>8:00am · 4:00pm AEST</div>
 </div>
 
 <div class="main">
 
+  <!-- DASHBOARD -->
+  <div id="pg-dashboard" class="page active">
+    <div class="ph"><h1>Dashboard</h1><p>Market overview · your portfolio · model &amp; strategy snapshot</p></div>
+    <div id="dashboard-body"><div class="empty">Loading dashboard…</div></div>
+  </div>
+
   <!-- MODEL PORTFOLIO -->
-  <div id="pg-model" class="page active">
+  <div id="pg-model" class="page">
     <div class="ph"><h1>Model Portfolio</h1><p>$50k paper trading · Conviction-based sizing · 6-layer strategy engine · CommSec execution</p></div>
     <div class="kb">
       <div class="kc dk"><div class="kl">Capital</div><div class="kv" id="m-cap">$50,000</div><div class="kn">Starting balance</div></div>
       <div class="kc"><div class="kl">Invested</div><div class="kv teal" id="m-inv">--</div><div class="kn">Deployed</div></div>
       <div class="kc"><div class="kl">Cash</div><div class="kv" id="m-cash">--</div><div class="kn">Available</div></div>
       <div class="kc"><div class="kl">Open Trades</div><div class="kv" id="m-open">--</div></div>
-      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn" id="m-price-status">Loading live prices...</div></div>
+      <div class="kc"><div class="kl">Today P&L</div><div class="kv" id="m-today-pnl">--</div><div class="kn" id="m-price-status">Loading live prices...</div><button id="refresh-prices-btn" onclick="clearAndRefreshPrices()" style="font-size:10px;padding:2px 8px;border:1px solid var(--rule);border-radius:3px;background:white;cursor:pointer;color:var(--muted);margin-top:4px;">↻ Refresh</button></div>
       <div class="kc"><div class="kl">Total P&L</div><div class="kv" id="m-pnl">--</div></div>
       <div class="kc"><div class="kl">Win Rate</div><div class="kv gold" id="m-win">--</div></div>
     </div>
@@ -215,6 +223,7 @@ tfoot td.r{text-align:right}
     <div class="tab-row" style="margin-bottom:16px">
       <button class="tab active" onclick="switchStratType('reversion',this)">📉 Mean Reversion</button>
       <button class="tab" onclick="switchStratType('breakout',this)">🚀 Breakout</button>
+      <button class="tab" onclick="switchStratType('value',this)">💰 Value</button>
     </div>
 
     <div id="strat-reversion-section">
@@ -254,6 +263,21 @@ tfoot td.r{text-align:right}
       </div>
       <div class="sl">Today's breakout signals</div>
       <div id="breakout-strat-results"><div class="empty">Loading breakout signals...</div></div>
+    </div>
+
+    <div id="strat-value-section" style="display:none">
+      <div style="background:var(--cream);border:1px solid var(--rule);border-radius:4px;padding:12px 14px;margin-bottom:16px;font-size:12px">
+        <strong>💰 Value</strong> — low P/E and relative value (cheap vs sector median). Reads the fundamentals table (EODHD). Ranked by how cheap each name is relative to its sector, then by absolute P/E. Negative-earnings names excluded.
+      </div>
+      <div class="sl">Value screen — low P/E &amp; relative value</div>
+      <table>
+        <thead><tr>
+          <th>Ticker</th><th>Company</th><th>Sector</th>
+          <th class="r">P/E</th><th class="r">Fwd P/E</th><th class="r">Sector med</th>
+          <th class="r">vs Sector</th><th class="r">P/B</th><th class="r">Yield</th><th>Flag</th>
+        </tr></thead>
+        <tbody id="value-strat-tbody"><tr><td colspan="10" class="empty">Loading value screen...</td></tr></tbody>
+      </table>
     </div>
   </div>
 
@@ -646,7 +670,7 @@ async function init() {
     const env = await res.json();
     db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
     // Load model immediately with DB prices for fast initial render
-    loadModel();
+    loadDashboard();
     // Then fetch live prices — model auto-reloads when done via refreshLivePrices()
     refreshLivePrices();
   } catch(e) {
@@ -677,6 +701,107 @@ function candleTooltip(pattern) {
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
+// ── DASHBOARD (landing) ─────────────────────────────────────────────────────
+function miniIndexChart(rows, label, sub) {
+  if (!rows || rows.length < 2)
+    return `<div style="flex:1;min-width:260px"><div class="kl" style="margin-bottom:6px">${label}</div>
+      <div style="height:150px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;background:var(--cream);border-radius:6px;text-align:center;padding:0 16px">
+      Awaiting first index pull — trigger <code>fetch-index-prices</code></div></div>`;
+  rows = rows.slice().sort((a,b)=>(a.market_date||'').localeCompare(b.market_date||''));
+  const c = rows.map(r=>parseFloat(r.close)).filter(v=>!isNaN(v));
+  const w=440,h=150,pad=12, min=Math.min(...c), max=Math.max(...c), rng=(max-min)||1;
+  const x=i=>pad+(i/(c.length-1))*(w-2*pad), y=v=>h-pad-((v-min)/rng)*(h-2*pad);
+  const line=c.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+  const area=line+` L${x(c.length-1).toFixed(1)},${h-pad} L${x(0).toFixed(1)},${h-pad} Z`;
+  const last=c[c.length-1], first=c[0], chg=((last/first-1)*100), up=chg>=0;
+  const col=up?'#00B0F0':'#00273E';
+  return `<div style="flex:1;min-width:260px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <div class="kl">${label}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:12px"><b>${last.toLocaleString()}</b>
+        <span style="color:${up?'var(--green)':'var(--red)'};margin-left:6px">${up?'+':''}${chg.toFixed(2)}%</span></div></div>
+    <svg viewBox="0 0 ${w} ${h}" width="100%" style="background:var(--paper);border:1px solid var(--rule);border-radius:6px;display:block">
+      <path d="${area}" fill="${col}" opacity="0.10"/>
+      <path d="${line}" fill="none" stroke="${col}" stroke-width="1.6"/>
+    </svg>
+    <div class="kn" style="margin-top:3px">${sub}</div></div>`;
+}
+
+async function loadDashboard() {
+  if (!db) return;
+  const el = document.getElementById('dashboard-body'); if (!el) return;
+  const money = v => '$' + Math.round(v||0).toLocaleString();
+  try {
+    const [xao, xko, real, model, macro] = await Promise.all([
+      db.from('index_prices').select('market_date,close').eq('index_code','XAO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
+      db.from('index_prices').select('market_date,close').eq('index_code','XKO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
+      db.from('real_trades').select('*').then(r=>r.data||[]),
+      db.from('model_trades').select('*').then(r=>r.data||[]),
+      db.from('morning_signals').select('*').order('signal_date',{ascending:false}).limit(1).maybeSingle().then(r=>r.data),
+    ]);
+
+    // value real holdings off latest prices
+    const byTicker = {};
+    real.forEach(t => {
+      const u = parseFloat(t.units||0);
+      const dir = String(t.direction||t.side||'BUY').toUpperCase();
+      byTicker[t.ticker] = (byTicker[t.ticker]||0) + (dir.startsWith('S') ? -u : u);
+    });
+    const held = Object.entries(byTicker).filter(([,u])=>u>0.0001).map(([tk,u])=>({tk,u}));
+    const tickers = held.map(h=>h.tk);
+    const priceMap = {};
+    if (tickers.length) {
+      const { data: pr } = await db.from('prices').select('ticker,close,market_date').in('ticker',tickers).order('market_date',{ascending:false});
+      (pr||[]).forEach(p => { if (priceMap[p.ticker]==null) priceMap[p.ticker]=parseFloat(p.close); });
+    }
+    let portVal = 0;
+    held.forEach(h => { h.px = priceMap[h.tk]||0; h.val = h.u*h.px; portVal += h.val; });
+    held.sort((a,b)=>b.val-a.val);
+
+    const openModel = model.filter(t => String(t.status||'').toLowerCase()!=='closed' && !t.exit_price).length;
+    const macroSig = macro ? (macro.signal || macro.macro_signal || '—') : '—';
+    const macroScore = macro ? (macro.score ?? macro.macro_score ?? '') : '';
+    const macroDate = macro ? (macro.signal_date || '') : '';
+
+    el.innerHTML = `
+      <div class="sl">Market</div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">
+        ${miniIndexChart(xao,'All Ordinaries (XAO)','Broad market')}
+        ${miniIndexChart(xko,'ASX 300 (XKO)','Top 300')}
+      </div>
+
+      <div class="sl">Snapshot</div>
+      <div class="kb">
+        <div class="kc dk"><div class="kl">Portfolio value</div><div class="kv">${money(portVal)}</div><div class="kn">${held.length} holding${held.length!==1?'s':''}</div></div>
+        <div class="kc"><div class="kl">Model — open</div><div class="kv teal">${openModel}</div><div class="kn">${model.length} total trades</div></div>
+        <div class="kc"><div class="kl">Macro</div><div class="kv">${macroSig}${macroScore!==''?` <span style="font-size:12px;color:var(--muted)">${macroScore>0?'+':''}${macroScore}</span>`:''}</div><div class="kn">${macroDate?('as at '+macroDate):'latest scan'}</div></div>
+        <div class="kc"><div class="kl">Strategies</div><div class="kv gold">5</div><div class="kn"><a href="#" onclick="go('strategies',document.querySelector('.nav a[data-page=&quot;strategies&quot;]'));return false" style="color:var(--teal);text-decoration:none">Open engine →</a></div></div>
+      </div>
+
+      <div class="sl">Current holdings</div>
+      <table><thead><tr><th>Ticker</th><th class="r">Units</th><th class="r">Last</th><th class="r">Value</th><th class="r">Weight</th></tr></thead>
+        <tbody>${held.length ? held.map(h=>`<tr class="clickable" onclick="go('real',document.querySelector('.nav a[data-page=&quot;real&quot;]'))">
+          <td><span class="tkr">${h.tk}</span></td><td class="r">${h.u.toLocaleString()}</td>
+          <td class="r">${h.px?('$'+h.px.toFixed(2)):'--'}</td><td class="r">${money(h.val)}</td>
+          <td class="r">${portVal?((h.val/portVal*100).toFixed(1)+'%'):'--'}</td></tr>`).join('')
+          : '<tr><td colspan="5" class="empty">No holdings yet — record a trade or upload a contract note.</td></tr>'}</tbody>
+      </table>
+
+      <div class="sl">Model portfolio — open positions</div>
+      <table><thead><tr><th>Ticker</th><th class="r">Entry</th><th class="r">Target</th><th>Score</th></tr></thead>
+        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" onclick="go('model',document.querySelector('.nav a[data-page=&quot;model&quot;]'))">
+          <td><span class="tkr">${t.ticker}</span></td><td class="r">${t.entry_price?'$'+parseFloat(t.entry_price).toFixed(2):'--'}</td>
+          <td class="r">${t.target_price?'$'+parseFloat(t.target_price).toFixed(2):'--'}</td>
+          <td>${t.total_score!=null?t.total_score+'/7':(t.score!=null?t.score:'')}</td></tr>`).join('')
+          || '<tr><td colspan="4" class="empty">No open model trades.</td></tr>'}</tbody>
+      </table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Dashboard error: ${e.message}</div>`;
+    console.error('dashboard error', e);
+  }
+}
+
+
 function go(page, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
@@ -684,6 +809,7 @@ function go(page, el) {
   if (pg) pg.classList.add('active');
   if (el) el.classList.add('active');
   const fns = {
+    dashboard: loadDashboard,
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     income: loadIncome, morning: loadMorning, bond: loadBond,
@@ -702,11 +828,59 @@ function wireNav() {
 }
 
 function switchStratType(type, el) {
-  document.querySelectorAll('.tab-row .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#pg-strategies > .tab-row .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('strat-reversion-section').style.display = type === 'reversion' ? '' : 'none';
   document.getElementById('strat-breakout-section').style.display  = type === 'breakout'  ? '' : 'none';
+  document.getElementById('strat-value-section').style.display     = type === 'value'     ? '' : 'none';
   if (type === 'breakout') loadBreakoutStrat();
+  if (type === 'value')    loadValueStrat();
+}
+
+async function loadValueStrat() {
+  if (!db) return;
+  const el = document.getElementById('value-strat-tbody'); if (!el) return;
+  el.innerHTML = '<tr><td colspan="10" class="empty">Loading value screen...</td></tr>';
+  let data, error;
+  try {
+    ({ data, error } = await db.from('fundamentals')
+      .select('ticker,name,sector,pe,forward_pe,eps,dividend_yield,price_book'));
+  } catch (e) { error = e; }
+  if (error || !data || !data.length) {
+    el.innerHTML = '<tr><td colspan="10" class="empty">No P/E data yet — run fundamentals.sql, then trigger /.netlify/functions/fetch-fundamentals-background to populate.</td></tr>';
+    return;
+  }
+  // positive-earnings only (negative/zero P/E isn't "value", it's loss-making)
+  const rows = data.filter(r => r.pe != null && r.pe > 0 && r.pe < 200);
+  if (!rows.length) { el.innerHTML = '<tr><td colspan="10" class="empty">No positive-P/E names in the fundamentals table yet.</td></tr>'; return; }
+  // sector median P/E for relative value
+  const median = a => { const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const bySector = {}; rows.forEach(r => { const k=r.sector||'—'; (bySector[k]=bySector[k]||[]).push(r.pe); });
+  const medPE = {}; Object.entries(bySector).forEach(([s,a]) => medPE[s]=median(a));
+  rows.forEach(r => { const m=medPE[r.sector||'—']; r.relVal = m ? (1 - r.pe/m)*100 : 0; });
+  // value universe: cheap absolute OR cheap vs sector; rank by relative cheapness then absolute P/E
+  let view = rows.filter(r => r.pe < 18 || r.relVal > 10);
+  view.sort((a,b) => b.relVal - a.relVal || a.pe - b.pe);
+  view = view.slice(0, 60);
+  const yld = v => (v==null) ? '--' : ((v < 1 ? v*100 : v).toFixed(1) + '%');  // EODHD yield is decimal
+  el.innerHTML = view.map(r => {
+    const m = medPE[r.sector||'—'];
+    const flag = r.relVal > 15 ? '<span class="badge b-buy">Value</span>'
+               : r.relVal > 0  ? '<span class="badge b-watch">Cheap-ish</span>'
+               : '<span class="badge b-mod">Fair</span>';
+    return `<tr>
+      <td><span class="tkr">${r.ticker}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${(r.name||'').slice(0,26)}</td>
+      <td style="font-size:11px">${r.sector||'—'}</td>
+      <td class="r">${r.pe.toFixed(1)}</td>
+      <td class="r">${r.forward_pe?r.forward_pe.toFixed(1):'--'}</td>
+      <td class="r" style="color:var(--muted)">${m?m.toFixed(1):'--'}</td>
+      <td class="r" style="color:${r.relVal>0?'var(--green)':'var(--red)'}">${r.relVal>0?'+':''}${r.relVal.toFixed(0)}%</td>
+      <td class="r">${r.price_book?r.price_book.toFixed(2):'--'}</td>
+      <td class="r">${yld(r.dividend_yield)}</td>
+      <td>${flag}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function loadBreakoutStrat() {
@@ -803,6 +977,16 @@ let livePriceCache = {};
 let livePriceLastFetch = 0;
 let livePriceFetching = false;
 
+async function clearAndRefreshPrices() {
+  livePriceCache = {};
+  livePriceLastFetch = 0;
+  livePriceFetching = false;
+  const btn = document.getElementById('refresh-prices-btn');
+  if (btn) { btn.textContent = '↻ Refreshing...'; btn.disabled = true; }
+  await refreshLivePrices();
+  if (btn) { btn.textContent = '↻ Refresh prices'; btn.disabled = false; }
+}
+
 async function refreshLivePrices() {
   if (livePriceFetching) return;
   livePriceFetching = true;
@@ -815,7 +999,17 @@ async function refreshLivePrices() {
       const data = await res.json();
       // Support both old format (plain object) and new paginated format
       const prices = data.prices || data;
-      Object.assign(livePriceCache, prices);
+      // Sanitise before caching — reject prices >500x face or zero
+      // EODHD occasionally returns corrupt data (e.g. $702 for a $6 stock)
+      Object.keys(prices).forEach(ticker => {
+        const p = prices[ticker];
+        if (p && p.price > 0 && p.price < 50000) {
+          livePriceCache[ticker] = p;
+        } else if (p && p.price !== null && p.price !== undefined) {
+          console.warn(`Rejected bad price for ${ticker}: $${p.price}`);
+        }
+        // null price = delisted/suspended — silently skip
+      });
       hasMore = data.hasMore || false;
       offset  = data.nextOffset || offset + 100;
     }
@@ -846,8 +1040,17 @@ async function getPrices(tickers) {
     const map = {};
     (tickers || []).forEach(t => {
       if (livePriceCache[t]) {
+        const p = livePriceCache[t].price;
+        // Sanity check — reject prices that are >10x or <0.1x the open price
+        // This filters corrupt EODHD data points (e.g. $702 instead of $6.86)
+        const o = livePriceCache[t].open;
+        const isSane = !o || !p || (p > 0 && p < o * 10 && p > o * 0.1);
+        if (!isSane) {
+          console.warn(`Suspicious price for ${t}: $${p} (open $${o}) — skipping cache`);
+          return;
+        }
         map[t] = {
-          price:     livePriceCache[t].price,
+          price:     p,
           open:      livePriceCache[t].open,
           high:      livePriceCache[t].high,
           low:       livePriceCache[t].low,
@@ -2099,185 +2302,43 @@ function closeStockDetail() {
 }
 
 function buildFullChart(prices, trade) {
-  // Full-width SVG candlestick chart
+  // Brand-mono candlestick chart. Self-sorts oldest→newest so it renders
+  // correctly regardless of how the caller ordered the query.
+  prices = (prices || []).slice().sort((a,b) => (a.market_date||'').localeCompare(b.market_date||''));
   const w = 900, h = 320, padL = 60, padR = 20, padT = 15, padB = 50, volH = 50;
-  const chartW = w - padL - padR;
-  const chartH = h - padT - padB - volH;
-
+  const chartW = w - padL - padR, chartH = h - padT - padB - volH;
   const closes = prices.map(p => parseFloat(p.close));
   const highs  = prices.map(p => parseFloat(p.high  || p.close));
   const lows   = prices.map(p => parseFloat(p.low   || p.close));
   const vols   = prices.map(p => parseInt(p.volume  || 0));
   const opens  = prices.map(p => parseFloat(p.open  || p.close));
-
-  const minP = Math.min(...lows)   * 0.997;
-  const maxP = Math.max(...highs)  * 1.003;
-  const maxV = Math.max(...vols)   || 1;
-  const n    = prices.length;
-
-  const px  = i => padL + (i / (n - 1)) * chartW;
-  const py  = v => padT + chartH - ((v - minP) / (maxP - minP)) * chartH;
-  const pvy = v => (h - padB) - (v / maxV) * volH;
-
-  // Candle width
-  const candleW = Math.max(3, Math.floor(chartW / n * 0.7));
-
-  // Moving averages — proper rolling
-  const sma = (arr, period) => arr.map((_, i) => {
-    if (i < period - 1) return null;
-    return arr.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period;
-  });
-
-  const ma20arr  = sma(closes, 20);
-  const ma50arr  = sma(closes, 50);
-  const ma200arr = sma(closes, 200);
-
-  // MA line paths
-  const maPath = (arr, color, dash) => {
-    const pts = arr.map((v, i) => v ? `${px(i)},${py(v)}` : null).filter(Boolean);
-    if (pts.length < 2) return '';
-    // Build path with gaps for nulls
-    let d = '';
-    let inPath = false;
-    arr.forEach((v, i) => {
-      if (v) {
-        d += inPath ? ` L${px(i)},${py(v)}` : ` M${px(i)},${py(v)}`;
-        inPath = true;
-      } else {
-        inPath = false;
-      }
-    });
-    return `<path d="${d}" stroke="${color}" stroke-width="1.5" fill="none" stroke-dasharray="${dash||''}" opacity="0.8"/>`;
-  };
-
-  // Bollinger Bands
-  const bbArr = closes.map((_, i) => {
-    if (i < 19) return null;
-    const slice = closes.slice(i - 19, i + 1);
-    const mean  = slice.reduce((a, b) => a + b, 0) / 20;
-    const std   = Math.sqrt(slice.reduce((s, v) => s + (v - mean) ** 2, 0) / 20);
-    return { upper: mean + 2 * std, lower: mean - 2 * std, mid: mean };
-  });
-
-  const bbUpper = bbArr.map(b => b?.upper || null);
-  const bbLower = bbArr.map(b => b?.lower || null);
-
-  // Bollinger band fill
-  let bbFillD = '';
-  const validBB = bbArr.map((b, i) => b ? { i, upper: b.upper, lower: b.lower } : null).filter(Boolean);
-  if (validBB.length > 1) {
-    bbFillD = validBB.map((b, j) => j === 0 ? `M${px(b.i)},${py(b.upper)}` : `L${px(b.i)},${py(b.upper)}`).join(' ');
-    bbFillD += ' ' + [...validBB].reverse().map(b => `L${px(b.i)},${py(b.lower)}`).join(' ') + ' Z';
-  }
-
-  // Candlesticks
-  const candles = prices.map((p, i) => {
-    const o   = parseFloat(p.open  || p.close);
-    const c   = parseFloat(p.close);
-    const hi  = parseFloat(p.high  || p.close);
-    const lo  = parseFloat(p.low   || p.close);
-    const x   = px(i);
-    const bull = c >= o;
-    const col  = bull ? '#2d5a2d' : '#8b2e2e';
-    const bodyT = py(Math.max(o, c));
-    const bodyB = py(Math.min(o, c));
-    const bodyH = Math.max(1, bodyB - bodyT);
-    return `
-      <line x1="${x}" y1="${py(hi)}" x2="${x}" y2="${py(lo)}" stroke="${col}" stroke-width="1"/>
-      <rect x="${x - candleW/2}" y="${bodyT}" width="${candleW}" height="${bodyH}"
-        fill="${bull ? 'none' : col}" stroke="${col}" stroke-width="1"
-        ${bull ? `fill="rgba(45,90,45,0.15)"` : ''}/>`;
-  }).join('');
-
-  // Volume bars
-  const volBars = prices.map((p, i) => {
-    const v   = parseInt(p.volume || 0);
-    const c   = parseFloat(p.close);
-    const o   = parseFloat(p.open || p.close);
-    const col = c >= o ? '#2d5a2d' : '#8b2e2e';
-    const barH = (v / maxV) * volH;
-    return `<rect x="${px(i) - candleW/2}" y="${h - padB - barH}" width="${candleW}" height="${barH}" fill="${col}" opacity="0.35"/>`;
-  }).join('');
-
-  // Trade levels
+  const UP='#00B0F0', DN='#00273E', SKY='#00B0F0', TEAL='#4B97B2', INK='#00273E',
+        RULE='#d7e0e5', MUT='#5a7682', BG='#f4f8fa', TRED='#c0392b', TGRN='#1f8a4c';
+  const minP = Math.min(...lows)*0.997, maxP = Math.max(...highs)*1.003, maxV = Math.max(...vols)||1, n = prices.length;
+  const px = i => padL + (n<=1?chartW/2:(i/(n-1))*chartW);
+  const py = v => padT + chartH - ((v-minP)/(maxP-minP))*chartH;
+  const candleW = Math.max(3, Math.floor(chartW/n*0.7));
+  const sma = (arr,period) => arr.map((_,i)=> i<period-1?null:arr.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period);
+  const ma20arr=sma(closes,20), ma50arr=sma(closes,50), ma200arr=sma(closes,200);
+  const maPath = (arr,color,dash) => { let d='',inPath=false; arr.forEach((v,i)=>{ if(v){ d+=inPath?` L${px(i)},${py(v)}`:` M${px(i)},${py(v)}`; inPath=true;} else inPath=false; }); return d?`<path d="${d}" stroke="${color}" stroke-width="1.5" fill="none" stroke-dasharray="${dash||''}" opacity="0.85"/>`:''; };
+  const bbArr = closes.map((_,i)=>{ if(i<19) return null; const s=closes.slice(i-19,i+1), m=s.reduce((a,b)=>a+b,0)/20, sd=Math.sqrt(s.reduce((x,v)=>x+(v-m)**2,0)/20); return {upper:m+2*sd, lower:m-2*sd}; });
+  const bbUpper=bbArr.map(b=>b?.upper||null), bbLower=bbArr.map(b=>b?.lower||null);
+  let bbFillD=''; const validBB=bbArr.map((b,i)=>b?{i,upper:b.upper,lower:b.lower}:null).filter(Boolean);
+  if(validBB.length>1){ bbFillD=validBB.map((b,j)=>j===0?`M${px(b.i)},${py(b.upper)}`:`L${px(b.i)},${py(b.upper)}`).join(' '); bbFillD+=' '+[...validBB].reverse().map(b=>`L${px(b.i)},${py(b.lower)}`).join(' ')+' Z'; }
+  const candles = prices.map((p,i)=>{ const o=parseFloat(p.open||p.close),c=parseFloat(p.close),hi=parseFloat(p.high||p.close),lo=parseFloat(p.low||p.close); const x=px(i),bull=c>=o,col=bull?UP:DN; const bt=py(Math.max(o,c)),bb=py(Math.min(o,c)),bh=Math.max(1,bb-bt); return `<line x1="${x}" y1="${py(hi)}" x2="${x}" y2="${py(lo)}" stroke="${col}" stroke-width="1"/><rect x="${x-candleW/2}" y="${bt}" width="${candleW}" height="${bh}" fill="${bull?'rgba(0,176,240,0.18)':col}" stroke="${col}" stroke-width="1"/>`; }).join('');
+  const volBars = prices.map((p,i)=>{ const v=parseInt(p.volume||0),c=parseFloat(p.close),o=parseFloat(p.open||p.close),col=c>=o?UP:DN,bh=(v/maxV)*volH; return `<rect x="${px(i)-candleW/2}" y="${h-padB-bh}" width="${candleW}" height="${bh}" fill="${col}" opacity="0.32"/>`; }).join('');
   const tradeLines = trade ? [
-    trade.entry_price ? `<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="4,3"/>
-      <text x="${padL+4}" y="${py(parseFloat(trade.entry_price))-3}" font-size="9" fill="#555" font-family="monospace">Entry $${parseFloat(trade.entry_price).toFixed(3)}</text>` : '',
-    trade.stop_price  ? `<line x1="${padL}" y1="${py(parseFloat(trade.stop_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.stop_price))}" stroke="#8b2e2e" stroke-width="1.5" stroke-dasharray="4,3"/>
-      <text x="${padL+4}" y="${py(parseFloat(trade.stop_price))-3}" font-size="9" fill="#8b2e2e" font-family="monospace">Stop $${parseFloat(trade.stop_price).toFixed(3)}</text>` : '',
-    trade.target_price? `<line x1="${padL}" y1="${py(parseFloat(trade.target_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.target_price))}" stroke="#2d5a2d" stroke-width="1.5" stroke-dasharray="4,3"/>
-      <text x="${padL+4}" y="${py(parseFloat(trade.target_price))-3}" font-size="9" fill="#2d5a2d" font-family="monospace">Target $${parseFloat(trade.target_price).toFixed(3)}</text>` : '',
+    trade.entry_price?`<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="${INK}" stroke-width="1.5" stroke-dasharray="4,3"/><text x="${padL+4}" y="${py(parseFloat(trade.entry_price))-3}" font-size="9" fill="${INK}" font-family="monospace">Entry $${parseFloat(trade.entry_price).toFixed(3)}</text>`:'',
+    trade.stop_price?`<line x1="${padL}" y1="${py(parseFloat(trade.stop_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.stop_price))}" stroke="${TRED}" stroke-width="1.5" stroke-dasharray="4,3"/><text x="${padL+4}" y="${py(parseFloat(trade.stop_price))-3}" font-size="9" fill="${TRED}" font-family="monospace">Stop $${parseFloat(trade.stop_price).toFixed(3)}</text>`:'',
+    trade.target_price?`<line x1="${padL}" y1="${py(parseFloat(trade.target_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.target_price))}" stroke="${TGRN}" stroke-width="1.5" stroke-dasharray="4,3"/><text x="${padL+4}" y="${py(parseFloat(trade.target_price))-3}" font-size="9" fill="${TGRN}" font-family="monospace">Target $${parseFloat(trade.target_price).toFixed(3)}</text>`:'',
   ].join('') : '';
-
-  // Price grid lines and labels
-  const gridSteps = 5;
-  const gridLines = Array.from({length: gridSteps}, (_, i) => {
-    const v = minP + (maxP - minP) * (i / (gridSteps - 1));
-    const y = py(v);
-    return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#c8c2b4" stroke-width="0.5" opacity="0.5"/>
-      <text x="${padL-4}" y="${y+4}" text-anchor="end" font-size="10" fill="#888" font-family="monospace">$${v.toFixed(2)}</text>`;
-  }).join('');
-
-  // Date labels — show every 10th
-  const dateLabels = prices.map((p, i) => {
-    if (i % 10 !== 0 && i !== n - 1) return '';
-    const date = p.market_date?.slice(5) || ''; // MM-DD
-    return `<text x="${px(i)}" y="${h-padB+18}" text-anchor="middle" font-size="9" fill="#888" font-family="monospace">${date}</text>`;
-  }).join('');
-
-  // Legend
-  const legend = `
-    <rect x="${padL}" y="${h-15}" width="12" height="2" fill="#1a5f6e"/>
-    <text x="${padL+15}" y="${h-11}" font-size="9" fill="#888">20 DMA</text>
-    <rect x="${padL+65}" y="${h-15}" width="12" height="2" fill="#b8943f"/>
-    <text x="${padL+80}" y="${h-11}" font-size="9" fill="#888">50 DMA</text>
-    <rect x="${padL+130}" y="${h-15}" width="12" height="2" fill="#8b2e2e"/>
-    <text x="${padL+145}" y="${h-11}" font-size="9" fill="#888">200 DMA</text>
-    <rect x="${padL+200}" y="${h-15}" width="12" height="2" fill="#5c3d8f" opacity="0.5"/>
-    <text x="${padL+215}" y="${h-11}" font-size="9" fill="#888">Bollinger</text>
-    ${trade ? `<rect x="${padL+275}" y="${h-15}" width="12" height="2" fill="#1a1a1a"/>
-    <text x="${padL+290}" y="${h-11}" font-size="9" fill="#888">Trade levels</text>` : ''}
-  `;
-
-  // Divider line between chart and volume
-  const divider = `<line x1="${padL}" y1="${h-padB-volH}" x2="${w-padR}" y2="${h-padB-volH}" stroke="#c8c2b4" stroke-width="0.5"/>`;
-
-  // Invisible hover zones over each candle for tooltips
-  const hoverZones = prices.map((p, i) => {
-    const x    = px(i);
-    const date = p.market_date || '';
-    const o    = parseFloat(p.open  || p.close);
-    const c    = parseFloat(p.close);
-    const hi   = parseFloat(p.high  || p.close);
-    const lo   = parseFloat(p.low   || p.close);
-    const vol  = parseInt(p.volume  || 0);
-    const chg  = parseFloat(p.change_pct || 0);
-    const tip  = `${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`;
-    return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" 
-      fill="transparent" style="cursor:crosshair">
-      <title>${tip}</title>
-    </rect>`;
-  }).join('');
-
-  return `<div style="overflow-x:auto">
-    <svg width="100%" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background:#f9f7f4;border-radius:4px;min-width:600px">
-      <rect width="${w}" height="${h}" fill="#f9f7f4" rx="4"/>
-      ${gridLines}
-      ${bbFillD ? `<path d="${bbFillD}" fill="rgba(92,61,143,0.06)"/>` : ''}
-      ${maPath(bbUpper, '#5c3d8f', '3,3')}
-      ${maPath(bbLower, '#5c3d8f', '3,3')}
-      ${volBars}
-      ${divider}
-      ${maPath(ma200arr, '#8b2e2e', '6,4')}
-      ${maPath(ma50arr,  '#b8943f', '4,3')}
-      ${maPath(ma20arr,  '#1a5f6e', '')}
-      ${tradeLines}
-      ${candles}
-      ${hoverZones}
-      ${dateLabels}
-      ${legend}
-    </svg>
-  </div>`;
+  const gridSteps=5;
+  const gridLines = Array.from({length:gridSteps},(_,i)=>{ const v=minP+(maxP-minP)*(i/(gridSteps-1)),y=py(v); return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${RULE}" stroke-width="0.5" opacity="0.6"/><text x="${padL-4}" y="${y+4}" text-anchor="end" font-size="10" fill="${MUT}" font-family="monospace">$${v.toFixed(2)}</text>`; }).join('');
+  const dateLabels = prices.map((p,i)=>{ if(i%10!==0 && i!==n-1) return ''; const date=p.market_date?.slice(5)||''; return `<text x="${px(i)}" y="${h-padB+18}" text-anchor="middle" font-size="9" fill="${MUT}" font-family="monospace">${date}</text>`; }).join('');
+  const legend = `<rect x="${padL}" y="${h-15}" width="12" height="2" fill="${SKY}"/><text x="${padL+15}" y="${h-11}" font-size="9" fill="${MUT}">20 DMA</text><rect x="${padL+65}" y="${h-15}" width="12" height="2" fill="${TEAL}"/><text x="${padL+80}" y="${h-11}" font-size="9" fill="${MUT}">50 DMA</text><rect x="${padL+130}" y="${h-15}" width="12" height="2" fill="${INK}"/><text x="${padL+145}" y="${h-11}" font-size="9" fill="${MUT}">200 DMA</text><rect x="${padL+200}" y="${h-15}" width="12" height="2" fill="${TEAL}" opacity="0.5"/><text x="${padL+215}" y="${h-11}" font-size="9" fill="${MUT}">Bollinger</text>${trade?`<rect x="${padL+275}" y="${h-15}" width="12" height="2" fill="${INK}"/><text x="${padL+290}" y="${h-11}" font-size="9" fill="${MUT}">Trade levels</text>`:''}`;
+  const divider = `<line x1="${padL}" y1="${h-padB-volH}" x2="${w-padR}" y2="${h-padB-volH}" stroke="${RULE}" stroke-width="0.5"/>`;
+  const hoverZones = prices.map((p,i)=>{ const x=px(i),date=p.market_date||'',o=parseFloat(p.open||p.close),c=parseFloat(p.close),hi=parseFloat(p.high||p.close),lo=parseFloat(p.low||p.close),vol=parseInt(p.volume||0),chg=parseFloat(p.change_pct||0); const tip=`${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`; return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" fill="transparent" style="cursor:crosshair"><title>${tip}</title></rect>`; }).join('');
+  return `<div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background:${BG};border-radius:4px;min-width:600px"><rect width="${w}" height="${h}" fill="${BG}" rx="4"/>${gridLines}${bbFillD?`<path d="${bbFillD}" fill="rgba(75,151,178,0.08)"/>`:''}${maPath(bbUpper,TEAL,'3,3')}${maPath(bbLower,TEAL,'3,3')}${volBars}${divider}${maPath(ma200arr,INK,'6,4')}${maPath(ma50arr,TEAL,'4,3')}${maPath(ma20arr,SKY,'')}${tradeLines}${candles}${hoverZones}${dateLabels}${legend}</svg></div>`;
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
