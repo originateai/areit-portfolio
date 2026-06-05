@@ -27,7 +27,7 @@ Reference design: the shell-preview HTML files from the chat session (brand pale
 
 ### 4a. Master Dashboard (landing page — first thing seen on login)
 - [ ] New top nav item "Dashboard", set as the default/landing view.
-- [ ] Index charts: **All Ords (XAO)** + **ASX 200/300 (confirm which)**. Needs index price history — if not stored, add a small ingestion (EODHD `XAO.INDX`, `XJO.INDX`) into `prices` or a new `index_prices` table.
+- [ ] Index charts: **All Ords (XAO)** + **ASX 300 (XKO)** — confirmed. Needs index price history — add ingestion (EODHD `XAO.INDX`, `XKO.INDX`) into the `index_prices` table (already created in db_classification.sql).
 - [ ] Summary sections (cards + mini-tables, all linking through to the full page):
       Strategies snapshot · Current holdings + value · Model portfolio performance · macro/net-worth strip.
 
@@ -54,6 +54,49 @@ Reference design: the shell-preview HTML files from the chat session (brand pale
 ## 6. The honest backtester (gates the Strategies numbers)
 - [ ] Walk-forward, real brokerage + slippage, survivorship handling, time-series CV with purge/embargo.
 - [ ] Until this exists, label all strategy performance figures as illustrative.
+
+## 7. Income tracking, documents & performance (James's stated structure)
+
+### CANONICAL nav structure — TWO buckets (James, repeated)
+Everything you OWN in one place; everything strategy/research in one place.
+
+- **Dashboard**
+- **Portfolio** — all holdings in one place:
+  - Real Portfolio · REIT Holdings · Credit Holdings · Bond Holdings · Income
+  - (Credit/Bond *Holdings* pages are NEW — distinct from the Credit/Bond *Signals*
+     which live under Strategies. Holdings = what you own; Signals = what to buy.)
+  - At the very bottom of Portfolio: **Portfolio Performance** —
+    cumulative-return LINE CHART over time (real + model), then real snapshot,
+    then model snapshot below it.
+- **Strategies** — all strategies + signals in one place:
+  - Strategy Engine (mean reversion · breakout · value · + momentum/ML later)
+  - Model Portfolio (the strategies' paper output)
+  - Stock Screener
+  - REIT Signals · Credit Signals · Bond Signals · Morning Scan · Bond Market
+- **Admin** — Record Trade · Settings · Alerts
+
+Nav already collapsed to Portfolio + Strategies + Admin in index.html. Still TODO:
+add Credit Holdings + Bond Holdings pages under Portfolio, and the Performance block.
+
+### Income tracking
+- [ ] Under each REIT, list every distribution received, **cumulative per stock**
+      (running total paid). Source: `distributions` table, populated from EODHD
+      dividends AND from uploaded distribution statements.
+- [ ] Per-class income views: Credit holdings under Credit, Bonds under Bonds.
+
+### Document uploads — single source of truth (needs Supabase Storage)
+- [ ] Storage bucket + upload UI in the portal for three doc types:
+      **contract notes** (trades → holdings, parser exists),
+      **distribution statements** (new parser → feeds cumulative income),
+      **tax statements** (stored for reference).
+- [ ] Each upload: store the file in Storage + a metadata row (type, ticker,
+      date, amounts parsed) so everything's tracked in one place.
+
+### Cumulative return chart (needs new table + daily job)
+- [ ] `portfolio_snapshots` table (date, scope=real|model, total_value, cost_base).
+- [ ] Daily job (after the 4pm price pull) captures real + model portfolio value.
+- [ ] Line chart traces cumulative return over time. Starts accruing from switch-on;
+      OPTION to reconstruct backwards from trade dates + price history (James to decide).
 
 ## Guardrails (from CLAUDE.md)
 - No React/bundler. Client-side indicator calc from raw prices. Clean rewrites over patches.
