@@ -132,8 +132,10 @@ tfoot td.r{text-align:right}
 <div class="sidebar">
   <div class="logo">Morning Update<span>ASX Trading Platform · Live</span></div>
   <nav class="nav">
+    <div class="nav-sec">Overview</div>
+    <a class="active" data-page="dashboard">▣ Dashboard</a>
     <div class="nav-sec">Trading</div>
-    <a class="active" data-page="model">◈ Model Portfolio</a>
+    <a data-page="model">◈ Model Portfolio</a>
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="strategies">⚡ Strategy Engine</a>
     <a data-page="screener">⬡ Stock Screener</a>
@@ -158,8 +160,14 @@ tfoot td.r{text-align:right}
 
 <div class="main">
 
+  <!-- DASHBOARD -->
+  <div id="pg-dashboard" class="page active">
+    <div class="ph"><h1>Dashboard</h1><p>Market overview · your portfolio · model &amp; strategy snapshot</p></div>
+    <div id="dashboard-body"><div class="empty">Loading dashboard…</div></div>
+  </div>
+
   <!-- MODEL PORTFOLIO -->
-  <div id="pg-model" class="page active">
+  <div id="pg-model" class="page">
     <div class="ph"><h1>Model Portfolio</h1><p>$50k paper trading · Conviction-based sizing · 6-layer strategy engine · CommSec execution</p></div>
     <div class="kb">
       <div class="kc dk"><div class="kl">Capital</div><div class="kv" id="m-cap">$50,000</div><div class="kn">Starting balance</div></div>
@@ -646,7 +654,7 @@ async function init() {
     const env = await res.json();
     db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
     // Load model immediately with DB prices for fast initial render
-    loadModel();
+    loadDashboard();
     // Then fetch live prices — model auto-reloads when done via refreshLivePrices()
     refreshLivePrices();
   } catch(e) {
@@ -677,6 +685,107 @@ function candleTooltip(pattern) {
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
+// ── DASHBOARD (landing) ─────────────────────────────────────────────────────
+function miniIndexChart(rows, label, sub) {
+  if (!rows || rows.length < 2)
+    return `<div style="flex:1;min-width:260px"><div class="kl" style="margin-bottom:6px">${label}</div>
+      <div style="height:150px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;background:var(--cream);border-radius:6px;text-align:center;padding:0 16px">
+      Awaiting first index pull — trigger <code>fetch-index-prices</code></div></div>`;
+  rows = rows.slice().sort((a,b)=>(a.market_date||'').localeCompare(b.market_date||''));
+  const c = rows.map(r=>parseFloat(r.close)).filter(v=>!isNaN(v));
+  const w=440,h=150,pad=12, min=Math.min(...c), max=Math.max(...c), rng=(max-min)||1;
+  const x=i=>pad+(i/(c.length-1))*(w-2*pad), y=v=>h-pad-((v-min)/rng)*(h-2*pad);
+  const line=c.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+  const area=line+` L${x(c.length-1).toFixed(1)},${h-pad} L${x(0).toFixed(1)},${h-pad} Z`;
+  const last=c[c.length-1], first=c[0], chg=((last/first-1)*100), up=chg>=0;
+  const col=up?'#00B0F0':'#00273E';
+  return `<div style="flex:1;min-width:260px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <div class="kl">${label}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:12px"><b>${last.toLocaleString()}</b>
+        <span style="color:${up?'var(--green)':'var(--red)'};margin-left:6px">${up?'+':''}${chg.toFixed(2)}%</span></div></div>
+    <svg viewBox="0 0 ${w} ${h}" width="100%" style="background:var(--paper);border:1px solid var(--rule);border-radius:6px;display:block">
+      <path d="${area}" fill="${col}" opacity="0.10"/>
+      <path d="${line}" fill="none" stroke="${col}" stroke-width="1.6"/>
+    </svg>
+    <div class="kn" style="margin-top:3px">${sub}</div></div>`;
+}
+
+async function loadDashboard() {
+  if (!db) return;
+  const el = document.getElementById('dashboard-body'); if (!el) return;
+  const money = v => '$' + Math.round(v||0).toLocaleString();
+  try {
+    const [xao, xko, real, model, macro] = await Promise.all([
+      db.from('index_prices').select('market_date,close').eq('index_code','XAO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
+      db.from('index_prices').select('market_date,close').eq('index_code','XKO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
+      db.from('real_trades').select('*').then(r=>r.data||[]),
+      db.from('model_trades').select('*').then(r=>r.data||[]),
+      db.from('morning_signals').select('*').order('signal_date',{ascending:false}).limit(1).maybeSingle().then(r=>r.data),
+    ]);
+
+    // value real holdings off latest prices
+    const byTicker = {};
+    real.forEach(t => {
+      const u = parseFloat(t.units||0);
+      const dir = String(t.direction||t.side||'BUY').toUpperCase();
+      byTicker[t.ticker] = (byTicker[t.ticker]||0) + (dir.startsWith('S') ? -u : u);
+    });
+    const held = Object.entries(byTicker).filter(([,u])=>u>0.0001).map(([tk,u])=>({tk,u}));
+    const tickers = held.map(h=>h.tk);
+    const priceMap = {};
+    if (tickers.length) {
+      const { data: pr } = await db.from('prices').select('ticker,close,market_date').in('ticker',tickers).order('market_date',{ascending:false});
+      (pr||[]).forEach(p => { if (priceMap[p.ticker]==null) priceMap[p.ticker]=parseFloat(p.close); });
+    }
+    let portVal = 0;
+    held.forEach(h => { h.px = priceMap[h.tk]||0; h.val = h.u*h.px; portVal += h.val; });
+    held.sort((a,b)=>b.val-a.val);
+
+    const openModel = model.filter(t => String(t.status||'').toLowerCase()!=='closed' && !t.exit_price).length;
+    const macroSig = macro ? (macro.signal || macro.macro_signal || '—') : '—';
+    const macroScore = macro ? (macro.score ?? macro.macro_score ?? '') : '';
+    const macroDate = macro ? (macro.signal_date || '') : '';
+
+    el.innerHTML = `
+      <div class="sl">Market</div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">
+        ${miniIndexChart(xao,'All Ordinaries (XAO)','Broad market')}
+        ${miniIndexChart(xko,'ASX 300 (XKO)','Top 300')}
+      </div>
+
+      <div class="sl">Snapshot</div>
+      <div class="kb">
+        <div class="kc dk"><div class="kl">Portfolio value</div><div class="kv">${money(portVal)}</div><div class="kn">${held.length} holding${held.length!==1?'s':''}</div></div>
+        <div class="kc"><div class="kl">Model — open</div><div class="kv teal">${openModel}</div><div class="kn">${model.length} total trades</div></div>
+        <div class="kc"><div class="kl">Macro</div><div class="kv">${macroSig}${macroScore!==''?` <span style="font-size:12px;color:var(--muted)">${macroScore>0?'+':''}${macroScore}</span>`:''}</div><div class="kn">${macroDate?('as at '+macroDate):'latest scan'}</div></div>
+        <div class="kc"><div class="kl">Strategies</div><div class="kv gold">5</div><div class="kn"><a href="#" onclick="go('strategies',document.querySelector('.nav a[data-page=&quot;strategies&quot;]'));return false" style="color:var(--teal);text-decoration:none">Open engine →</a></div></div>
+      </div>
+
+      <div class="sl">Current holdings</div>
+      <table><thead><tr><th>Ticker</th><th class="r">Units</th><th class="r">Last</th><th class="r">Value</th><th class="r">Weight</th></tr></thead>
+        <tbody>${held.length ? held.map(h=>`<tr class="clickable" onclick="go('real',document.querySelector('.nav a[data-page=&quot;real&quot;]'))">
+          <td><span class="tkr">${h.tk}</span></td><td class="r">${h.u.toLocaleString()}</td>
+          <td class="r">${h.px?('$'+h.px.toFixed(2)):'--'}</td><td class="r">${money(h.val)}</td>
+          <td class="r">${portVal?((h.val/portVal*100).toFixed(1)+'%'):'--'}</td></tr>`).join('')
+          : '<tr><td colspan="5" class="empty">No holdings yet — record a trade or upload a contract note.</td></tr>'}</tbody>
+      </table>
+
+      <div class="sl">Model portfolio — open positions</div>
+      <table><thead><tr><th>Ticker</th><th class="r">Entry</th><th class="r">Target</th><th>Score</th></tr></thead>
+        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" onclick="go('model',document.querySelector('.nav a[data-page=&quot;model&quot;]'))">
+          <td><span class="tkr">${t.ticker}</span></td><td class="r">${t.entry_price?'$'+parseFloat(t.entry_price).toFixed(2):'--'}</td>
+          <td class="r">${t.target_price?'$'+parseFloat(t.target_price).toFixed(2):'--'}</td>
+          <td>${t.total_score!=null?t.total_score+'/7':(t.score!=null?t.score:'')}</td></tr>`).join('')
+          || '<tr><td colspan="4" class="empty">No open model trades.</td></tr>'}</tbody>
+      </table>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Dashboard error: ${e.message}</div>`;
+    console.error('dashboard error', e);
+  }
+}
+
+
 function go(page, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
@@ -684,6 +793,7 @@ function go(page, el) {
   if (pg) pg.classList.add('active');
   if (el) el.classList.add('active');
   const fns = {
+    dashboard: loadDashboard,
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     income: loadIncome, morning: loadMorning, bond: loadBond,
