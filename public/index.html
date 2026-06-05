@@ -138,18 +138,21 @@ tfoot td.r{text-align:right}
   <nav class="nav">
     <div class="nav-sec">Overview</div>
     <a class="active" data-page="dashboard">▣ Dashboard</a>
-    <div class="nav-sec">Portfolio</div>
-    <a data-page="real">$ My Portfolio</a>
-    <a data-page="model">◈ Model Portfolio</a>
-    <a data-page="reit">⬡ REIT Holdings</a>
-    <a data-page="income">$ Income</a>
-    <a data-page="performance">▲ Performance</a>
     <div class="nav-sec">Strategies</div>
     <a data-page="strategies">⚡ Strategy Engine</a>
     <a data-page="screener">⬡ Stock Screener</a>
     <a data-page="reit-trading">~ REIT Signals</a>
     <a data-page="credit-signals">◈ Credit Signals</a>
     <a data-page="bond-signals">⬡ Bond Signals</a>
+    <div class="nav-sec">My Portfolio</div>
+    <a data-page="real">$ Real Portfolio</a>
+    <a data-page="reit">⬡ REIT Holdings</a>
+    <a data-page="bond-holdings">~ Bond Holdings</a>
+    <a data-page="credit-holdings">◈ Credit Holdings</a>
+    <a data-page="income">$ Income</a>
+    <a data-page="performance">▲ Total Portfolio</a>
+    <div class="nav-sec">Model Portfolio</div>
+    <a data-page="model">◈ Model Portfolio</a>
     <div class="nav-sec">Market Data</div>
     <a data-page="morning">☀ Morning Scan</a>
     <a data-page="bond">~ Bond Market</a>
@@ -363,6 +366,44 @@ tfoot td.r{text-align:right}
     </table>
   </div>
 
+  <!-- BOND HOLDINGS -->
+  <div id="pg-bond-holdings" class="page">
+    <div class="ph"><h1>Bond &amp; Hybrid Holdings</h1><p>Owned bonds, hybrids &amp; FRNs · TSR = capital + income received</p></div>
+    <div class="kb">
+      <div class="kc dk"><div class="kl">Total Value</div><div class="kv" id="bh-val">--</div></div>
+      <div class="kc"><div class="kl">Capital P&L</div><div class="kv" id="bh-pnl">--</div></div>
+      <div class="kc"><div class="kl">Income</div><div class="kv teal" id="bh-inc">--</div><div class="kn">distributions received</div></div>
+      <div class="kc"><div class="kl">Holdings</div><div class="kv" id="bh-cnt">--</div></div>
+    </div>
+    <div class="sl">Holdings</div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Issuer</th><th class="r">Units</th><th class="r">Avg Cost</th><th class="r">Price</th>
+        <th class="r">Value</th><th class="r">Income</th><th class="r">Cap P&L</th><th class="r">TSR</th><th class="r">Ann.</th>
+      </tr></thead>
+      <tbody id="bond-holdings-tbody"><tr><td colspan="10" class="empty">No bond/hybrid holdings yet. Record one via "+ Record Trade" → Hybrid / Bond.</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- CREDIT HOLDINGS -->
+  <div id="pg-credit-holdings" class="page">
+    <div class="ph"><h1>Credit Fund Holdings</h1><p>Owned listed-credit funds (MXT, GCI, QRI…) · TSR = capital + income received</p></div>
+    <div class="kb">
+      <div class="kc dk"><div class="kl">Total Value</div><div class="kv" id="ch-val">--</div></div>
+      <div class="kc"><div class="kl">Capital P&L</div><div class="kv" id="ch-pnl">--</div></div>
+      <div class="kc"><div class="kl">Income</div><div class="kv teal" id="ch-inc">--</div><div class="kn">distributions received</div></div>
+      <div class="kc"><div class="kl">Holdings</div><div class="kv" id="ch-cnt">--</div></div>
+    </div>
+    <div class="sl">Holdings</div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Name</th><th class="r">Units</th><th class="r">Avg Cost</th><th class="r">Price</th>
+        <th class="r">Value</th><th class="r">Income</th><th class="r">Cap P&L</th><th class="r">TSR</th><th class="r">Ann.</th>
+      </tr></thead>
+      <tbody id="credit-holdings-tbody"><tr><td colspan="10" class="empty">No credit-fund holdings yet. Record one via "+ Record Trade" → Credit Fund.</td></tr></tbody>
+    </table>
+  </div>
+
   <!-- REIT TRADING SIGNALS -->
   <div id="pg-reit-trading" class="page">
     <div class="ph"><h1>REIT Signals</h1><p>Moelis-covered landlords · Yield triggers · NTA discount · Strategy scoring</p></div>
@@ -496,9 +537,22 @@ tfoot td.r{text-align:right}
     </div>
   </div>
 
-  <!-- PORTFOLIO PERFORMANCE -->
+  <!-- TOTAL PORTFOLIO -->
   <div id="pg-performance" class="page">
-    <div class="ph"><h1>Portfolio Performance</h1><p>Cumulative return over time · Real vs Model · from daily snapshots</p></div>
+    <div class="ph"><h1>Total Portfolio</h1><p>Net worth across all asset classes · allocation · cumulative return (real vs model)</p></div>
+
+    <!-- Net worth roll-up across every real holding -->
+    <div class="kb" style="margin-bottom:12px">
+      <div class="kc dk"><div class="kl">Net worth</div><div class="kv" id="tp-net">--</div><div class="kn">all real holdings</div></div>
+      <div class="kc"><div class="kl">Capital P&L</div><div class="kv" id="tp-pnl">--</div></div>
+      <div class="kc"><div class="kl">Income received</div><div class="kv teal" id="tp-inc">--</div></div>
+      <div class="kc"><div class="kl">TSR</div><div class="kv" id="tp-tsr">--</div><div class="kn">capital + income</div></div>
+      <div class="kc"><div class="kl">Positions</div><div class="kv" id="tp-cnt">--</div></div>
+    </div>
+    <div class="sl">Allocation by asset class</div>
+    <div id="tp-alloc" style="margin-bottom:18px"></div>
+
+    <div class="sl">Performance vs Model</div>
     <div class="kb" style="margin-bottom:16px">
       <div class="kc dk"><div class="kl">Real return</div><div class="kv" id="perf-real">--</div><div class="kn" id="perf-real-sub">since inception</div></div>
       <div class="kc"><div class="kl">Model return</div><div class="kv teal" id="perf-model">--</div><div class="kn" id="perf-model-sub">paper</div></div>
@@ -904,6 +958,7 @@ function go(page, el) {
     dashboard: loadDashboard,
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
+    'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
     income: loadIncome, performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
@@ -1433,6 +1488,84 @@ async function loadReal() {
   const posN = Object.values(pos).filter(p=>p.units>0).length;
   document.getElementById('r-win').textContent   = posN ? Math.round(wins/posN*100)+'%' : '--';
   document.getElementById('r-count').textContent = trades.length;
+}
+
+// ── ASSET-CLASS HOLDINGS (Bond / Credit) ──────────────────────────────────────
+// Generic holdings view driven by real_trades.universe. Net position per ticker,
+// TSR = capital + income received, holding-period + annualised.
+async function loadAssetHoldings(opts) {
+  if (!db) return;
+  const tbody = document.getElementById(opts.tbody);
+  if (!tbody) return;
+  let q = db.from('real_trades').select('*');
+  if (opts.universes)    q = q.in('universe', opts.universes);
+  if (opts.notUniverses) q = q.not('universe','in','('+opts.notUniverses.map(u=>`"${u}"`).join(',')+')');
+  const { data: trades } = await q.order('trade_date',{ascending:false});
+
+  const setStat = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  if (!trades?.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">${opts.empty}</td></tr>`;
+    ['val','pnl','inc','cnt'].forEach(s=>setStat(opts.idPrefix+'-'+s,'--'));
+    return;
+  }
+
+  const tickers = [...new Set(trades.map(t=>t.ticker))];
+  const prices  = await getPrices(tickers);
+  const income  = await incomeByTicker();
+
+  const pos = {};
+  trades.forEach(t => {
+    const p = pos[t.ticker] = pos[t.ticker] || { units:0, cost:0, entry:t.trade_date, name:t.company_name||t.ticker };
+    const sign = String(t.direction).toUpperCase()==='SELL' ? -1 : 1;
+    p.units += sign*(parseFloat(t.units)||0);
+    p.cost  += sign*(parseFloat(t.total_cost)||0);
+    if (t.trade_date && t.trade_date < p.entry) p.entry = t.trade_date;
+  });
+
+  let totVal=0, totPnl=0, totInc=0, n=0;
+  tbody.innerHTML = '';
+  Object.entries(pos).forEach(([tk,p]) => {
+    if (p.units <= 0) return;
+    const cur = prices[tk]?.price;
+    const val = cur ? p.units*cur : null;
+    const inc = income[tk] || 0;
+    const T   = tsr(p.cost, val, inc, p.entry);
+    if (val) totVal += val;
+    if (T.cap!=null && val!=null) totPnl += T.cap;
+    totInc += inc; n++;
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.title = 'Click for full stock detail · TSR = capital + income received';
+    tr.addEventListener('click', () => openSignalDrawer(tk));
+    tr.innerHTML = `
+      <td><span class="tkr">${tk}</span></td>
+      <td style="font-size:11px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name||''}</td>
+      <td class="r">${Math.round(p.units).toLocaleString()}</td>
+      <td class="r">${f.$(p.cost/p.units,3)}</td>
+      <td class="r">${cur?f.$(cur,3):'--'}</td>
+      <td class="r">${val!=null?f.$k(val):'--'}</td>
+      <td class="r" style="color:${inc?'var(--teal)':'var(--muted)'}">${inc?f.$k(inc):'--'}</td>
+      <td class="r" style="color:${T.cap==null||val==null?'var(--muted)':f.clr(T.cap)}">${T.cap!=null&&val!=null?(T.cap>=0?'+':'')+f.$(T.cap,0):'--'}</td>
+      <td class="r" style="font-weight:600;color:${T.totalPct==null?'var(--muted)':f.clr(T.totalPct)}">${pctCell(T.totalPct)}</td>
+      <td class="r" style="color:${T.annual==null?'var(--muted)':f.clr(T.annual)}">${T.annual==null?'--':pctCell(T.annual)}</td>`;
+    tbody.appendChild(tr);
+  });
+  if (!n) tbody.innerHTML = `<tr><td colspan="10" class="empty">${opts.empty}</td></tr>`;
+  setStat(opts.idPrefix+'-val', f.$k(totVal));
+  const pe=document.getElementById(opts.idPrefix+'-pnl'); if(pe){ pe.textContent=(totPnl>=0?'+':'')+f.$k(totPnl); pe.style.color=f.clr(totPnl); }
+  setStat(opts.idPrefix+'-inc', f.$k(totInc));
+  setStat(opts.idPrefix+'-cnt', n);
+}
+
+function loadCreditHoldings() {
+  return loadAssetHoldings({ universes:['CREDIT'], tbody:'credit-holdings-tbody', idPrefix:'ch',
+    empty:'No credit-fund holdings yet. Record one via "+ Record Trade" → Credit Fund.' });
+}
+function loadBondHoldings() {
+  // Bonds/hybrids = anything that isn't equity, REIT or credit (hybrid type is
+  // stored uppercased in universe, e.g. BOND/HYBRID/FRN).
+  return loadAssetHoldings({ notUniverses:['ASX500','REIT','CREDIT'], tbody:'bond-holdings-tbody', idPrefix:'bh',
+    empty:'No bond/hybrid holdings yet. Record one via "+ Record Trade" → Hybrid / Bond.' });
 }
 
 // ── STRATEGY ENGINE ───────────────────────────────────────────────────────────
@@ -2091,9 +2224,73 @@ async function saveDist() {
   loadIncome();
 }
 
+// ── TOTAL PORTFOLIO ───────────────────────────────────────────────────────────
+// Net-worth roll-up across every real holding + allocation by asset class.
+const ASSET_CLASS = u => u==='ASX500'?'Equities' : u==='REIT'?'REITs' : u==='CREDIT'?'Credit' : 'Bonds/Hybrids';
+const CLASS_COLOUR = { 'Equities':'#00B0F0', 'REITs':'#4B97B2', 'Credit':'#063D58', 'Bonds/Hybrids':'#00273E' };
+
+async function loadTotalPortfolio() {
+  if (!db) return;
+  const { data: trades } = await db.from('real_trades').select('*');
+  const setStat = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  if (!trades?.length) {
+    ['tp-net','tp-pnl','tp-inc','tp-tsr','tp-cnt'].forEach(id=>setStat(id,'--'));
+    const a=document.getElementById('tp-alloc'); if(a) a.innerHTML='<div class="empty">No holdings yet.</div>';
+    return;
+  }
+  const tickers = [...new Set(trades.map(t=>t.ticker))];
+  const prices  = await getPrices(tickers);
+  const income  = await incomeByTicker();
+
+  const pos = {};
+  trades.forEach(t => {
+    const p = pos[t.ticker] = pos[t.ticker] || { units:0, cost:0, entry:t.trade_date, cls:ASSET_CLASS(t.universe) };
+    const sign = String(t.direction).toUpperCase()==='SELL' ? -1 : 1;
+    p.units += sign*(parseFloat(t.units)||0);
+    p.cost  += sign*(parseFloat(t.total_cost)||0);
+    if (t.trade_date && t.trade_date < p.entry) p.entry = t.trade_date;
+  });
+
+  const byClass = {};
+  let netWorth=0, totCost=0, totInc=0, n=0;
+  Object.entries(pos).forEach(([tk,p]) => {
+    if (p.units <= 0) return;
+    const cur = prices[tk]?.price;
+    const val = cur ? p.units*cur : 0;
+    const inc = income[tk] || 0;
+    netWorth += val; totCost += p.cost; totInc += inc; n++;
+    const c = byClass[p.cls] = byClass[p.cls] || { val:0, cost:0, inc:0, n:0 };
+    c.val += val; c.cost += p.cost; c.inc += inc; c.n++;
+  });
+  const capPnl = netWorth - totCost;
+  const tsrPct = totCost>0 ? (capPnl+totInc)/totCost : null;
+
+  setStat('tp-net', f.$k(netWorth));
+  const pe=document.getElementById('tp-pnl'); if(pe){ pe.textContent=(capPnl>=0?'+':'')+f.$k(capPnl); pe.style.color=f.clr(capPnl); }
+  setStat('tp-inc', f.$k(totInc));
+  const te=document.getElementById('tp-tsr'); if(te){ te.textContent=pctCell(tsrPct); te.style.color=tsrPct==null?'':f.clr(tsrPct); }
+  setStat('tp-cnt', n);
+
+  // allocation: stacked bar + legend
+  const classes = Object.entries(byClass).sort((a,b)=>b[1].val-a[1].val);
+  const total = classes.reduce((s,[,c])=>s+c.val,0) || 1;
+  const bar = classes.map(([name,c]) => `<div title="${name}: ${f.$k(c.val)}" style="width:${(c.val/total*100).toFixed(1)}%;background:${CLASS_COLOUR[name]||'#999'}"></div>`).join('');
+  const legend = classes.map(([name,c]) => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+      <span style="width:11px;height:11px;border-radius:2px;background:${CLASS_COLOUR[name]||'#999'};display:inline-block"></span>
+      <span style="flex:1">${name} <span style="color:var(--muted)">· ${c.n} holding${c.n!==1?'s':''}</span></span>
+      <span style="font-family:'DM Mono',monospace">${f.$k(c.val)}</span>
+      <span style="font-family:'DM Mono',monospace;color:var(--muted);width:46px;text-align:right">${(c.val/total*100).toFixed(0)}%</span>
+    </div>`).join('');
+  document.getElementById('tp-alloc').innerHTML = `
+    <div style="display:flex;height:18px;border-radius:4px;overflow:hidden;border:1px solid var(--rule);margin-bottom:8px">${bar}</div>
+    ${legend}`;
+}
+
 // ── PORTFOLIO PERFORMANCE ─────────────────────────────────────────────────────
 async function loadPerformance() {
   if (!db) return;
+  loadTotalPortfolio();   // net-worth roll-up at the top of the Total Portfolio page
   const chartEl = document.getElementById('perf-chart');
   const { data: snaps } = await db.from('performance').select('*').order('snap_date',{ascending:true});
   perfSnaps = snaps || [];
@@ -2300,7 +2497,7 @@ async function saveRealTrade(type) {
       direction: dir, units, price, brokerage: brok, total_cost: total, contract_note: note, broker: 'CommSec'
     });
     alert(`✓ ${dir} ${units} ${ticker} @ $${price.toFixed(3)} recorded`);
-    go('real', document.querySelector('.nav a:nth-child(2)'));
+    go('real', document.querySelector('.nav a[data-page="real"]'));
   } else if (type === 'reit') {
     const ticker = document.getElementById('ri-ticker').value.toUpperCase().trim();
     const units  = parseFloat(document.getElementById('ri-units').value);
@@ -2334,7 +2531,7 @@ async function saveRealTrade(type) {
       contract_note: note, broker: 'CommSec', notes: note
     });
     alert(`✓ ${units} ${ticker} @ $${price.toFixed(3)} added to REIT income portfolio`);
-    go('reit', document.querySelector('.nav a'));
+    go('reit', document.querySelector('.nav a[data-page="reit"]'));
 
   } else if (type === 'credit') {
     const ticker  = document.getElementById('cf-ticker').value.toUpperCase().trim();
@@ -2356,7 +2553,7 @@ async function saveRealTrade(type) {
       notes: `NTA: $${nta||'--'} | Disc: ${disc||'--'}% | Target: ${target||'--'}`
     });
     alert(`✓ ${dir} ${units} ${ticker} @ $${price.toFixed(3)} recorded${disc ? ` (${disc}% ${parseFloat(disc)<0?'disc':'prem'} to NTA)` : ''}`);
-    go('credit-signals', document.querySelector('.nav a'));
+    go('credit-holdings', document.querySelector('.nav a[data-page="credit-holdings"]'));
 
   } else if (type === 'hybrid') {
     const ticker   = document.getElementById('hb-ticker').value.toUpperCase().trim();
@@ -2387,7 +2584,7 @@ async function saveRealTrade(type) {
       notes: `Margin: ${margin}% | Franking: ${franking}% | Gross yield: ${grossYield}% | Call: ${callDate||'--'} | Maturity: ${matDate||'--'}`
     });
     alert(`✓ ${dir} ${units} ${ticker} @ $${price.toFixed(2)} recorded | Gross yield ~${grossYield}%`);
-    go('bond-signals', document.querySelector('.nav a'));
+    go('bond-holdings', document.querySelector('.nav a[data-page="bond-holdings"]'));
   }
 }
 
