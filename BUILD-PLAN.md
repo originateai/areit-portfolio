@@ -23,6 +23,24 @@ Read `CLAUDE.md` first for full context. Verify against the live schema before a
 
 ## 4. The shell (port the approved previews into live index.html)
 Reference design: the shell-preview HTML files from the chat session (brand palette, no 360 marks).
+**Re-skin already shipped** (brand palette, Morning Update labelling, EODHD footer, brand-mono self-sorting chart). Remaining = structure:
+
+### 4a. Master Dashboard (landing page — first thing seen on login)
+- [ ] New top nav item "Dashboard", set as the default/landing view.
+- [ ] Index charts: **All Ords (XAO)** + **ASX 200/300 (confirm which)**. Needs index price history — if not stored, add a small ingestion (EODHD `XAO.INDX`, `XJO.INDX`) into `prices` or a new `index_prices` table.
+- [ ] Summary sections (cards + mini-tables, all linking through to the full page):
+      Strategies snapshot · Current holdings + value · Model portfolio performance · macro/net-worth strip.
+
+### 4b. Nav restructure
+- [ ] **Model Portfolio moves UNDER the Strategy Engine** (it's the output of the strategies). Strategy Engine becomes the home for all strategies — beyond the current mean-reversion + breakout (value, momentum, ML, etc.).
+- [ ] **Per-class portfolios under each income signal**: Credit Signals → credit holdings; Bond Signals → bond holdings. Each signal class gets a holdings view, not just signals.
+- [ ] Five-class taxonomy + REIT sub-classes (landlord/dev/manager) + landlord sector filter (from the shell previews).
+
+### 4c. Classification
+- [ ] DXS reclassified to REIT/landlord/office (SQL run separately). Confirm which table the Real Portfolio vs REIT Holdings views read from, and that reclassified holdings flow to the right view.
+
+### 4d. Detail view
+
 - [ ] Nav: Portfolio group (Net Worth, Model, My Portfolio, Trading History) + Growth (Equities+LICs, REITs→landlord/dev/manager) + Income (LITs, Credit, Bonds) + Strategies (Value, Momentum, Reversion, Breakout, ML).
 - [ ] Per-class signal tables with their own columns (the "different inputs" — landlords get the full field set incl. sector filter, implied cap, hedging).
 - [ ] Detail view: dual 7-layer breakdown (equity technical / REIT fundamental) + the brand-mono `buildChart`.
