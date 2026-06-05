@@ -198,19 +198,19 @@ tfoot td.r{text-align:right}
     <div class="ph"><h1>Real Portfolio</h1><p>Actual CommSec trades · Enter via contract note · Tracks real P&L vs model</p></div>
     <div class="kb">
       <div class="kc dk"><div class="kl">Total Value</div><div class="kv" id="r-val">--</div></div>
-      <div class="kc"><div class="kl">Total P&L</div><div class="kv" id="r-pnl">--</div></div>
+      <div class="kc"><div class="kl">Capital P&L</div><div class="kv" id="r-pnl">--</div></div>
+      <div class="kc"><div class="kl">Income</div><div class="kv teal" id="r-inc">--</div><div class="kn">distributions received</div></div>
       <div class="kc"><div class="kl">Win Rate</div><div class="kv gold" id="r-win">--</div></div>
-      <div class="kc"><div class="kl">vs Model</div><div class="kv" id="r-vs">--</div><div class="kn">Real vs paper</div></div>
       <div class="kc"><div class="kl">Trades</div><div class="kv" id="r-count">--</div></div>
     </div>
-    <div class="sl">Holdings</div>
+    <div class="sl">Holdings — TSR = capital + income received</div>
     <table>
       <thead><tr>
         <th>Date</th><th>Ticker</th><th>Direction</th><th class="r">Price</th>
         <th class="r">Units</th><th class="r">Cost</th><th class="r">Current</th>
-        <th class="r">P&L</th><th class="r">%</th><th>Broker</th><th>vs Model</th>
+        <th class="r">Cap P&L</th><th class="r">Income</th><th class="r">TSR</th><th class="r">Ann.</th><th>Broker</th>
       </tr></thead>
-      <tbody id="real-tbody"><tr><td colspan="11" class="empty">No real trades yet. Record your first CommSec trade via "+ Record Trade".</td></tr></tbody>
+      <tbody id="real-tbody"><tr><td colspan="12" class="empty">No real trades yet. Record your first CommSec trade via "+ Record Trade".</td></tr></tbody>
     </table>
   </div>
 
@@ -350,7 +350,7 @@ tfoot td.r{text-align:right}
       <thead><tr>
         <th>Ticker</th><th>Name</th><th class="r">Units</th><th class="r">Avg Cost</th>
         <th class="r">Price</th><th class="r">NTA</th><th class="r">Disc NTA</th>
-        <th class="r">Yield (mkt)</th><th class="r">Annual Inc</th><th class="r">P&L</th>
+        <th class="r">Yield (mkt)</th><th class="r">Income</th><th class="r">Cap P&L</th><th class="r">TSR</th><th class="r">Ann.</th>
       </tr></thead>
       <tbody id="reit-tbody"><tr><td colspan="10" class="empty">No REIT holdings yet. Record your first purchase via "+ Record Trade".</td></tr></tbody>
     </table>
@@ -620,6 +620,12 @@ tfoot td.r{text-align:right}
 
     <!-- Key metrics row -->
     <div id="sd-metrics" class="kb" style="margin-bottom:18px"></div>
+
+    <!-- TSR (only when held) -->
+    <div id="sd-tsr-wrap" style="display:none;margin-bottom:18px">
+      <div class="sl">Your Position — Total Shareholder Return</div>
+      <div id="sd-tsr" class="kb"></div>
+    </div>
 
     <!-- Chart -->
     <div class="sl">Price Chart — Last 60 days</div>
@@ -1250,29 +1256,85 @@ async function loadModel() {
   });
 }
 
+// ── TSR (Total Shareholder Return = capital gain + income received) ────────────
+// Sum distributions received-to-date per ticker, from the `distributions` table.
+async function incomeByTicker() {
+  const { data } = await db.from('distributions').select('ticker,total_received,amount_per_unit,units_held');
+  const m = {};
+  (data||[]).forEach(d => {
+    const v = d.total_received != null ? parseFloat(d.total_received)
+            : (d.amount_per_unit && d.units_held ? parseFloat(d.amount_per_unit)*parseFloat(d.units_held) : 0);
+    m[d.ticker] = (m[d.ticker]||0) + (v||0);
+  });
+  return m;
+}
+
+// Holding-period TSR plus annualised (CAGR). costBasis/currentValue/income in $.
+function tsr(costBasis, currentValue, income, entryDate) {
+  costBasis = parseFloat(costBasis)||0;
+  const cap   = (parseFloat(currentValue)||0) - costBasis;
+  const inc   = parseFloat(income)||0;
+  const total = cap + inc;
+  const totalPct = costBasis>0 ? total/costBasis : null;
+  const capPct   = costBasis>0 ? cap/costBasis   : null;
+  const incPct   = costBasis>0 ? inc/costBasis   : null;
+  let days=null, annual=null;
+  if (entryDate) {
+    days = Math.max(1, Math.round((Date.now()-new Date(entryDate).getTime())/86400000));
+    const yrs = days/365.25;
+    // only annualise once there's enough holding period (~1 month) to be meaningful
+    if (totalPct!=null && yrs>=0.08 && (1+totalPct)>0) annual = Math.pow(1+totalPct, 1/yrs)-1;
+  }
+  return { cap, inc, total, totalPct, capPct, incPct, days, annual };
+}
+const pctCell = v => v==null ? '--' : (v>=0?'+':'')+(v*100).toFixed(1)+'%';
+
 // ── REAL PORTFOLIO ────────────────────────────────────────────────────────────
 async function loadReal() {
   if (!db) return;
   const { data: trades } = await db.from('real_trades').select('*').order('trade_date',{ascending:false});
   const tbody = document.getElementById('real-tbody');
   tbody.innerHTML = '';
-  if (!trades?.length) { tbody.innerHTML = '<tr><td colspan="11" class="empty">No real trades recorded yet. Use "+ Record Trade" after placing in CommSec.</td></tr>'; return; }
+  if (!trades?.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty">No real trades recorded yet. Use "+ Record Trade" after placing in CommSec.</td></tr>'; return; }
 
   const tickers = [...new Set(trades.map(t=>t.ticker))];
   const prices  = await getPrices(tickers);
-  let totVal=0, totPnl=0, wins=0;
+  const income  = await incomeByTicker();
+
+  // Net position per ticker → consistent, no-double-count TSR shown on each row.
+  const pos = {};
+  trades.forEach(t => {
+    const p = pos[t.ticker] = pos[t.ticker] || { units:0, cost:0, entry:t.trade_date };
+    const sign = String(t.direction).toUpperCase()==='SELL' ? -1 : 1;
+    p.units += sign*(parseInt(t.units)||0);
+    p.cost  += sign*(parseFloat(t.total_cost)||0);
+    if (t.trade_date && t.trade_date < p.entry) p.entry = t.trade_date;
+  });
+  Object.entries(pos).forEach(([tk,p]) => {
+    const cur = prices[tk]?.price;
+    p.value  = cur ? p.units*cur : null;
+    p.income = income[tk] || 0;
+    p.tsr    = tsr(p.cost, p.value, p.income, p.entry);
+  });
+
+  let totVal=0, totPnl=0, totInc=0, wins=0;
+  Object.values(pos).forEach(p => {
+    if (p.value) totVal += p.value;
+    if (p.tsr.cap!=null && p.value!=null) { totPnl += p.tsr.cap; if (p.tsr.cap>0) wins++; }
+  });
+  Object.keys(pos).forEach(tk => { totInc += income[tk]||0; });
 
   trades.forEach(t => {
-    const pd    = prices[t.ticker];
-    const cur   = pd?.price;
-    const val   = t.direction==='BUY'&&cur ? t.units*cur : null;
-    const upnl  = val&&t.total_cost ? val-parseFloat(t.total_cost) : null;
-    const pnl   = t.pnl!=null ? parseFloat(t.pnl) : upnl;
-    if (val) totVal += val;
-    if (pnl!=null) { totPnl += pnl; if (pnl>0) wins++; }
+    const pd   = prices[t.ticker];
+    const cur  = pd?.price;
+    const p    = pos[t.ticker];
+    const val  = t.direction==='BUY'&&cur ? t.units*cur : null;
+    const upnl = val&&t.total_cost ? val-parseFloat(t.total_cost) : null;
+    const pnl  = t.pnl!=null ? parseFloat(t.pnl) : upnl;
+    const T    = p.tsr;
     const tr = document.createElement('tr');
     tr.className = 'clickable';
-    tr.title = 'Click for full stock detail';
+    tr.title = 'Click for full stock detail · TSR is position-level (capital + income)';
     tr.addEventListener('click', () => openSignalDrawer(t.ticker));
     tr.innerHTML = `
       <td style="font-size:10px;color:var(--muted)">${t.trade_date}</td>
@@ -1283,9 +1345,10 @@ async function loadReal() {
       <td class="r">${f.$k(t.total_cost)}</td>
       <td class="r">${cur?f.$(cur,3):'--'}</td>
       <td class="r" style="color:${pnl==null?'var(--muted)':f.clr(pnl)}">${pnl==null?'--':(pnl>=0?'+':'')+f.$(pnl,0)}</td>
-      <td class="r" style="color:${t.pnl_pct==null?'var(--muted)':f.clr(t.pnl_pct)}">${t.pnl_pct==null?'--':(parseFloat(t.pnl_pct)*100).toFixed(1)+'%'}</td>
+      <td class="r" style="color:${p.income?'var(--teal)':'var(--muted)'}">${p.income?f.$k(p.income):'--'}</td>
+      <td class="r" style="font-weight:600;color:${T.totalPct==null?'var(--muted)':f.clr(T.totalPct)}">${pctCell(T.totalPct)}</td>
+      <td class="r" style="color:${T.annual==null?'var(--muted)':f.clr(T.annual)}">${T.annual==null?'--':pctCell(T.annual)}</td>
       <td style="font-size:10px;color:var(--muted)">${t.broker||'CommSec'}</td>
-      <td><span style="font-size:10px;color:var(--muted)">${t.followed_model?'✓ Followed':'Manual'}</span></td>
     `;
     tbody.appendChild(tr);
   });
@@ -1294,7 +1357,9 @@ async function loadReal() {
   const pnlEl = document.getElementById('r-pnl');
   pnlEl.textContent = (totPnl>=0?'+':'')+f.$k(totPnl);
   pnlEl.style.color = f.clr(totPnl);
-  document.getElementById('r-win').textContent   = trades.length ? Math.round(wins/trades.length*100)+'%' : '--';
+  const incEl = document.getElementById('r-inc'); if (incEl) incEl.textContent = f.$k(totInc);
+  const posN = Object.values(pos).filter(p=>p.units>0).length;
+  document.getElementById('r-win').textContent   = posN ? Math.round(wins/posN*100)+'%' : '--';
   document.getElementById('r-count').textContent = trades.length;
 }
 
@@ -1663,23 +1728,26 @@ async function loadREIT() {
   const { data: holdings } = await db.from('reit_income_holdings').select('*').gt('units_held',0);
   const tbody = document.getElementById('reit-tbody');
   tbody.innerHTML = '';
-  if (!holdings?.length) { tbody.innerHTML = '<tr><td colspan="10" class="empty">No REIT holdings yet. Record your first REIT purchase via "+ Record Trade".</td></tr>'; return; }
+  if (!holdings?.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty">No REIT holdings yet. Record your first REIT purchase via "+ Record Trade".</td></tr>'; return; }
 
   let totVal=0, totInc=0, totPnl=0;
   const { data: stocks } = await db.from('stocks').select('ticker,nta').eq('is_reit',true);
   const ntaMap = {};
   (stocks||[]).forEach(s => { ntaMap[s.ticker] = s.nta; });
+  const income = await incomeByTicker();   // distributions received-to-date per ticker
 
   holdings.forEach(h => {
     const nta  = ntaMap[h.ticker];
     const disc = nta && h.current_price ? (h.current_price - nta) / nta : null;
     const yield_ = h.dps_fy26 && h.current_price ? h.dps_fy26 / h.current_price : null;
+    const inc  = income[h.ticker] || 0;
+    const T    = tsr(h.total_cost, h.current_value, inc, h.first_bought);
     if (h.current_value) totVal += parseFloat(h.current_value);
-    if (h.annual_income) totInc += parseFloat(h.annual_income);
-    if (h.unrealised_pnl) totPnl += parseFloat(h.unrealised_pnl);
+    totInc += inc;
+    if (T.cap!=null && h.current_value!=null) totPnl += T.cap;
     const tr = document.createElement('tr');
     tr.className = 'clickable';
-    tr.title = 'Click for full stock detail';
+    tr.title = 'Click for full stock detail · TSR = capital + income received';
     tr.addEventListener('click', () => openSignalDrawer(h.ticker));
     tr.innerHTML = `
       <td><span class="tkr">${h.ticker}</span></td>
@@ -1690,8 +1758,10 @@ async function loadREIT() {
       <td class="r">${nta?f.$(nta,2):'--'}</td>
       <td class="r" style="color:${disc==null?'var(--muted)':disc<0?'var(--teal)':'var(--red)'}">${disc!=null?(disc*100).toFixed(1)+'%':'--'}</td>
       <td class="r" style="color:${yield_>=0.08?'var(--green)':yield_>=0.07?'var(--teal)':'var(--muted)'};font-weight:${yield_>=0.07?600:400}">${yield_?(yield_*100).toFixed(1)+'%':'--'}</td>
-      <td class="r">${h.annual_income?f.$k(h.annual_income):'--'}</td>
-      <td class="r" style="color:${h.unrealised_pnl==null?'var(--muted)':f.clr(h.unrealised_pnl)}">${h.unrealised_pnl!=null?(h.unrealised_pnl>=0?'+':'')+f.$(h.unrealised_pnl,0):'--'}</td>
+      <td class="r" style="color:${inc?'var(--teal)':'var(--muted)'}">${inc?f.$k(inc):'--'}</td>
+      <td class="r" style="color:${T.cap==null||h.current_value==null?'var(--muted)':f.clr(T.cap)}">${T.cap!=null&&h.current_value!=null?(T.cap>=0?'+':'')+f.$(T.cap,0):'--'}</td>
+      <td class="r" style="font-weight:600;color:${T.totalPct==null?'var(--muted)':f.clr(T.totalPct)}">${pctCell(T.totalPct)}</td>
+      <td class="r" style="color:${T.annual==null?'var(--muted)':f.clr(T.annual)}">${T.annual==null?'--':pctCell(T.annual)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -2212,17 +2282,24 @@ async function openSignalDrawer(ticker) {
   document.getElementById('sd-history-tbody').innerHTML = '';
 
   // Fetch all data in parallel
-  const [tradeRes, analysisRes, pricesRes, stockRes] = await Promise.all([
+  const [tradeRes, analysisRes, pricesRes, stockRes, realRes, reitRes, distRes] = await Promise.all([
     db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).maybeSingle(),
     db.from('daily_analysis').select('*').eq('ticker', ticker).order('analysis_date',{ascending:false}).limit(1).single(),
     db.from('prices').select('market_date,open,high,low,close,volume,change_pct').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
-    db.from('stocks').select('*').eq('ticker', ticker).single()
+    db.from('stocks').select('*').eq('ticker', ticker).single(),
+    db.from('real_trades').select('direction,units,total_cost,price,trade_date').eq('ticker', ticker),
+    db.from('reit_income_holdings').select('*').eq('ticker', ticker).maybeSingle(),
+    db.from('distributions').select('total_received,amount_per_unit,units_held').eq('ticker', ticker)
   ]);
 
   const trade    = tradeRes.data;
   const analysis = analysisRes.data;
   const prices   = (pricesRes.data || []).reverse();
   const stock    = stockRes.data;
+  const realTrades = realRes.data || [];
+  const reitHold   = reitRes.data;
+  const incomeRecd = (distRes.data || []).reduce((s,d)=> s + (d.total_received!=null ? parseFloat(d.total_received)
+                       : (d.amount_per_unit&&d.units_held ? parseFloat(d.amount_per_unit)*parseFloat(d.units_held) : 0)), 0);
 
   const layers = [
     { name: 'Layer 1 — Macro',      val: analysis?.layer1_macro,     desc: 'US overnight S&P, Nasdaq, VIX, AUD, yield curve' },
@@ -2350,6 +2427,43 @@ async function openSignalDrawer(ticker) {
     if (asof) asof.textContent = stock.fundamentals_asof ? `· as at ${stock.fundamentals_asof} (results-pack date)` : '· awaiting results-pack data';
   } else {
     reitWrap.style.display = 'none';
+  }
+
+  // ── TSR for this position (capital + income), holding-period + annualised ─────
+  const tsrWrap = document.getElementById('sd-tsr-wrap');
+  let position = null;  // { units, cost, entry }
+  if (realTrades.length) {
+    position = { units:0, cost:0, entry:null };
+    realTrades.forEach(t => {
+      const sign = String(t.direction).toUpperCase()==='SELL' ? -1 : 1;
+      position.units += sign*(parseInt(t.units)||0);
+      position.cost  += sign*(parseFloat(t.total_cost)||0);
+      if (t.trade_date && (!position.entry || t.trade_date < position.entry)) position.entry = t.trade_date;
+    });
+  } else if (reitHold && reitHold.units_held > 0) {
+    position = { units: parseFloat(reitHold.units_held), cost: parseFloat(reitHold.total_cost)||0, entry: reitHold.first_bought };
+  }
+  if (position && position.units > 0) {
+    tsrWrap.style.display = 'block';
+    const px  = livePrice || prices[prices.length-1]?.close || null;
+    const val = px ? position.units*px : null;
+    const T   = tsr(position.cost, val, incomeRecd, position.entry);
+    const cards = [
+      { l:'Units held',     v: Math.round(position.units).toLocaleString(), c:'var(--ink)' },
+      { l:'Cost basis',     v: f.$k(position.cost), c:'var(--ink)' },
+      { l:'Market value',   v: val!=null?f.$k(val):'—', c:'var(--ink)' },
+      { l:'Capital return', v: T.capPct==null?'—':pctCell(T.capPct), c: T.capPct==null?'var(--muted)':f.clr(T.capPct) },
+      { l:'Income received',v: f.$k(T.inc), c:'var(--teal)' },
+      { l:'Income return',  v: T.incPct==null?'—':pctCell(T.incPct), c:'var(--teal)' },
+      { l:'TSR (total)',    v: T.totalPct==null?'—':pctCell(T.totalPct), c: T.totalPct==null?'var(--muted)':f.clr(T.totalPct), dark:true },
+      { l:'TSR annualised', v: T.annual==null?'—':pctCell(T.annual), c: T.annual==null?'var(--muted)':f.clr(T.annual) },
+      { l:'Holding period', v: T.days==null?'—':(T.days>=365?(T.days/365.25).toFixed(1)+'yr':T.days+'d'), c:'var(--muted)' },
+    ];
+    document.getElementById('sd-tsr').innerHTML = cards.map(m =>
+      `<div class="kc ${m.dark?'dk':''}"><div class="kl">${m.l}</div><div class="kv" style="color:${m.dark?'var(--gold-lt)':m.c};font-size:16px">${m.v}</div></div>`
+    ).join('');
+  } else {
+    tsrWrap.style.display = 'none';
   }
 
   // 6 layers
