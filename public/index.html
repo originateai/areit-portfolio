@@ -151,6 +151,7 @@ tfoot td.r{text-align:right}
     <a data-page="stock-detail" id="nav-stock-detail" style="display:none">◉ Stock Detail</a>
     <div class="nav-sec">Admin</div>
     <a data-page="enter-trade">+ Record Trade</a>
+    <a data-page="documents">⬆ Documents</a>
     <a data-page="settings">⚙ Settings</a>
     <a data-page="alerts">◎ Alerts</a>
   </nav>
@@ -612,6 +613,40 @@ tfoot td.r{text-align:right}
     </div>
   </div>
 
+  <!-- DOCUMENTS -->
+  <div id="pg-documents" class="page">
+    <div class="ph"><h1>Documents</h1><p>Single source of truth · Contract notes → holdings · Distribution statements → income · Tax statements stored for reference</p></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
+      <div class="kc" style="text-align:left;padding:14px">
+        <div class="kl" style="margin-bottom:6px">Contract note</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">CommSec trade confirmation. Text/CSV is parsed to prefill a trade for confirmation; PDFs are stored for reference.</div>
+        <input type="file" id="up-contract_note" accept=".pdf,.txt,.csv" style="font-size:11px;width:100%">
+        <input type="text" id="tk-contract_note" placeholder="Ticker (optional)" style="margin-top:6px;width:100%;font-size:11px;padding:4px">
+        <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('contract_note')">Upload &amp; parse</button>
+      </div>
+      <div class="kc" style="text-align:left;padding:14px">
+        <div class="kl" style="margin-bottom:6px">Distribution statement</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Registry/REIT distribution advice. Text/CSV prefills an income entry for confirmation.</div>
+        <input type="file" id="up-distribution_statement" accept=".pdf,.txt,.csv" style="font-size:11px;width:100%">
+        <input type="text" id="tk-distribution_statement" placeholder="Ticker (optional)" style="margin-top:6px;width:100%;font-size:11px;padding:4px">
+        <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('distribution_statement')">Upload &amp; parse</button>
+      </div>
+      <div class="kc" style="text-align:left;padding:14px">
+        <div class="kl" style="margin-bottom:6px">Tax statement</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Annual tax statement / AMMA. Stored for reference only.</div>
+        <input type="file" id="up-tax_statement" accept=".pdf,.txt,.csv" style="font-size:11px;width:100%">
+        <input type="text" id="tk-tax_statement" placeholder="Ticker / FY (optional)" style="margin-top:6px;width:100%;font-size:11px;padding:4px">
+        <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('tax_statement')">Upload &amp; store</button>
+      </div>
+    </div>
+    <div id="doc-status" style="font-size:12px;margin-bottom:10px"></div>
+    <div class="sl">Uploaded documents</div>
+    <table>
+      <thead><tr><th>Date</th><th>Type</th><th>Ticker</th><th>File</th><th>Parsed</th><th>Status</th><th></th></tr></thead>
+      <tbody id="doc-tbody"><tr><td colspan="7" class="empty">No documents uploaded yet.</td></tr></tbody>
+    </table>
+  </div>
+
   <!-- SETTINGS -->
   <div id="pg-settings" class="page">
     <div class="ph"><h1>Settings</h1><p>Conviction sizing · Risk parameters · Alert preferences</p></div>
@@ -855,7 +890,7 @@ function go(page, el) {
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     income: loadIncome, performance: loadPerformance, morning: loadMorning, bond: loadBond,
-    'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
+    'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
   fns[page]?.();
 }
@@ -2749,6 +2784,141 @@ function buildFullChart(prices, trade) {
   const divider = `<line x1="${padL}" y1="${h-padB-volH}" x2="${w-padR}" y2="${h-padB-volH}" stroke="${RULE}" stroke-width="0.5"/>`;
   const hoverZones = prices.map((p,i)=>{ const x=px(i),date=p.market_date||'',o=opens[i],c=closes[i],hi=highs[i],lo=lows[i],vol=parseInt(p.volume||0),chg=parseFloat(p.change_pct||0); const tip=`${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`; return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" fill="transparent" style="cursor:crosshair"><title>${tip}</title></rect>`; }).join('');
   return `<div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background:${BG};border-radius:4px;min-width:600px"><rect width="${w}" height="${h}" fill="${BG}" rx="4"/>${gridLines}${bbFillD?`<path d="${bbFillD}" fill="rgba(75,151,178,0.08)"/>`:''}${maPath(bbUpper,TEAL,'3,3')}${maPath(bbLower,TEAL,'3,3')}${volBars}${divider}${maPath(ma200arr,INK,'6,4')}${maPath(ma50arr,TEAL,'4,3')}${maPath(ma20arr,SKY,'')}${tradeLines}${candles}${hoverZones}${dateLabels}${legend}</svg></div>`;
+}
+
+// ── DOCUMENT UPLOADS ──────────────────────────────────────────────────────────
+// Stores the file in the `documents` Storage bucket + a metadata row. For
+// text/CSV contract notes & distribution advices we parse and PREFILL the
+// relevant form for the user to confirm — never silently writing to holdings or
+// income, since these are real-money records (see TODO.md).
+async function uploadDocument(docType) {
+  const fileEl = document.getElementById('up-' + docType);
+  const status = document.getElementById('doc-status');
+  const file   = fileEl?.files?.[0];
+  if (!file) { status.innerHTML = '<span style="color:var(--red)">Choose a file first.</span>'; return; }
+  const ticker = (document.getElementById('tk-' + docType)?.value || '').toUpperCase().trim() || null;
+  status.textContent = `Uploading ${file.name}…`;
+  try {
+    const path = `${docType}/${Date.now()}_${file.name.replace(/[^A-Za-z0-9._-]/g,'_')}`;
+    const { error: upErr } = await db.storage.from('documents').upload(path, file, { upsert: false });
+    if (upErr) throw upErr;
+
+    // Best-effort parse for text/CSV; PDFs are stored for reference only.
+    let parsed = null, parseMsg = '';
+    const isText = /\.(txt|csv)$/i.test(file.name) || /text|csv/.test(file.type);
+    if (isText && docType !== 'tax_statement') {
+      const text = await file.text();
+      parsed = (docType === 'contract_note') ? parseContractNote(text) : parseDistStatement(text);
+    }
+
+    const { data: row } = await db.from('document_uploads').insert({
+      doc_type: docType, ticker: ticker || parsed?.ticker || null,
+      doc_date: parsed?.date || null, file_path: path, file_name: file.name,
+      parsed, status: parsed ? 'parsed' : 'stored'
+    }).select().maybeSingle();
+
+    if (parsed && docType === 'contract_note') {
+      parseMsg = ` Parsed ${parsed.ticker||''} ${parsed.units||''}@${parsed.price||''}. Opening Record Trade to confirm…`;
+      prefillTradeFromParse(parsed);
+    } else if (parsed && docType === 'distribution_statement') {
+      parseMsg = ` Parsed ${parsed.ticker||''} $${parsed.amount||''}/unit. Opening Income to confirm…`;
+      prefillDistFromParse(parsed);
+    } else if (!isText && docType !== 'tax_statement') {
+      parseMsg = ' Stored. PDF auto-parsing not enabled — enter the details manually (form prefilled where possible).';
+    }
+    status.innerHTML = `<span style="color:var(--green)">Uploaded ${file.name}.</span>${parseMsg}`;
+    fileEl.value = '';
+    loadDocuments();
+  } catch (e) {
+    status.innerHTML = `<span style="color:var(--red)">Upload failed: ${e.message}</span>`;
+  }
+}
+
+// CommSec trade-confirmation parser (text/CSV). Tolerant of layout; returns
+// best-effort {ticker, direction, units, price, brokerage, date, total}.
+function parseContractNote(text) {
+  const out = {};
+  const T = text.replace(/\r/g,'');
+  let m;
+  if ((m = T.match(/\b(BUY|SELL|B U Y|BOUGHT|SOLD)\b/i))) out.direction = /sell|sold/i.test(m[1]) ? 'SELL' : 'BUY';
+  if ((m = T.match(/\b([A-Z]{3})\b(?=.*(?:ordinary|fully paid|units|shares))/i))) out.ticker = m[1];
+  if (!out.ticker && (m = T.match(/(?:code|asx|symbol)[:\s]+([A-Z]{3})\b/i))) out.ticker = m[1];
+  if ((m = T.match(/(?:quantity|units|shares)[:\s]+([\d,]+)/i))) out.units = parseInt(m[1].replace(/,/g,''));
+  if ((m = T.match(/(?:price|@)\s*\$?\s*([\d.]+)/i))) out.price = parseFloat(m[1]);
+  if ((m = T.match(/(?:brokerage|commission)[:\s]+\$?\s*([\d.]+)/i))) out.brokerage = parseFloat(m[1]);
+  if ((m = T.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/))) out.date = normDate(m[1]);
+  if ((m = T.match(/(?:net|total|consideration)[:\s]+\$?\s*([\d,]+\.\d{2})/i))) out.total = parseFloat(m[1].replace(/,/g,''));
+  // CSV row fallback: TICKER,DIR,UNITS,PRICE,DATE
+  if ((!out.ticker || !out.units) && /,/.test(T)) {
+    const cols = (T.split('\n').find(l => /^[A-Z]{3},/.test(l.trim())) || '').split(',');
+    if (cols.length >= 4) { out.ticker=out.ticker||cols[0].trim(); out.units=out.units||parseInt(cols[2]); out.price=out.price||parseFloat(cols[3]); }
+  }
+  return out;
+}
+
+// Distribution / dividend advice parser (text/CSV) → {ticker, amount(per unit), units, date}.
+function parseDistStatement(text) {
+  const out = {};
+  const T = text.replace(/\r/g,'');
+  let m;
+  if ((m = T.match(/(?:code|asx|security|symbol)[:\s]+([A-Z]{3})\b/i))) out.ticker = m[1];
+  if (!out.ticker && (m = T.match(/\b([A-Z]{3})\b/))) out.ticker = m[1];
+  if ((m = T.match(/(?:cents per|per unit|rate|distribution)[:\s$]*([\d.]+)\s*(c|cents)?/i))) {
+    out.amount = /c|cents/i.test(m[2]||'') ? parseFloat(m[1])/100 : parseFloat(m[1]);
+  }
+  if ((m = T.match(/(?:units|holding)[:\s]+([\d,]+)/i))) out.units = parseInt(m[1].replace(/,/g,''));
+  if ((m = T.match(/(?:payment|pay date|date)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i))) out.date = normDate(m[1]);
+  return out;
+}
+
+function normDate(s) {
+  const p = s.split(/[\/\-]/).map(Number);
+  if (p[0] > 31) return `${p[0]}-${String(p[1]).padStart(2,'0')}-${String(p[2]).padStart(2,'0')}`; // yyyy-mm-dd
+  let [d,mo,y] = p; if (y < 100) y += 2000;
+  return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function prefillTradeFromParse(p) {
+  go('enter-trade', document.querySelector('.nav a[data-page="enter-trade"]'));
+  const set = (id,v) => { const e=document.getElementById(id); if (e && v!=null) e.value = v; };
+  set('t-ticker', p.ticker); set('t-units', p.units); set('t-price', p.price);
+  set('t-date', p.date); set('t-brok', p.brokerage); set('t-dir', p.direction);
+  if (typeof updateTradeCalc === 'function') updateTradeCalc();
+}
+
+function prefillDistFromParse(p) {
+  go('income', document.querySelector('.nav a[data-page="income"]'));
+  showAddDist();
+  const set = (id,v) => { const e=document.getElementById(id); if (e && v!=null) e.value = v; };
+  set('d-ticker', p.ticker); set('d-amount', p.amount); set('d-units', p.units); set('d-exdate', p.date);
+}
+
+async function loadDocuments() {
+  if (!db) return;
+  const tbody = document.getElementById('doc-tbody');
+  const { data: docs } = await db.from('document_uploads').select('*').order('created_at',{ascending:false});
+  if (!docs?.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No documents uploaded yet.</td></tr>'; return; }
+  const typeLabel = { contract_note:'Contract note', distribution_statement:'Distribution', tax_statement:'Tax statement' };
+  tbody.innerHTML = '';
+  for (const d of docs) {
+    const tr = document.createElement('tr');
+    const parsedTxt = d.parsed ? Object.entries(d.parsed).map(([k,v])=>`${k}:${v}`).join(' · ') : '—';
+    tr.innerHTML = `
+      <td style="font-size:11px;color:var(--muted)">${(d.created_at||'').slice(0,10)}</td>
+      <td style="font-size:11px">${typeLabel[d.doc_type]||d.doc_type}</td>
+      <td>${d.ticker?`<span class="tkr">${d.ticker}</span>`:'—'}</td>
+      <td style="font-size:11px">${d.file_name||''}</td>
+      <td style="font-size:10px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${parsedTxt}">${parsedTxt}</td>
+      <td><span class="badge ${d.status==='parsed'?'b-buy':'b-hold'}">${d.status}</span></td>
+      <td><a href="#" style="font-size:11px;color:var(--teal)" onclick="downloadDoc('${d.file_path}');return false">Download</a></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function downloadDoc(path) {
+  const { data, error } = await db.storage.from('documents').createSignedUrl(path, 60);
+  if (error) { alert('Could not generate link: ' + error.message); return; }
+  window.open(data.signedUrl, '_blank');
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
