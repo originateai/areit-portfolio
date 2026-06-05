@@ -623,6 +623,12 @@ tfoot td.r{text-align:right}
     <div class="sl">Price Chart — Last 60 days</div>
     <div id="sd-chart" style="background:var(--cream);border-radius:4px;padding:8px;margin-bottom:18px;overflow:hidden"></div>
 
+    <!-- REIT fundamentals (full field set; every field always shown, blank = awaiting data) -->
+    <div id="sd-reit-wrap" style="display:none;margin-bottom:18px">
+      <div class="sl">REIT Fundamentals <span id="sd-reit-asof" style="font-weight:400;color:var(--muted);font-size:10px"></span></div>
+      <div id="sd-reit" class="kb"></div>
+    </div>
+
     <!-- Two column layout -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
 
@@ -786,7 +792,7 @@ async function loadDashboard() {
 
       <div class="sl">Current holdings</div>
       <table><thead><tr><th>Ticker</th><th class="r">Units</th><th class="r">Last</th><th class="r">Value</th><th class="r">Weight</th></tr></thead>
-        <tbody>${held.length ? held.map(h=>`<tr class="clickable" onclick="go('real',document.querySelector('.nav a[data-page=&quot;real&quot;]'))">
+        <tbody>${held.length ? held.map(h=>`<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${h.tk}')">
           <td><span class="tkr">${h.tk}</span></td><td class="r">${h.u.toLocaleString()}</td>
           <td class="r">${h.px?('$'+h.px.toFixed(2)):'--'}</td><td class="r">${money(h.val)}</td>
           <td class="r">${portVal?((h.val/portVal*100).toFixed(1)+'%'):'--'}</td></tr>`).join('')
@@ -795,7 +801,7 @@ async function loadDashboard() {
 
       <div class="sl">Model portfolio — open positions</div>
       <table><thead><tr><th>Ticker</th><th class="r">Entry</th><th class="r">Target</th><th>Score</th></tr></thead>
-        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" onclick="go('model',document.querySelector('.nav a[data-page=&quot;model&quot;]'))">
+        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${t.ticker}')">
           <td><span class="tkr">${t.ticker}</span></td><td class="r">${t.entry_price?'$'+parseFloat(t.entry_price).toFixed(2):'--'}</td>
           <td class="r">${t.target_price?'$'+parseFloat(t.target_price).toFixed(2):'--'}</td>
           <td>${t.total_score!=null?t.total_score+'/7':(t.score!=null?t.score:'')}</td></tr>`).join('')
@@ -936,7 +942,7 @@ function renderValueRows() {
     const pbCell = !r.price_book ? '<td class="r">--</td>'
       : r.assetHeavy ? `<td class="r">${r.price_book.toFixed(2)}</td>`
       : `<td class="r" style="color:var(--muted)" title="P/B ignored — capital-light (${r.industry||'—'})">${r.price_book.toFixed(2)}*</td>`;
-    return `<tr>
+    return `<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${r.ticker}')">
       <td><span class="tkr">${r.ticker}</span></td>
       <td style="font-size:11px;color:var(--muted)">${(r.name||'').slice(0,26)}</td>
       <td style="font-size:11px">${r.sector||'—'}</td>
@@ -1263,6 +1269,9 @@ async function loadReal() {
     if (val) totVal += val;
     if (pnl!=null) { totPnl += pnl; if (pnl>0) wins++; }
     const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.title = 'Click for full stock detail';
+    tr.addEventListener('click', () => openSignalDrawer(t.ticker));
     tr.innerHTML = `
       <td style="font-size:10px;color:var(--muted)">${t.trade_date}</td>
       <td><span class="tkr">${t.ticker}</span></td>
@@ -1667,6 +1676,9 @@ async function loadREIT() {
     if (h.annual_income) totInc += parseFloat(h.annual_income);
     if (h.unrealised_pnl) totPnl += parseFloat(h.unrealised_pnl);
     const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.title = 'Click for full stock detail';
+    tr.addEventListener('click', () => openSignalDrawer(h.ticker));
     tr.innerHTML = `
       <td><span class="tkr">${h.ticker}</span></td>
       <td style="font-size:11px">${h.name}</td>
@@ -2224,13 +2236,7 @@ async function openSignalDrawer(ticker) {
     { l:'BB Pos',   v: analysis?.bb_position != null ? (()=>{ const v=parseFloat(analysis.bb_position)*100; return (v<-200?'<-200':v>200?'>200':v.toFixed(0))+'%'; })():'--', c: analysis?.bb_position<0?'var(--red)':analysis?.bb_position>1?'var(--green)':'var(--ink)', dark: false },
     { l:'Conviction',v: conv + ' ' + score+'/7',  c: convFg, dark: conv==='EXCEPTIONAL' },
     { l:'Candle',   v: candleTooltip(analysis?.candle_pattern) || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false, html: true },
-    ...(stock?.is_reit ? [
-      { l:'NTA',      v: stock.nta ? '$'+parseFloat(stock.nta).toFixed(2) : '--', c: 'var(--ink)', dark: false },
-      { l:'Gearing',  v: stock.gearing ? (stock.gearing*100).toFixed(0)+'%' : '--', c: stock.gearing>0.4?'var(--red)':stock.gearing>0.35?'var(--amber)':'var(--ink)', dark: false },
-      { l:'WALE',     v: stock.wale ? parseFloat(stock.wale).toFixed(1)+'yr' : '--', c: 'var(--ink)', dark: false },
-      { l:'Occupancy',v: stock.occupancy ? (stock.occupancy*100).toFixed(1)+'%' : '--', c: stock.occupancy>0.97?'var(--green)':stock.occupancy>0.93?'var(--ink)':'var(--amber)', dark: false },
-      { l:'Cap Rate', v: stock.cap_rate ? (stock.cap_rate*100).toFixed(2)+'%' : '--', c: 'var(--teal)', dark: false },
-    ] : []),
+    // REIT fundamentals are rendered in the dedicated #sd-reit panel below.
   ];
   document.getElementById('sd-metrics').innerHTML = metrics.map(m =>
     `<div class="kc ${m.dark?'dk':''}">
@@ -2243,6 +2249,48 @@ async function openSignalDrawer(ticker) {
   document.getElementById('sd-chart').innerHTML = prices.length > 5
     ? buildFullChart(prices, trade)
     : '<div style="height:300px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">Not enough price history — run bootstrap first</div>';
+
+  // ── REIT FUNDAMENTALS PANEL ──────────────────────────────────────────────────
+  // Every field is ALWAYS shown for a REIT. Missing data renders as a labelled
+  // blank placeholder ("—"), ready to receive data — never hidden.
+  const reitWrap = document.getElementById('sd-reit-wrap');
+  if (stock?.is_reit) {
+    reitWrap.style.display = 'block';
+    const px       = livePrice || prices[prices.length-1]?.close || null;
+    const blank    = '<span style="color:var(--muted)">—</span>';
+    const pctOf    = v => (v==null||v==='') ? blank : (parseFloat(v)*100).toFixed(1)+'%';
+    const pct2     = v => (v==null||v==='') ? blank : (parseFloat(v)*100).toFixed(2)+'%';
+    const dollars  = (v,d=2) => (v==null||v==='') ? blank : '$'+parseFloat(v).toFixed(d);
+    const distYld  = (stock.dps_fy26 && px) ? stock.dps_fy26/px : null;
+    const discNta  = (stock.nta && px) ? (px-stock.nta)/stock.nta : null;
+    // implied vs book cap-rate gap (landlords): positive = market prices a higher cap than book
+    const capGap   = (stock.implied_wacr!=null && stock.wacr!=null) ? (stock.implied_wacr - stock.wacr) : null;
+    const subclass = stock.reit_subclass || (stock.is_manager?'manager':stock.is_developer?'developer':'landlord');
+    const isLandlord = !stock.is_manager && !stock.is_developer;
+    const fields = [
+      { l:'Sub-class',        v: subclass ? subclass.charAt(0).toUpperCase()+subclass.slice(1) : blank, c:'var(--ink)' },
+      { l:'Sector',           v: stock.landlord_sector || stock.sector || blank, c:'var(--ink)' },
+      { l:'NTA / unit',       v: dollars(stock.nta), c:'var(--ink)' },
+      { l:'Price vs NTA',     v: discNta==null?blank:(discNta<0?'':'+')+(discNta*100).toFixed(1)+'%', c: discNta==null?'var(--muted)':discNta<0?'var(--teal)':'var(--red)' },
+      { l:'Dist. yield',      v: distYld==null?blank:(distYld*100).toFixed(1)+'%', c: distYld>=0.08?'var(--green)':distYld>=0.07?'var(--teal)':'var(--ink)' },
+      { l:'DPS (FY26)',       v: dollars(stock.dps_fy26,4), c:'var(--ink)' },
+      { l:'WACR (book)',      v: pct2(stock.wacr), c:'var(--ink)' },
+      { l:'Implied cap rate', v: isLandlord ? pct2(stock.implied_wacr) : '<span style="color:var(--muted)" title="EV-based; meaningless for non-landlords">n/a</span>', c:'var(--teal)' },
+      { l:'Impl − book gap',  v: (isLandlord && capGap!=null) ? (capGap>=0?'+':'')+(capGap*10000).toFixed(0)+'bps' : blank, c: capGap==null?'var(--muted)':capGap>0?'var(--green)':'var(--red)' },
+      { l:'Gearing',          v: pctOf(stock.gearing), c: stock.gearing>0.4?'var(--red)':stock.gearing>0.35?'var(--amber)':'var(--ink)' },
+      { l:'ICR (×)',          v: stock.icr==null?blank:parseFloat(stock.icr).toFixed(1)+'×', c: stock.icr<2?'var(--red)':stock.icr<3?'var(--amber)':'var(--ink)' },
+      { l:'Debt hedged',      v: pctOf(stock.hedged_pct), c:'var(--ink)' },
+      { l:'WALE',             v: stock.wale==null?blank:parseFloat(stock.wale).toFixed(1)+'yr', c:'var(--ink)' },
+      { l:'Occupancy',        v: pctOf(stock.occupancy), c: stock.occupancy>0.97?'var(--green)':stock.occupancy>0.93?'var(--ink)':'var(--amber)' },
+    ];
+    document.getElementById('sd-reit').innerHTML = fields.map(m =>
+      `<div class="kc"><div class="kl">${m.l}</div><div class="kv" style="color:${m.c};font-size:15px">${m.v}</div></div>`
+    ).join('');
+    const asof = document.getElementById('sd-reit-asof');
+    if (asof) asof.textContent = stock.fundamentals_asof ? `· as at ${stock.fundamentals_asof} (results-pack date)` : '· awaiting results-pack data';
+  } else {
+    reitWrap.style.display = 'none';
+  }
 
   // 6 layers
   document.getElementById('sd-layers').innerHTML = layers.map(l => `
