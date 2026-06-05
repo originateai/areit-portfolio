@@ -138,6 +138,7 @@ tfoot td.r{text-align:right}
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="reit">⬡ REIT Holdings</a>
     <a data-page="income">$ Income</a>
+    <a data-page="performance">▲ Performance</a>
     <div class="nav-sec">Strategies</div>
     <a data-page="strategies">⚡ Strategy Engine</a>
     <a data-page="model">◈ Model Portfolio</a>
@@ -489,6 +490,27 @@ tfoot td.r{text-align:right}
     </div>
   </div>
 
+  <!-- PORTFOLIO PERFORMANCE -->
+  <div id="pg-performance" class="page">
+    <div class="ph"><h1>Portfolio Performance</h1><p>Cumulative return over time · Real vs Model · from daily snapshots</p></div>
+    <div class="kb" style="margin-bottom:16px">
+      <div class="kc dk"><div class="kl">Real return</div><div class="kv" id="perf-real">--</div><div class="kn" id="perf-real-sub">since inception</div></div>
+      <div class="kc"><div class="kl">Model return</div><div class="kv teal" id="perf-model">--</div><div class="kn" id="perf-model-sub">paper</div></div>
+      <div class="kc"><div class="kl">Snapshots</div><div class="kv" id="perf-cnt">0</div><div class="kn" id="perf-range">--</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1">Cumulative return (%)</div>
+      <button class="btn btn-secondary" onclick="reconstructPerformance()" style="font-size:11px" id="perf-recon-btn"
+        title="Rebuild historical snapshots from your trade dates + stored price history">↻ Reconstruct from trade history</button>
+    </div>
+    <div id="perf-recon-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
+    <div id="perf-chart" style="background:var(--cream);border-radius:4px;padding:10px;margin-bottom:18px;min-height:260px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div><div class="sl">Real portfolio — latest snapshot</div><div id="perf-real-snap" class="kb"></div></div>
+      <div><div class="sl">Model portfolio — latest snapshot</div><div id="perf-model-snap" class="kb"></div></div>
+    </div>
+  </div>
+
   <!-- MORNING SCAN -->
   <div id="pg-morning" class="page">
     <div class="ph"><h1>Morning Scan</h1><p>8:00am AEST Mon–Fri · US overnight + bond market + 6-layer strategy</p></div>
@@ -832,7 +854,7 @@ function go(page, el) {
     dashboard: loadDashboard,
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
-    income: loadIncome, morning: loadMorning, bond: loadBond,
+    income: loadIncome, performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
   };
   fns[page]?.();
@@ -2017,6 +2039,94 @@ async function saveDist() {
   await db.from('distributions').upsert({ ticker, ex_date: exdate, amount_per_unit: amount, units_held: units, total_received: amount*units, source: 'manual' }, { onConflict: 'ticker,ex_date' });
   document.getElementById('add-dist-form').style.display='none';
   loadIncome();
+}
+
+// ── PORTFOLIO PERFORMANCE ─────────────────────────────────────────────────────
+async function loadPerformance() {
+  if (!db) return;
+  const chartEl = document.getElementById('perf-chart');
+  const { data: snaps } = await db.from('performance').select('*').order('snap_date',{ascending:true});
+
+  if (!snaps?.length) {
+    chartEl.innerHTML = '<div class="empty" style="padding:40px 0">No snapshots yet. The daily 4pm price job writes one each market day; or click “Reconstruct from trade history” to backfill from your trades + stored prices.</div>';
+    ['perf-real','perf-model','perf-cnt','perf-range'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent='--'; });
+    document.getElementById('perf-real-snap').innerHTML = '';
+    document.getElementById('perf-model-snap').innerHTML = '';
+    return;
+  }
+
+  // Build the two cumulative-return series (%). Prefer stored *_pnl_pct; else derive.
+  const series = snaps.map(s => {
+    const modelPct = s.model_pnl_pct!=null ? parseFloat(s.model_pnl_pct)
+                   : (s.model_value && s.model_capital ? (s.model_value-s.model_capital)/s.model_capital : null);
+    const realPct  = s.real_pnl_pct!=null ? parseFloat(s.real_pnl_pct) : null;
+    return { date: s.snap_date, model: modelPct, real: realPct };
+  });
+
+  chartEl.innerHTML = perfLineChart(series);
+
+  const last = snaps[snaps.length-1];
+  const fmtPct = v => v==null ? '--' : (v>=0?'+':'')+(v*100).toFixed(2)+'%';
+  const realPct  = last.real_pnl_pct!=null ? parseFloat(last.real_pnl_pct) : null;
+  const modelPct = last.model_pnl_pct!=null ? parseFloat(last.model_pnl_pct)
+                 : (last.model_value&&last.model_capital ? (last.model_value-last.model_capital)/last.model_capital : null);
+  const rEl=document.getElementById('perf-real');  rEl.textContent=fmtPct(realPct);  rEl.style.color = realPct==null?'':f.clr(realPct);
+  const mEl=document.getElementById('perf-model'); mEl.textContent=fmtPct(modelPct);
+  document.getElementById('perf-cnt').textContent   = snaps.length;
+  document.getElementById('perf-range').textContent = `${snaps[0].snap_date} → ${last.snap_date}`;
+
+  const snapCards = (pairs) => pairs.map(([l,v])=>`<div class="kc"><div class="kl">${l}</div><div class="kv" style="font-size:15px">${v}</div></div>`).join('');
+  document.getElementById('perf-real-snap').innerHTML = snapCards([
+    ['Value', last.real_value!=null?f.$k(last.real_value):'—'],
+    ['P&L', last.real_pnl!=null?(parseFloat(last.real_pnl)>=0?'+':'')+f.$k(last.real_pnl):'—'],
+    ['Return', fmtPct(realPct)],
+    ['REIT income YTD', last.reit_income_ytd!=null?f.$k(last.reit_income_ytd):'—'],
+  ]);
+  document.getElementById('perf-model-snap').innerHTML = snapCards([
+    ['Value', last.model_value!=null?f.$k(last.model_value):'—'],
+    ['Invested', last.model_invested!=null?f.$k(last.model_invested):'—'],
+    ['P&L', last.model_pnl!=null?(parseFloat(last.model_pnl)>=0?'+':'')+f.$k(last.model_pnl):'—'],
+    ['Win rate', last.model_win_rate!=null?(parseFloat(last.model_win_rate)*100).toFixed(0)+'%':'—'],
+  ]);
+}
+
+// Dual-line cumulative-return chart (real = ink, model = sky), SVG, zero baseline.
+function perfLineChart(series) {
+  const w=900, h=260, padL=48, padR=16, padT=16, padB=28;
+  const cw=w-padL-padR, ch=h-padT-padB;
+  const vals = series.flatMap(p => [p.model, p.real]).filter(v => v!=null);
+  if (!vals.length) return '<div class="empty" style="padding:40px 0">No return data in snapshots yet.</div>';
+  let min=Math.min(0,...vals), max=Math.max(0,...vals); if (min===max){min-=0.01;max+=0.01;}
+  const pad=(max-min)*0.08; min-=pad; max+=pad;
+  const n=series.length;
+  const px=i=> padL + (n<=1?cw/2:(i/(n-1))*cw);
+  const py=v=> padT + ch - ((v-min)/(max-min))*ch;
+  const SKY='#00B0F0', INK='#00273E', RULE='#d7e0e5', MUT='#5a7682', BG='#f4f8fa';
+  const path = key => { let d='',inP=false; series.forEach((p,i)=>{ const v=p[key]; if(v!=null){ d+=(inP?' L':'M')+px(i).toFixed(1)+','+py(v).toFixed(1); inP=true;} else inP=false; }); return d; };
+  const zeroY=py(0);
+  const grid=Array.from({length:5},(_,i)=>{ const v=min+(max-min)*(i/4),y=py(v); return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${RULE}" stroke-width="0.5"/><text x="${padL-5}" y="${y+3}" text-anchor="end" font-size="9" fill="${MUT}" font-family="monospace">${(v*100).toFixed(0)}%</text>`; }).join('');
+  const xlabs=series.map((p,i)=>{ if(i%Math.ceil(n/6)!==0 && i!==n-1) return ''; return `<text x="${px(i)}" y="${h-padB+16}" text-anchor="middle" font-size="9" fill="${MUT}" font-family="monospace">${(p.date||'').slice(2)}</text>`; }).join('');
+  const mPath=path('model'), rPath=path('real');
+  const legend=`<rect x="${padL}" y="2" width="12" height="2" fill="${INK}"/><text x="${padL+16}" y="6" font-size="9" fill="${MUT}">Real</text><rect x="${padL+55}" y="2" width="12" height="2" fill="${SKY}"/><text x="${padL+71}" y="6" font-size="9" fill="${MUT}">Model</text>`;
+  return `<div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${w} ${h}" style="background:${BG};border-radius:4px;min-width:560px">
+    <rect width="${w}" height="${h}" fill="${BG}" rx="4"/>${grid}
+    <line x1="${padL}" y1="${zeroY}" x2="${w-padR}" y2="${zeroY}" stroke="${MUT}" stroke-width="1" stroke-dasharray="3,3"/>
+    ${mPath?`<path d="${mPath}" fill="none" stroke="${SKY}" stroke-width="1.8"/>`:''}
+    ${rPath?`<path d="${rPath}" fill="none" stroke="${INK}" stroke-width="2"/>`:''}
+    ${xlabs}${legend}</svg></div>`;
+}
+
+async function reconstructPerformance() {
+  const btn=document.getElementById('perf-recon-btn'), st=document.getElementById('perf-recon-status');
+  if (!confirm('Rebuild historical performance snapshots from your trade dates and stored price history? This overwrites snapshot rows for past dates.')) return;
+  if (btn){ btn.disabled=true; btn.textContent='↻ Reconstructing…'; }
+  if (st) st.textContent='Walking trade history against stored prices…';
+  try {
+    const res = await fetch('/.netlify/functions/reconstruct-performance-background', { method:'POST' });
+    const out = await res.json().catch(()=>({}));
+    if (st) st.textContent = out.message || `Done — ${out.snapshots||0} snapshots written.`;
+  } catch(e){ if (st) st.textContent='Reconstruction failed: '+e.message; }
+  finally { if (btn){ btn.disabled=false; btn.textContent='↻ Reconstruct from trade history'; } loadPerformance(); }
 }
 
 // ── MORNING SCAN ──────────────────────────────────────────────────────────────

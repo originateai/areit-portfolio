@@ -176,12 +176,33 @@ exports.handler = schedule('0 6 * * 1-5', async () => {
       await sendEmail(`⚡ Trade Alerts — ${alerts.map(a=>a.ticker).join(', ')}`, html);
     }
 
-    // Save performance snapshot
+    // Save performance snapshot — MODEL
     const { data: allTrades } = await db.from('model_trades').select('pnl,status,amount');
     const totPnl   = (allTrades||[]).filter(t=>t.pnl!=null).reduce((s,t)=>s+parseFloat(t.pnl),0);
     const invested = (allTrades||[]).filter(t=>t.status==='OPEN').reduce((s,t)=>s+parseFloat(t.amount||0),0);
     const closed   = (allTrades||[]).filter(t=>t.status!=='OPEN'&&t.pnl!=null);
     const wins     = closed.filter(t=>parseFloat(t.pnl)>0);
+
+    // Save performance snapshot — REAL portfolio (net positions valued at today's close)
+    const closeByTicker = {};
+    priceRows.forEach(r => { closeByTicker[r.ticker] = r.close; });
+    const { data: realTrades } = await db.from('real_trades').select('ticker,direction,units,total_cost');
+    const realPos = {};
+    (realTrades||[]).forEach(t => {
+      const p = realPos[t.ticker] = realPos[t.ticker] || { units:0, cost:0 };
+      const sign = String(t.direction||'').toUpperCase()==='SELL' ? -1 : 1;
+      p.units += sign*(parseInt(t.units)||0);
+      p.cost  += sign*(parseFloat(t.total_cost)||0);
+    });
+    let realValue=0, realCost=0;
+    Object.entries(realPos).forEach(([tk,p]) => {
+      if (p.units <= 0) return;
+      const px = closeByTicker[tk];
+      if (px) realValue += p.units*px;
+      realCost += p.cost;
+    });
+    const realPnl    = realCost>0 ? realValue-realCost : 0;
+    const realPnlPct = realCost>0 ? realPnl/realCost  : 0;
 
     await db.from('performance').upsert({
       snap_date:         today,
@@ -192,7 +213,10 @@ exports.handler = schedule('0 6 * * 1-5', async () => {
       model_pnl:         parseFloat(totPnl.toFixed(2)),
       model_pnl_pct:     parseFloat((totPnl/50000).toFixed(6)),
       model_trades_open: (allTrades||[]).filter(t=>t.status==='OPEN').length,
-      model_win_rate:    closed.length ? parseFloat((wins.length/closed.length).toFixed(4)) : null
+      model_win_rate:    closed.length ? parseFloat((wins.length/closed.length).toFixed(4)) : null,
+      real_value:        parseFloat(realValue.toFixed(2)),
+      real_pnl:          parseFloat(realPnl.toFixed(2)),
+      real_pnl_pct:      parseFloat(realPnlPct.toFixed(6))
     }, { onConflict: 'snap_date' });
 
     console.log(`Prices saved: ${fetched}, failed: ${failed}, stops: ${stopped}, targets: ${targeted}`);
