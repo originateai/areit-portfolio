@@ -2381,10 +2381,15 @@ function buildFullChart(prices, trade) {
   const w = 900, h = 320, padL = 60, padR = 20, padT = 15, padB = 50, volH = 50;
   const chartW = w - padL - padR, chartH = h - padT - padB - volH;
   const closes = prices.map(p => parseFloat(p.close));
-  const highs  = prices.map(p => parseFloat(p.high  || p.close));
-  const lows   = prices.map(p => parseFloat(p.low   || p.close));
-  const vols   = prices.map(p => parseInt(p.volume  || 0));
   const opens  = prices.map(p => parseFloat(p.open  || p.close));
+  const vols   = prices.map(p => parseInt(p.volume  || 0));
+  // Defensive geometry: legacy bootstrap rows stored adjusted_close as `close`
+  // but RAW open/high/low, so for dividend/split names the close can fall
+  // outside the raw high–low band and the candle renders inside-out. Clamp the
+  // wick to always enclose the body so EVERY stock renders a valid candle,
+  // regardless of how consistent the stored OHLC happens to be.
+  const highs  = prices.map((p,i) => Math.max(parseFloat(p.high || p.close), opens[i], closes[i]));
+  const lows   = prices.map((p,i) => Math.min(parseFloat(p.low  || p.close), opens[i], closes[i]));
   const UP='#00B0F0', DN='#00273E', SKY='#00B0F0', TEAL='#4B97B2', INK='#00273E',
         RULE='#d7e0e5', MUT='#5a7682', BG='#f4f8fa', TRED='#c0392b', TGRN='#1f8a4c';
   const minP = Math.min(...lows)*0.997, maxP = Math.max(...highs)*1.003, maxV = Math.max(...vols)||1, n = prices.length;
@@ -2398,7 +2403,7 @@ function buildFullChart(prices, trade) {
   const bbUpper=bbArr.map(b=>b?.upper||null), bbLower=bbArr.map(b=>b?.lower||null);
   let bbFillD=''; const validBB=bbArr.map((b,i)=>b?{i,upper:b.upper,lower:b.lower}:null).filter(Boolean);
   if(validBB.length>1){ bbFillD=validBB.map((b,j)=>j===0?`M${px(b.i)},${py(b.upper)}`:`L${px(b.i)},${py(b.upper)}`).join(' '); bbFillD+=' '+[...validBB].reverse().map(b=>`L${px(b.i)},${py(b.lower)}`).join(' ')+' Z'; }
-  const candles = prices.map((p,i)=>{ const o=parseFloat(p.open||p.close),c=parseFloat(p.close),hi=parseFloat(p.high||p.close),lo=parseFloat(p.low||p.close); const x=px(i),bull=c>=o,col=bull?UP:DN; const bt=py(Math.max(o,c)),bb=py(Math.min(o,c)),bh=Math.max(1,bb-bt); return `<line x1="${x}" y1="${py(hi)}" x2="${x}" y2="${py(lo)}" stroke="${col}" stroke-width="1"/><rect x="${x-candleW/2}" y="${bt}" width="${candleW}" height="${bh}" fill="${bull?'rgba(0,176,240,0.18)':col}" stroke="${col}" stroke-width="1"/>`; }).join('');
+  const candles = prices.map((p,i)=>{ const o=opens[i],c=closes[i],hi=highs[i],lo=lows[i]; const x=px(i),bull=c>=o,col=bull?UP:DN; const bt=py(Math.max(o,c)),bb=py(Math.min(o,c)),bh=Math.max(1,bb-bt); return `<line x1="${x}" y1="${py(hi)}" x2="${x}" y2="${py(lo)}" stroke="${col}" stroke-width="1"/><rect x="${x-candleW/2}" y="${bt}" width="${candleW}" height="${bh}" fill="${bull?'rgba(0,176,240,0.18)':col}" stroke="${col}" stroke-width="1"/>`; }).join('');
   const volBars = prices.map((p,i)=>{ const v=parseInt(p.volume||0),c=parseFloat(p.close),o=parseFloat(p.open||p.close),col=c>=o?UP:DN,bh=(v/maxV)*volH; return `<rect x="${px(i)-candleW/2}" y="${h-padB-bh}" width="${candleW}" height="${bh}" fill="${col}" opacity="0.32"/>`; }).join('');
   const tradeLines = trade ? [
     trade.entry_price?`<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="${INK}" stroke-width="1.5" stroke-dasharray="4,3"/><text x="${padL+4}" y="${py(parseFloat(trade.entry_price))-3}" font-size="9" fill="${INK}" font-family="monospace">Entry $${parseFloat(trade.entry_price).toFixed(3)}</text>`:'',
@@ -2410,7 +2415,7 @@ function buildFullChart(prices, trade) {
   const dateLabels = prices.map((p,i)=>{ if(i%10!==0 && i!==n-1) return ''; const date=p.market_date?.slice(5)||''; return `<text x="${px(i)}" y="${h-padB+18}" text-anchor="middle" font-size="9" fill="${MUT}" font-family="monospace">${date}</text>`; }).join('');
   const legend = `<rect x="${padL}" y="${h-15}" width="12" height="2" fill="${SKY}"/><text x="${padL+15}" y="${h-11}" font-size="9" fill="${MUT}">20 DMA</text><rect x="${padL+65}" y="${h-15}" width="12" height="2" fill="${TEAL}"/><text x="${padL+80}" y="${h-11}" font-size="9" fill="${MUT}">50 DMA</text><rect x="${padL+130}" y="${h-15}" width="12" height="2" fill="${INK}"/><text x="${padL+145}" y="${h-11}" font-size="9" fill="${MUT}">200 DMA</text><rect x="${padL+200}" y="${h-15}" width="12" height="2" fill="${TEAL}" opacity="0.5"/><text x="${padL+215}" y="${h-11}" font-size="9" fill="${MUT}">Bollinger</text>${trade?`<rect x="${padL+275}" y="${h-15}" width="12" height="2" fill="${INK}"/><text x="${padL+290}" y="${h-11}" font-size="9" fill="${MUT}">Trade levels</text>`:''}`;
   const divider = `<line x1="${padL}" y1="${h-padB-volH}" x2="${w-padR}" y2="${h-padB-volH}" stroke="${RULE}" stroke-width="0.5"/>`;
-  const hoverZones = prices.map((p,i)=>{ const x=px(i),date=p.market_date||'',o=parseFloat(p.open||p.close),c=parseFloat(p.close),hi=parseFloat(p.high||p.close),lo=parseFloat(p.low||p.close),vol=parseInt(p.volume||0),chg=parseFloat(p.change_pct||0); const tip=`${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`; return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" fill="transparent" style="cursor:crosshair"><title>${tip}</title></rect>`; }).join('');
+  const hoverZones = prices.map((p,i)=>{ const x=px(i),date=p.market_date||'',o=opens[i],c=closes[i],hi=highs[i],lo=lows[i],vol=parseInt(p.volume||0),chg=parseFloat(p.change_pct||0); const tip=`${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`; return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" fill="transparent" style="cursor:crosshair"><title>${tip}</title></rect>`; }).join('');
   return `<div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background:${BG};border-radius:4px;min-width:600px"><rect width="${w}" height="${h}" fill="${BG}" rx="4"/>${gridLines}${bbFillD?`<path d="${bbFillD}" fill="rgba(75,151,178,0.08)"/>`:''}${maPath(bbUpper,TEAL,'3,3')}${maPath(bbLower,TEAL,'3,3')}${volBars}${divider}${maPath(ma200arr,INK,'6,4')}${maPath(ma50arr,TEAL,'4,3')}${maPath(ma20arr,SKY,'')}${tradeLines}${candles}${hoverZones}${dateLabels}${legend}</svg></div>`;
 }
 

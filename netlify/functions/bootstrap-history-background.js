@@ -30,14 +30,24 @@ async function getHistorical(ticker, from, to) {
     return data
       .filter(d => d.adjusted_close > 0 || d.close > 0)
       .map((d, i, arr) => {
-        const close = parseFloat(d.adjusted_close || d.close);
-        const prev  = i > 0 ? parseFloat(arr[i-1].adjusted_close || arr[i-1].close) : close;
+        // Store a fully ADJUSTED, internally-consistent OHLC bar.
+        // EODHD returns raw open/high/low/close plus adjusted_close. Using the
+        // adjusted close alongside raw O/H/L (the old bug) detaches the candle
+        // body from its wick for any name with a dividend/split. Apply the same
+        // back-adjustment factor (adjusted_close / close) to O/H/L so the whole
+        // candle lives in adjusted space and the body always sits inside the wick.
+        const rawClose = parseFloat(d.close);
+        const adjClose = parseFloat(d.adjusted_close || d.close);
+        const adj      = (rawClose > 0 && adjClose > 0) ? adjClose / rawClose : 1;
+        const close    = adjClose;
+        const prev     = i > 0 ? parseFloat(arr[i-1].adjusted_close || arr[i-1].close) : close;
+        const adjP     = v => v != null ? parseFloat((parseFloat(v) * adj).toFixed(4)) : close;
         return {
           ticker,
           market_date: d.date,
-          open:        parseFloat(d.open   || close),
-          high:        parseFloat(d.high   || close),
-          low:         parseFloat(d.low    || close),
+          open:        d.open != null ? adjP(d.open) : close,
+          high:        d.high != null ? adjP(d.high) : close,
+          low:         d.low  != null ? adjP(d.low)  : close,
           close,
           volume:      parseInt(d.volume   || 0),
           change_pct:  prev > 0 ? parseFloat(((close - prev) / prev).toFixed(6)) : 0,
