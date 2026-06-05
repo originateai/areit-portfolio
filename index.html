@@ -134,24 +134,24 @@ tfoot td.r{text-align:right}
   <nav class="nav">
     <div class="nav-sec">Overview</div>
     <a class="active" data-page="dashboard">▣ Dashboard</a>
-    <div class="nav-sec">Trading</div>
-    <a data-page="model">◈ Model Portfolio</a>
+    <div class="nav-sec">Portfolio</div>
     <a data-page="real">$ Real Portfolio</a>
-    <a data-page="strategies">⚡ Strategy Engine</a>
-    <a data-page="screener">⬡ Stock Screener</a>
-    <div class="nav-sec">Income</div>
     <a data-page="reit">⬡ REIT Holdings</a>
+    <a data-page="income">$ Income</a>
+    <a data-page="performance">▲ Performance</a>
+    <div class="nav-sec">Strategies</div>
+    <a data-page="strategies">⚡ Strategy Engine</a>
+    <a data-page="model">◈ Model Portfolio</a>
+    <a data-page="screener">⬡ Stock Screener</a>
     <a data-page="reit-trading">~ REIT Signals</a>
     <a data-page="credit-signals">◈ Credit Signals</a>
     <a data-page="bond-signals">⬡ Bond Signals</a>
-    <a data-page="income">$ Income Tracker</a>
-    <div class="nav-sec">Analysis</div>
-    <a data-page="stock-detail" id="nav-stock-detail" style="display:none">◉ Stock Detail</a>
-    <div class="nav-sec">Signals</div>
     <a data-page="morning">☀ Morning Scan</a>
     <a data-page="bond">~ Bond Market</a>
+    <a data-page="stock-detail" id="nav-stock-detail" style="display:none">◉ Stock Detail</a>
     <div class="nav-sec">Admin</div>
     <a data-page="enter-trade">+ Record Trade</a>
+    <a data-page="documents">⬆ Documents</a>
     <a data-page="settings">⚙ Settings</a>
     <a data-page="alerts">◎ Alerts</a>
   </nav>
@@ -200,19 +200,19 @@ tfoot td.r{text-align:right}
     <div class="ph"><h1>Real Portfolio</h1><p>Actual CommSec trades · Enter via contract note · Tracks real P&L vs model</p></div>
     <div class="kb">
       <div class="kc dk"><div class="kl">Total Value</div><div class="kv" id="r-val">--</div></div>
-      <div class="kc"><div class="kl">Total P&L</div><div class="kv" id="r-pnl">--</div></div>
+      <div class="kc"><div class="kl">Capital P&L</div><div class="kv" id="r-pnl">--</div></div>
+      <div class="kc"><div class="kl">Income</div><div class="kv teal" id="r-inc">--</div><div class="kn">distributions received</div></div>
       <div class="kc"><div class="kl">Win Rate</div><div class="kv gold" id="r-win">--</div></div>
-      <div class="kc"><div class="kl">vs Model</div><div class="kv" id="r-vs">--</div><div class="kn">Real vs paper</div></div>
       <div class="kc"><div class="kl">Trades</div><div class="kv" id="r-count">--</div></div>
     </div>
-    <div class="sl">Holdings</div>
+    <div class="sl">Holdings — TSR = capital + income received</div>
     <table>
       <thead><tr>
         <th>Date</th><th>Ticker</th><th>Direction</th><th class="r">Price</th>
         <th class="r">Units</th><th class="r">Cost</th><th class="r">Current</th>
-        <th class="r">P&L</th><th class="r">%</th><th>Broker</th><th>vs Model</th>
+        <th class="r">Cap P&L</th><th class="r">Income</th><th class="r">TSR</th><th class="r">Ann.</th><th>Broker</th>
       </tr></thead>
-      <tbody id="real-tbody"><tr><td colspan="11" class="empty">No real trades yet. Record your first CommSec trade via "+ Record Trade".</td></tr></tbody>
+      <tbody id="real-tbody"><tr><td colspan="12" class="empty">No real trades yet. Record your first CommSec trade via "+ Record Trade".</td></tr></tbody>
     </table>
   </div>
 
@@ -352,7 +352,7 @@ tfoot td.r{text-align:right}
       <thead><tr>
         <th>Ticker</th><th>Name</th><th class="r">Units</th><th class="r">Avg Cost</th>
         <th class="r">Price</th><th class="r">NTA</th><th class="r">Disc NTA</th>
-        <th class="r">Yield (mkt)</th><th class="r">Annual Inc</th><th class="r">P&L</th>
+        <th class="r">Yield (mkt)</th><th class="r">Income</th><th class="r">Cap P&L</th><th class="r">TSR</th><th class="r">Ann.</th>
       </tr></thead>
       <tbody id="reit-tbody"><tr><td colspan="10" class="empty">No REIT holdings yet. Record your first purchase via "+ Record Trade".</td></tr></tbody>
     </table>
@@ -466,15 +466,17 @@ tfoot td.r{text-align:right}
       <div class="kc"><div class="kl">Distributions</div><div class="kv" id="inc-cnt">0</div></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <div class="sl" style="flex:1">Distribution history</div>
-      <button class="btn btn-secondary" onclick="showAddDist()" style="margin-left:12px;font-size:11px">+ Add distribution</button>
+      <div class="sl" style="flex:1">Distributions received — cumulative per stock</div>
+      <button class="btn btn-secondary" onclick="ingestDividends()" style="margin-left:12px;font-size:11px" id="inc-pull-btn">↻ Pull dividends (EODHD)</button>
+      <button class="btn btn-secondary" onclick="showAddDist()" style="margin-left:8px;font-size:11px">+ Add distribution</button>
     </div>
+    <div id="inc-pull-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
     <table>
       <thead><tr>
         <th>Ticker</th><th>Ex-Date</th><th>Pay Date</th><th class="r">$/unit</th>
-        <th class="r">Units held</th><th class="r">Total received</th><th>Notes</th>
+        <th class="r">Units held</th><th class="r">Received</th><th class="r">Cumulative</th><th>Source</th>
       </tr></thead>
-      <tbody id="dist-tbody"><tr><td colspan="7" class="empty">No distributions recorded yet.</td></tr></tbody>
+      <tbody id="dist-tbody"><tr><td colspan="8" class="empty">No distributions recorded yet.</td></tr></tbody>
     </table>
     <div id="add-dist-form" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--rule);background:var(--cream)">
       <div class="sl">Record distribution</div>
@@ -486,6 +488,27 @@ tfoot td.r{text-align:right}
       </div>
       <button class="btn btn-primary" onclick="saveDist()">Save distribution</button>
       <button class="btn btn-secondary" onclick="document.getElementById('add-dist-form').style.display='none'" style="margin-left:8px">Cancel</button>
+    </div>
+  </div>
+
+  <!-- PORTFOLIO PERFORMANCE -->
+  <div id="pg-performance" class="page">
+    <div class="ph"><h1>Portfolio Performance</h1><p>Cumulative return over time · Real vs Model · from daily snapshots</p></div>
+    <div class="kb" style="margin-bottom:16px">
+      <div class="kc dk"><div class="kl">Real return</div><div class="kv" id="perf-real">--</div><div class="kn" id="perf-real-sub">since inception</div></div>
+      <div class="kc"><div class="kl">Model return</div><div class="kv teal" id="perf-model">--</div><div class="kn" id="perf-model-sub">paper</div></div>
+      <div class="kc"><div class="kl">Snapshots</div><div class="kv" id="perf-cnt">0</div><div class="kn" id="perf-range">--</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1">Cumulative return (%)</div>
+      <button class="btn btn-secondary" onclick="reconstructPerformance()" style="font-size:11px" id="perf-recon-btn"
+        title="Rebuild historical snapshots from your trade dates + stored price history">↻ Reconstruct from trade history</button>
+    </div>
+    <div id="perf-recon-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
+    <div id="perf-chart" style="background:var(--cream);border-radius:4px;padding:10px;margin-bottom:18px;min-height:260px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div><div class="sl">Real portfolio — latest snapshot</div><div id="perf-real-snap" class="kb"></div></div>
+      <div><div class="sl">Model portfolio — latest snapshot</div><div id="perf-model-snap" class="kb"></div></div>
     </div>
   </div>
 
@@ -590,6 +613,40 @@ tfoot td.r{text-align:right}
     </div>
   </div>
 
+  <!-- DOCUMENTS -->
+  <div id="pg-documents" class="page">
+    <div class="ph"><h1>Documents</h1><p>Single source of truth · Contract notes → holdings · Distribution statements → income · Tax statements stored for reference</p></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
+      <div class="kc" style="text-align:left;padding:14px">
+        <div class="kl" style="margin-bottom:6px">Contract note</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">CommSec trade confirmation. Text/CSV is parsed to prefill a trade for confirmation; PDFs are stored for reference.</div>
+        <input type="file" id="up-contract_note" accept=".pdf,.txt,.csv" style="font-size:11px;width:100%">
+        <input type="text" id="tk-contract_note" placeholder="Ticker (optional)" style="margin-top:6px;width:100%;font-size:11px;padding:4px">
+        <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('contract_note')">Upload &amp; parse</button>
+      </div>
+      <div class="kc" style="text-align:left;padding:14px">
+        <div class="kl" style="margin-bottom:6px">Distribution statement</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Registry/REIT distribution advice. Text/CSV prefills an income entry for confirmation.</div>
+        <input type="file" id="up-distribution_statement" accept=".pdf,.txt,.csv" style="font-size:11px;width:100%">
+        <input type="text" id="tk-distribution_statement" placeholder="Ticker (optional)" style="margin-top:6px;width:100%;font-size:11px;padding:4px">
+        <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('distribution_statement')">Upload &amp; parse</button>
+      </div>
+      <div class="kc" style="text-align:left;padding:14px">
+        <div class="kl" style="margin-bottom:6px">Tax statement</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Annual tax statement / AMMA. Stored for reference only.</div>
+        <input type="file" id="up-tax_statement" accept=".pdf,.txt,.csv" style="font-size:11px;width:100%">
+        <input type="text" id="tk-tax_statement" placeholder="Ticker / FY (optional)" style="margin-top:6px;width:100%;font-size:11px;padding:4px">
+        <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('tax_statement')">Upload &amp; store</button>
+      </div>
+    </div>
+    <div id="doc-status" style="font-size:12px;margin-bottom:10px"></div>
+    <div class="sl">Uploaded documents</div>
+    <table>
+      <thead><tr><th>Date</th><th>Type</th><th>Ticker</th><th>File</th><th>Parsed</th><th>Status</th><th></th></tr></thead>
+      <tbody id="doc-tbody"><tr><td colspan="7" class="empty">No documents uploaded yet.</td></tr></tbody>
+    </table>
+  </div>
+
   <!-- SETTINGS -->
   <div id="pg-settings" class="page">
     <div class="ph"><h1>Settings</h1><p>Conviction sizing · Risk parameters · Alert preferences</p></div>
@@ -621,9 +678,21 @@ tfoot td.r{text-align:right}
     <!-- Key metrics row -->
     <div id="sd-metrics" class="kb" style="margin-bottom:18px"></div>
 
+    <!-- TSR (only when held) -->
+    <div id="sd-tsr-wrap" style="display:none;margin-bottom:18px">
+      <div class="sl">Your Position — Total Shareholder Return</div>
+      <div id="sd-tsr" class="kb"></div>
+    </div>
+
     <!-- Chart -->
     <div class="sl">Price Chart — Last 60 days</div>
     <div id="sd-chart" style="background:var(--cream);border-radius:4px;padding:8px;margin-bottom:18px;overflow:hidden"></div>
+
+    <!-- REIT fundamentals (full field set; every field always shown, blank = awaiting data) -->
+    <div id="sd-reit-wrap" style="display:none;margin-bottom:18px">
+      <div class="sl">REIT Fundamentals <span id="sd-reit-asof" style="font-weight:400;color:var(--muted);font-size:10px"></span></div>
+      <div id="sd-reit" class="kb"></div>
+    </div>
 
     <!-- Two column layout -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
@@ -737,13 +806,16 @@ async function loadDashboard() {
   const el = document.getElementById('dashboard-body'); if (!el) return;
   const money = v => '$' + Math.round(v||0).toLocaleString();
   try {
-    const [xao, xko, real, model, macro] = await Promise.all([
+    const [xao, xko, xjo, real, model, macro] = await Promise.all([
       db.from('index_prices').select('market_date,close').eq('index_code','XAO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
       db.from('index_prices').select('market_date,close').eq('index_code','XKO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
+      db.from('index_prices').select('market_date,close').eq('index_code','XJO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
       db.from('real_trades').select('*').then(r=>r.data||[]),
       db.from('model_trades').select('*').then(r=>r.data||[]),
       db.from('morning_signals').select('*').order('signal_date',{ascending:false}).limit(1).maybeSingle().then(r=>r.data),
     ]);
+    // second index: prefer ASX 300, fall back to ASX 200
+    const idx2 = (xko && xko.length) ? {rows:xko, label:'ASX 300 (XKO)'} : {rows:xjo, label:'ASX 200 (XJO)'};
 
     // value real holdings off latest prices
     const byTicker = {};
@@ -772,7 +844,7 @@ async function loadDashboard() {
       <div class="sl">Market</div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">
         ${miniIndexChart(xao,'All Ordinaries (XAO)','Broad market')}
-        ${miniIndexChart(xko,'ASX 300 (XKO)','Top 300')}
+        ${miniIndexChart(idx2.rows,idx2.label,'Top 300/200')}
       </div>
 
       <div class="sl">Snapshot</div>
@@ -785,7 +857,7 @@ async function loadDashboard() {
 
       <div class="sl">Current holdings</div>
       <table><thead><tr><th>Ticker</th><th class="r">Units</th><th class="r">Last</th><th class="r">Value</th><th class="r">Weight</th></tr></thead>
-        <tbody>${held.length ? held.map(h=>`<tr class="clickable" onclick="go('real',document.querySelector('.nav a[data-page=&quot;real&quot;]'))">
+        <tbody>${held.length ? held.map(h=>`<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${h.tk}')">
           <td><span class="tkr">${h.tk}</span></td><td class="r">${h.u.toLocaleString()}</td>
           <td class="r">${h.px?('$'+h.px.toFixed(2)):'--'}</td><td class="r">${money(h.val)}</td>
           <td class="r">${portVal?((h.val/portVal*100).toFixed(1)+'%'):'--'}</td></tr>`).join('')
@@ -794,7 +866,7 @@ async function loadDashboard() {
 
       <div class="sl">Model portfolio — open positions</div>
       <table><thead><tr><th>Ticker</th><th class="r">Entry</th><th class="r">Target</th><th>Score</th></tr></thead>
-        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" onclick="go('model',document.querySelector('.nav a[data-page=&quot;model&quot;]'))">
+        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${t.ticker}')">
           <td><span class="tkr">${t.ticker}</span></td><td class="r">${t.entry_price?'$'+parseFloat(t.entry_price).toFixed(2):'--'}</td>
           <td class="r">${t.target_price?'$'+parseFloat(t.target_price).toFixed(2):'--'}</td>
           <td>${t.total_score!=null?t.total_score+'/7':(t.score!=null?t.score:'')}</td></tr>`).join('')
@@ -817,8 +889,8 @@ function go(page, el) {
     dashboard: loadDashboard,
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); loadBreakouts(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
-    income: loadIncome, morning: loadMorning, bond: loadBond,
-    'enter-trade': initTradeForm, settings: loadSettings, alerts: loadAlerts
+    income: loadIncome, performance: loadPerformance, morning: loadMorning, bond: loadBond,
+    'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
   fns[page]?.();
 }
@@ -935,7 +1007,7 @@ function renderValueRows() {
     const pbCell = !r.price_book ? '<td class="r">--</td>'
       : r.assetHeavy ? `<td class="r">${r.price_book.toFixed(2)}</td>`
       : `<td class="r" style="color:var(--muted)" title="P/B ignored — capital-light (${r.industry||'—'})">${r.price_book.toFixed(2)}*</td>`;
-    return `<tr>
+    return `<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${r.ticker}')">
       <td><span class="tkr">${r.ticker}</span></td>
       <td style="font-size:11px;color:var(--muted)">${(r.name||'').slice(0,26)}</td>
       <td style="font-size:11px">${r.sector||'—'}</td>
@@ -1241,27 +1313,86 @@ async function loadModel() {
   });
 }
 
+// ── TSR (Total Shareholder Return = capital gain + income received) ────────────
+// Sum distributions received-to-date per ticker, from the `distributions` table.
+async function incomeByTicker() {
+  const { data } = await db.from('distributions').select('ticker,total_received,amount_per_unit,units_held');
+  const m = {};
+  (data||[]).forEach(d => {
+    const v = d.total_received != null ? parseFloat(d.total_received)
+            : (d.amount_per_unit && d.units_held ? parseFloat(d.amount_per_unit)*parseFloat(d.units_held) : 0);
+    m[d.ticker] = (m[d.ticker]||0) + (v||0);
+  });
+  return m;
+}
+
+// Holding-period TSR plus annualised (CAGR). costBasis/currentValue/income in $.
+function tsr(costBasis, currentValue, income, entryDate) {
+  costBasis = parseFloat(costBasis)||0;
+  const cap   = (parseFloat(currentValue)||0) - costBasis;
+  const inc   = parseFloat(income)||0;
+  const total = cap + inc;
+  const totalPct = costBasis>0 ? total/costBasis : null;
+  const capPct   = costBasis>0 ? cap/costBasis   : null;
+  const incPct   = costBasis>0 ? inc/costBasis   : null;
+  let days=null, annual=null;
+  if (entryDate) {
+    days = Math.max(1, Math.round((Date.now()-new Date(entryDate).getTime())/86400000));
+    const yrs = days/365.25;
+    // only annualise once there's enough holding period (~1 month) to be meaningful
+    if (totalPct!=null && yrs>=0.08 && (1+totalPct)>0) annual = Math.pow(1+totalPct, 1/yrs)-1;
+  }
+  return { cap, inc, total, totalPct, capPct, incPct, days, annual };
+}
+const pctCell = v => v==null ? '--' : (v>=0?'+':'')+(v*100).toFixed(1)+'%';
+
 // ── REAL PORTFOLIO ────────────────────────────────────────────────────────────
 async function loadReal() {
   if (!db) return;
   const { data: trades } = await db.from('real_trades').select('*').order('trade_date',{ascending:false});
   const tbody = document.getElementById('real-tbody');
   tbody.innerHTML = '';
-  if (!trades?.length) { tbody.innerHTML = '<tr><td colspan="11" class="empty">No real trades recorded yet. Use "+ Record Trade" after placing in CommSec.</td></tr>'; return; }
+  if (!trades?.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty">No real trades recorded yet. Use "+ Record Trade" after placing in CommSec.</td></tr>'; return; }
 
   const tickers = [...new Set(trades.map(t=>t.ticker))];
   const prices  = await getPrices(tickers);
-  let totVal=0, totPnl=0, wins=0;
+  const income  = await incomeByTicker();
+
+  // Net position per ticker → consistent, no-double-count TSR shown on each row.
+  const pos = {};
+  trades.forEach(t => {
+    const p = pos[t.ticker] = pos[t.ticker] || { units:0, cost:0, entry:t.trade_date };
+    const sign = String(t.direction).toUpperCase()==='SELL' ? -1 : 1;
+    p.units += sign*(parseInt(t.units)||0);
+    p.cost  += sign*(parseFloat(t.total_cost)||0);
+    if (t.trade_date && t.trade_date < p.entry) p.entry = t.trade_date;
+  });
+  Object.entries(pos).forEach(([tk,p]) => {
+    const cur = prices[tk]?.price;
+    p.value  = cur ? p.units*cur : null;
+    p.income = income[tk] || 0;
+    p.tsr    = tsr(p.cost, p.value, p.income, p.entry);
+  });
+
+  let totVal=0, totPnl=0, totInc=0, wins=0;
+  Object.values(pos).forEach(p => {
+    if (p.value) totVal += p.value;
+    if (p.tsr.cap!=null && p.value!=null) { totPnl += p.tsr.cap; if (p.tsr.cap>0) wins++; }
+  });
+  Object.keys(pos).forEach(tk => { totInc += income[tk]||0; });
 
   trades.forEach(t => {
-    const pd    = prices[t.ticker];
-    const cur   = pd?.price;
-    const val   = t.direction==='BUY'&&cur ? t.units*cur : null;
-    const upnl  = val&&t.total_cost ? val-parseFloat(t.total_cost) : null;
-    const pnl   = t.pnl!=null ? parseFloat(t.pnl) : upnl;
-    if (val) totVal += val;
-    if (pnl!=null) { totPnl += pnl; if (pnl>0) wins++; }
+    const pd   = prices[t.ticker];
+    const cur  = pd?.price;
+    const p    = pos[t.ticker];
+    const val  = t.direction==='BUY'&&cur ? t.units*cur : null;
+    const upnl = val&&t.total_cost ? val-parseFloat(t.total_cost) : null;
+    const pnl  = t.pnl!=null ? parseFloat(t.pnl) : upnl;
+    const T    = p.tsr;
     const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.title = 'Click for full stock detail · TSR is position-level (capital + income)';
+    tr.addEventListener('click', () => openSignalDrawer(t.ticker));
     tr.innerHTML = `
       <td style="font-size:10px;color:var(--muted)">${t.trade_date}</td>
       <td><span class="tkr">${t.ticker}</span></td>
@@ -1271,9 +1402,10 @@ async function loadReal() {
       <td class="r">${f.$k(t.total_cost)}</td>
       <td class="r">${cur?f.$(cur,3):'--'}</td>
       <td class="r" style="color:${pnl==null?'var(--muted)':f.clr(pnl)}">${pnl==null?'--':(pnl>=0?'+':'')+f.$(pnl,0)}</td>
-      <td class="r" style="color:${t.pnl_pct==null?'var(--muted)':f.clr(t.pnl_pct)}">${t.pnl_pct==null?'--':(parseFloat(t.pnl_pct)*100).toFixed(1)+'%'}</td>
+      <td class="r" style="color:${p.income?'var(--teal)':'var(--muted)'}">${p.income?f.$k(p.income):'--'}</td>
+      <td class="r" style="font-weight:600;color:${T.totalPct==null?'var(--muted)':f.clr(T.totalPct)}">${pctCell(T.totalPct)}</td>
+      <td class="r" style="color:${T.annual==null?'var(--muted)':f.clr(T.annual)}">${T.annual==null?'--':pctCell(T.annual)}</td>
       <td style="font-size:10px;color:var(--muted)">${t.broker||'CommSec'}</td>
-      <td><span style="font-size:10px;color:var(--muted)">${t.followed_model?'✓ Followed':'Manual'}</span></td>
     `;
     tbody.appendChild(tr);
   });
@@ -1282,7 +1414,9 @@ async function loadReal() {
   const pnlEl = document.getElementById('r-pnl');
   pnlEl.textContent = (totPnl>=0?'+':'')+f.$k(totPnl);
   pnlEl.style.color = f.clr(totPnl);
-  document.getElementById('r-win').textContent   = trades.length ? Math.round(wins/trades.length*100)+'%' : '--';
+  const incEl = document.getElementById('r-inc'); if (incEl) incEl.textContent = f.$k(totInc);
+  const posN = Object.values(pos).filter(p=>p.units>0).length;
+  document.getElementById('r-win').textContent   = posN ? Math.round(wins/posN*100)+'%' : '--';
   document.getElementById('r-count').textContent = trades.length;
 }
 
@@ -1651,21 +1785,27 @@ async function loadREIT() {
   const { data: holdings } = await db.from('reit_income_holdings').select('*').gt('units_held',0);
   const tbody = document.getElementById('reit-tbody');
   tbody.innerHTML = '';
-  if (!holdings?.length) { tbody.innerHTML = '<tr><td colspan="10" class="empty">No REIT holdings yet. Record your first REIT purchase via "+ Record Trade".</td></tr>'; return; }
+  if (!holdings?.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty">No REIT holdings yet. Record your first REIT purchase via "+ Record Trade".</td></tr>'; return; }
 
   let totVal=0, totInc=0, totPnl=0;
   const { data: stocks } = await db.from('stocks').select('ticker,nta').eq('is_reit',true);
   const ntaMap = {};
   (stocks||[]).forEach(s => { ntaMap[s.ticker] = s.nta; });
+  const income = await incomeByTicker();   // distributions received-to-date per ticker
 
   holdings.forEach(h => {
     const nta  = ntaMap[h.ticker];
     const disc = nta && h.current_price ? (h.current_price - nta) / nta : null;
     const yield_ = h.dps_fy26 && h.current_price ? h.dps_fy26 / h.current_price : null;
+    const inc  = income[h.ticker] || 0;
+    const T    = tsr(h.total_cost, h.current_value, inc, h.first_bought);
     if (h.current_value) totVal += parseFloat(h.current_value);
-    if (h.annual_income) totInc += parseFloat(h.annual_income);
-    if (h.unrealised_pnl) totPnl += parseFloat(h.unrealised_pnl);
+    totInc += inc;
+    if (T.cap!=null && h.current_value!=null) totPnl += T.cap;
     const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.title = 'Click for full stock detail · TSR = capital + income received';
+    tr.addEventListener('click', () => openSignalDrawer(h.ticker));
     tr.innerHTML = `
       <td><span class="tkr">${h.ticker}</span></td>
       <td style="font-size:11px">${h.name}</td>
@@ -1675,8 +1815,10 @@ async function loadREIT() {
       <td class="r">${nta?f.$(nta,2):'--'}</td>
       <td class="r" style="color:${disc==null?'var(--muted)':disc<0?'var(--teal)':'var(--red)'}">${disc!=null?(disc*100).toFixed(1)+'%':'--'}</td>
       <td class="r" style="color:${yield_>=0.08?'var(--green)':yield_>=0.07?'var(--teal)':'var(--muted)'};font-weight:${yield_>=0.07?600:400}">${yield_?(yield_*100).toFixed(1)+'%':'--'}</td>
-      <td class="r">${h.annual_income?f.$k(h.annual_income):'--'}</td>
-      <td class="r" style="color:${h.unrealised_pnl==null?'var(--muted)':f.clr(h.unrealised_pnl)}">${h.unrealised_pnl!=null?(h.unrealised_pnl>=0?'+':'')+f.$(h.unrealised_pnl,0):'--'}</td>
+      <td class="r" style="color:${inc?'var(--teal)':'var(--muted)'}">${inc?f.$k(inc):'--'}</td>
+      <td class="r" style="color:${T.cap==null||h.current_value==null?'var(--muted)':f.clr(T.cap)}">${T.cap!=null&&h.current_value!=null?(T.cap>=0?'+':'')+f.$(T.cap,0):'--'}</td>
+      <td class="r" style="font-weight:600;color:${T.totalPct==null?'var(--muted)':f.clr(T.totalPct)}">${pctCell(T.totalPct)}</td>
+      <td class="r" style="color:${T.annual==null?'var(--muted)':f.clr(T.annual)}">${T.annual==null?'--':pctCell(T.annual)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -1839,28 +1981,86 @@ async function loadREITSignals() {
 // ── INCOME TRACKER ────────────────────────────────────────────────────────────
 async function loadIncome() {
   if (!db) return;
-  const { data: dists } = await db.from('distributions').select('*').order('ex_date',{ascending:false});
+  const { data: dists } = await db.from('distributions').select('*');
   const tbody = document.getElementById('dist-tbody');
   tbody.innerHTML = '';
-  if (!dists?.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No distributions recorded yet.</td></tr>'; return; }
+  if (!dists?.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No distributions recorded yet. Click “Pull dividends (EODHD)” or add one manually.</td></tr>'; return; }
 
-  const ytd = dists.filter(d => d.ex_date?.startsWith(new Date().getFullYear())).reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+  // Group by ticker, sort each group oldest→newest so the running cumulative builds correctly.
+  const byTicker = {};
+  dists.forEach(d => { (byTicker[d.ticker] = byTicker[d.ticker] || []).push(d); });
+  Object.values(byTicker).forEach(arr => arr.sort((a,b) => (a.ex_date||'').localeCompare(b.ex_date||'')));
+
+  // Order stocks by total received (biggest income contributors first).
+  const tickers = Object.keys(byTicker).sort((a,b) => {
+    const sa = byTicker[a].reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+    const sb = byTicker[b].reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+    return sb - sa;
+  });
+
+  const thisYear = String(new Date().getFullYear());
+  let grandTotal = 0, ytd = 0;
+
+  tickers.forEach(tk => {
+    const rows = byTicker[tk];
+    const stockTotal = rows.reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+    grandTotal += stockTotal;
+
+    // Per-stock header row — cumulative total paid by this holding, click → detail.
+    const hdr = document.createElement('tr');
+    hdr.className = 'clickable';
+    hdr.title = 'Click for full stock detail';
+    hdr.addEventListener('click', () => openSignalDrawer(tk));
+    hdr.style.background = 'var(--cream)';
+    hdr.innerHTML = `
+      <td colspan="6" style="font-weight:600"><span class="tkr">${tk}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:8px">${rows.length} distribution${rows.length!==1?'s':''}</span></td>
+      <td class="r" style="color:var(--teal);font-weight:700">${f.$k(stockTotal)}</td>
+      <td style="font-size:10px;color:var(--muted)">total</td>`;
+    tbody.appendChild(hdr);
+
+    // Each distribution with a running cumulative for this stock.
+    let runtot = 0;
+    rows.forEach(d => {
+      const recv = parseFloat(d.total_received||0);
+      runtot += recv;
+      if (d.ex_date && d.ex_date.startsWith(thisYear)) ytd += recv;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td></td>
+        <td style="font-size:11px">${d.ex_date||'--'}</td>
+        <td style="font-size:11px;color:var(--muted)">${d.pay_date||'--'}</td>
+        <td class="r">${f.$(d.amount_per_unit,4)}</td>
+        <td class="r">${d.units_held?Math.round(d.units_held).toLocaleString():'--'}</td>
+        <td class="r">${f.$k(recv)}</td>
+        <td class="r" style="color:var(--teal);font-weight:600">${f.$k(runtot)}</td>
+        <td style="font-size:10px;color:var(--muted)">${d.source||d.notes||'manual'}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+
   document.getElementById('inc-ytd').textContent = f.$k(ytd);
   document.getElementById('inc-cnt').textContent = dists.length;
+  const projEl = document.getElementById('inc-proj');
+  if (projEl) projEl.textContent = f.$k(grandTotal);  // lifetime income received to date
+}
 
-  dists.forEach(d => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><span class="tkr">${d.ticker}</span></td>
-      <td style="font-size:11px">${d.ex_date}</td>
-      <td style="font-size:11px;color:var(--muted)">${d.pay_date||'--'}</td>
-      <td class="r">${f.$(d.amount_per_unit,4)}</td>
-      <td class="r">${Math.round(d.units_held||0).toLocaleString()}</td>
-      <td class="r" style="color:var(--teal);font-weight:600">${f.$k(d.total_received)}</td>
-      <td style="font-size:10px;color:var(--muted)">${d.notes||''}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+// Trigger the EODHD dividend ingestion, then reload.
+async function ingestDividends() {
+  const btn = document.getElementById('inc-pull-btn');
+  const status = document.getElementById('inc-pull-status');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Pulling…'; }
+  if (status) status.textContent = 'Fetching dividend history from EODHD for your holdings…';
+  try {
+    const res = await fetch('/.netlify/functions/fetch-dividends-background', { method: 'POST' });
+    const out = await res.json().catch(() => ({}));
+    if (status) status.textContent = out.message || `Done — ${out.upserted||0} distributions updated.`;
+  } catch (e) {
+    if (status) status.textContent = 'Dividend pull failed: ' + e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Pull dividends (EODHD)'; }
+    loadIncome();
+  }
 }
 
 function showAddDist() { document.getElementById('add-dist-form').style.display='block'; }
@@ -1871,9 +2071,97 @@ async function saveDist() {
   const amount = parseFloat(document.getElementById('d-amount').value);
   const units  = parseFloat(document.getElementById('d-units').value);
   if (!ticker||!exdate||!amount||!units) { alert('Please fill all fields'); return; }
-  await db.from('distributions').insert({ ticker, ex_date: exdate, amount_per_unit: amount, units_held: units, total_received: amount*units });
+  await db.from('distributions').upsert({ ticker, ex_date: exdate, amount_per_unit: amount, units_held: units, total_received: amount*units, source: 'manual' }, { onConflict: 'ticker,ex_date' });
   document.getElementById('add-dist-form').style.display='none';
   loadIncome();
+}
+
+// ── PORTFOLIO PERFORMANCE ─────────────────────────────────────────────────────
+async function loadPerformance() {
+  if (!db) return;
+  const chartEl = document.getElementById('perf-chart');
+  const { data: snaps } = await db.from('performance').select('*').order('snap_date',{ascending:true});
+
+  if (!snaps?.length) {
+    chartEl.innerHTML = '<div class="empty" style="padding:40px 0">No snapshots yet. The daily 4pm price job writes one each market day; or click “Reconstruct from trade history” to backfill from your trades + stored prices.</div>';
+    ['perf-real','perf-model','perf-cnt','perf-range'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent='--'; });
+    document.getElementById('perf-real-snap').innerHTML = '';
+    document.getElementById('perf-model-snap').innerHTML = '';
+    return;
+  }
+
+  // Build the two cumulative-return series (%). Prefer stored *_pnl_pct; else derive.
+  const series = snaps.map(s => {
+    const modelPct = s.model_pnl_pct!=null ? parseFloat(s.model_pnl_pct)
+                   : (s.model_value && s.model_capital ? (s.model_value-s.model_capital)/s.model_capital : null);
+    const realPct  = s.real_pnl_pct!=null ? parseFloat(s.real_pnl_pct) : null;
+    return { date: s.snap_date, model: modelPct, real: realPct };
+  });
+
+  chartEl.innerHTML = perfLineChart(series);
+
+  const last = snaps[snaps.length-1];
+  const fmtPct = v => v==null ? '--' : (v>=0?'+':'')+(v*100).toFixed(2)+'%';
+  const realPct  = last.real_pnl_pct!=null ? parseFloat(last.real_pnl_pct) : null;
+  const modelPct = last.model_pnl_pct!=null ? parseFloat(last.model_pnl_pct)
+                 : (last.model_value&&last.model_capital ? (last.model_value-last.model_capital)/last.model_capital : null);
+  const rEl=document.getElementById('perf-real');  rEl.textContent=fmtPct(realPct);  rEl.style.color = realPct==null?'':f.clr(realPct);
+  const mEl=document.getElementById('perf-model'); mEl.textContent=fmtPct(modelPct);
+  document.getElementById('perf-cnt').textContent   = snaps.length;
+  document.getElementById('perf-range').textContent = `${snaps[0].snap_date} → ${last.snap_date}`;
+
+  const snapCards = (pairs) => pairs.map(([l,v])=>`<div class="kc"><div class="kl">${l}</div><div class="kv" style="font-size:15px">${v}</div></div>`).join('');
+  document.getElementById('perf-real-snap').innerHTML = snapCards([
+    ['Value', last.real_value!=null?f.$k(last.real_value):'—'],
+    ['P&L', last.real_pnl!=null?(parseFloat(last.real_pnl)>=0?'+':'')+f.$k(last.real_pnl):'—'],
+    ['Return', fmtPct(realPct)],
+    ['REIT income YTD', last.reit_income_ytd!=null?f.$k(last.reit_income_ytd):'—'],
+  ]);
+  document.getElementById('perf-model-snap').innerHTML = snapCards([
+    ['Value', last.model_value!=null?f.$k(last.model_value):'—'],
+    ['Invested', last.model_invested!=null?f.$k(last.model_invested):'—'],
+    ['P&L', last.model_pnl!=null?(parseFloat(last.model_pnl)>=0?'+':'')+f.$k(last.model_pnl):'—'],
+    ['Win rate', last.model_win_rate!=null?(parseFloat(last.model_win_rate)*100).toFixed(0)+'%':'—'],
+  ]);
+}
+
+// Dual-line cumulative-return chart (real = ink, model = sky), SVG, zero baseline.
+function perfLineChart(series) {
+  const w=900, h=260, padL=48, padR=16, padT=16, padB=28;
+  const cw=w-padL-padR, ch=h-padT-padB;
+  const vals = series.flatMap(p => [p.model, p.real]).filter(v => v!=null);
+  if (!vals.length) return '<div class="empty" style="padding:40px 0">No return data in snapshots yet.</div>';
+  let min=Math.min(0,...vals), max=Math.max(0,...vals); if (min===max){min-=0.01;max+=0.01;}
+  const pad=(max-min)*0.08; min-=pad; max+=pad;
+  const n=series.length;
+  const px=i=> padL + (n<=1?cw/2:(i/(n-1))*cw);
+  const py=v=> padT + ch - ((v-min)/(max-min))*ch;
+  const SKY='#00B0F0', INK='#00273E', RULE='#d7e0e5', MUT='#5a7682', BG='#f4f8fa';
+  const path = key => { let d='',inP=false; series.forEach((p,i)=>{ const v=p[key]; if(v!=null){ d+=(inP?' L':'M')+px(i).toFixed(1)+','+py(v).toFixed(1); inP=true;} else inP=false; }); return d; };
+  const zeroY=py(0);
+  const grid=Array.from({length:5},(_,i)=>{ const v=min+(max-min)*(i/4),y=py(v); return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${RULE}" stroke-width="0.5"/><text x="${padL-5}" y="${y+3}" text-anchor="end" font-size="9" fill="${MUT}" font-family="monospace">${(v*100).toFixed(0)}%</text>`; }).join('');
+  const xlabs=series.map((p,i)=>{ if(i%Math.ceil(n/6)!==0 && i!==n-1) return ''; return `<text x="${px(i)}" y="${h-padB+16}" text-anchor="middle" font-size="9" fill="${MUT}" font-family="monospace">${(p.date||'').slice(2)}</text>`; }).join('');
+  const mPath=path('model'), rPath=path('real');
+  const legend=`<rect x="${padL}" y="2" width="12" height="2" fill="${INK}"/><text x="${padL+16}" y="6" font-size="9" fill="${MUT}">Real</text><rect x="${padL+55}" y="2" width="12" height="2" fill="${SKY}"/><text x="${padL+71}" y="6" font-size="9" fill="${MUT}">Model</text>`;
+  return `<div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${w} ${h}" style="background:${BG};border-radius:4px;min-width:560px">
+    <rect width="${w}" height="${h}" fill="${BG}" rx="4"/>${grid}
+    <line x1="${padL}" y1="${zeroY}" x2="${w-padR}" y2="${zeroY}" stroke="${MUT}" stroke-width="1" stroke-dasharray="3,3"/>
+    ${mPath?`<path d="${mPath}" fill="none" stroke="${SKY}" stroke-width="1.8"/>`:''}
+    ${rPath?`<path d="${rPath}" fill="none" stroke="${INK}" stroke-width="2"/>`:''}
+    ${xlabs}${legend}</svg></div>`;
+}
+
+async function reconstructPerformance() {
+  const btn=document.getElementById('perf-recon-btn'), st=document.getElementById('perf-recon-status');
+  if (!confirm('Rebuild historical performance snapshots from your trade dates and stored price history? This overwrites snapshot rows for past dates.')) return;
+  if (btn){ btn.disabled=true; btn.textContent='↻ Reconstructing…'; }
+  if (st) st.textContent='Walking trade history against stored prices…';
+  try {
+    const res = await fetch('/.netlify/functions/reconstruct-performance-background', { method:'POST' });
+    const out = await res.json().catch(()=>({}));
+    if (st) st.textContent = out.message || `Done — ${out.snapshots||0} snapshots written.`;
+  } catch(e){ if (st) st.textContent='Reconstruction failed: '+e.message; }
+  finally { if (btn){ btn.disabled=false; btn.textContent='↻ Reconstruct from trade history'; } loadPerformance(); }
 }
 
 // ── MORNING SCAN ──────────────────────────────────────────────────────────────
@@ -2139,17 +2427,24 @@ async function openSignalDrawer(ticker) {
   document.getElementById('sd-history-tbody').innerHTML = '';
 
   // Fetch all data in parallel
-  const [tradeRes, analysisRes, pricesRes, stockRes] = await Promise.all([
+  const [tradeRes, analysisRes, pricesRes, stockRes, realRes, reitRes, distRes] = await Promise.all([
     db.from('model_trades').select('*').eq('ticker', ticker).order('created_at',{ascending:false}).limit(1).maybeSingle(),
     db.from('daily_analysis').select('*').eq('ticker', ticker).order('analysis_date',{ascending:false}).limit(1).single(),
     db.from('prices').select('market_date,open,high,low,close,volume,change_pct').eq('ticker', ticker).order('market_date',{ascending:false}).limit(60),
-    db.from('stocks').select('*').eq('ticker', ticker).single()
+    db.from('stocks').select('*').eq('ticker', ticker).single(),
+    db.from('real_trades').select('direction,units,total_cost,price,trade_date').eq('ticker', ticker),
+    db.from('reit_income_holdings').select('*').eq('ticker', ticker).maybeSingle(),
+    db.from('distributions').select('total_received,amount_per_unit,units_held').eq('ticker', ticker)
   ]);
 
   const trade    = tradeRes.data;
   const analysis = analysisRes.data;
   const prices   = (pricesRes.data || []).reverse();
   const stock    = stockRes.data;
+  const realTrades = realRes.data || [];
+  const reitHold   = reitRes.data;
+  const incomeRecd = (distRes.data || []).reduce((s,d)=> s + (d.total_received!=null ? parseFloat(d.total_received)
+                       : (d.amount_per_unit&&d.units_held ? parseFloat(d.amount_per_unit)*parseFloat(d.units_held) : 0)), 0);
 
   const layers = [
     { name: 'Layer 1 — Macro',      val: analysis?.layer1_macro,     desc: 'US overnight S&P, Nasdaq, VIX, AUD, yield curve' },
@@ -2223,13 +2518,7 @@ async function openSignalDrawer(ticker) {
     { l:'BB Pos',   v: analysis?.bb_position != null ? (()=>{ const v=parseFloat(analysis.bb_position)*100; return (v<-200?'<-200':v>200?'>200':v.toFixed(0))+'%'; })():'--', c: analysis?.bb_position<0?'var(--red)':analysis?.bb_position>1?'var(--green)':'var(--ink)', dark: false },
     { l:'Conviction',v: conv + ' ' + score+'/7',  c: convFg, dark: conv==='EXCEPTIONAL' },
     { l:'Candle',   v: candleTooltip(analysis?.candle_pattern) || 'None', c: analysis?.candle_pattern?'var(--amber)':'var(--muted)', dark: false, html: true },
-    ...(stock?.is_reit ? [
-      { l:'NTA',      v: stock.nta ? '$'+parseFloat(stock.nta).toFixed(2) : '--', c: 'var(--ink)', dark: false },
-      { l:'Gearing',  v: stock.gearing ? (stock.gearing*100).toFixed(0)+'%' : '--', c: stock.gearing>0.4?'var(--red)':stock.gearing>0.35?'var(--amber)':'var(--ink)', dark: false },
-      { l:'WALE',     v: stock.wale ? parseFloat(stock.wale).toFixed(1)+'yr' : '--', c: 'var(--ink)', dark: false },
-      { l:'Occupancy',v: stock.occupancy ? (stock.occupancy*100).toFixed(1)+'%' : '--', c: stock.occupancy>0.97?'var(--green)':stock.occupancy>0.93?'var(--ink)':'var(--amber)', dark: false },
-      { l:'Cap Rate', v: stock.cap_rate ? (stock.cap_rate*100).toFixed(2)+'%' : '--', c: 'var(--teal)', dark: false },
-    ] : []),
+    // REIT fundamentals are rendered in the dedicated #sd-reit panel below.
   ];
   document.getElementById('sd-metrics').innerHTML = metrics.map(m =>
     `<div class="kc ${m.dark?'dk':''}">
@@ -2242,6 +2531,85 @@ async function openSignalDrawer(ticker) {
   document.getElementById('sd-chart').innerHTML = prices.length > 5
     ? buildFullChart(prices, trade)
     : '<div style="height:300px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">Not enough price history — run bootstrap first</div>';
+
+  // ── REIT FUNDAMENTALS PANEL ──────────────────────────────────────────────────
+  // Every field is ALWAYS shown for a REIT. Missing data renders as a labelled
+  // blank placeholder ("—"), ready to receive data — never hidden.
+  const reitWrap = document.getElementById('sd-reit-wrap');
+  if (stock?.is_reit) {
+    reitWrap.style.display = 'block';
+    const px       = livePrice || prices[prices.length-1]?.close || null;
+    const blank    = '<span style="color:var(--muted)">—</span>';
+    const pctOf    = v => (v==null||v==='') ? blank : (parseFloat(v)*100).toFixed(1)+'%';
+    const pct2     = v => (v==null||v==='') ? blank : (parseFloat(v)*100).toFixed(2)+'%';
+    const dollars  = (v,d=2) => (v==null||v==='') ? blank : '$'+parseFloat(v).toFixed(d);
+    const distYld  = (stock.dps_fy26 && px) ? stock.dps_fy26/px : null;
+    const discNta  = (stock.nta && px) ? (px-stock.nta)/stock.nta : null;
+    // implied vs book cap-rate gap (landlords): positive = market prices a higher cap than book
+    const capGap   = (stock.implied_wacr!=null && stock.wacr!=null) ? (stock.implied_wacr - stock.wacr) : null;
+    const subclass = stock.reit_subclass || (stock.is_manager?'manager':stock.is_developer?'developer':'landlord');
+    const isLandlord = !stock.is_manager && !stock.is_developer;
+    const fields = [
+      { l:'Sub-class',        v: subclass ? subclass.charAt(0).toUpperCase()+subclass.slice(1) : blank, c:'var(--ink)' },
+      { l:'Sector',           v: stock.landlord_sector || stock.sector || blank, c:'var(--ink)' },
+      { l:'NTA / unit',       v: dollars(stock.nta), c:'var(--ink)' },
+      { l:'Price vs NTA',     v: discNta==null?blank:(discNta<0?'':'+')+(discNta*100).toFixed(1)+'%', c: discNta==null?'var(--muted)':discNta<0?'var(--teal)':'var(--red)' },
+      { l:'Dist. yield',      v: distYld==null?blank:(distYld*100).toFixed(1)+'%', c: distYld>=0.08?'var(--green)':distYld>=0.07?'var(--teal)':'var(--ink)' },
+      { l:'DPS (FY26)',       v: dollars(stock.dps_fy26,4), c:'var(--ink)' },
+      { l:'WACR (book)',      v: pct2(stock.wacr), c:'var(--ink)' },
+      { l:'Implied cap rate', v: isLandlord ? pct2(stock.implied_wacr) : '<span style="color:var(--muted)" title="EV-based; meaningless for non-landlords">n/a</span>', c:'var(--teal)' },
+      { l:'Impl − book gap',  v: (isLandlord && capGap!=null) ? (capGap>=0?'+':'')+(capGap*10000).toFixed(0)+'bps' : blank, c: capGap==null?'var(--muted)':capGap>0?'var(--green)':'var(--red)' },
+      { l:'Gearing',          v: pctOf(stock.gearing), c: stock.gearing>0.4?'var(--red)':stock.gearing>0.35?'var(--amber)':'var(--ink)' },
+      { l:'ICR (×)',          v: stock.icr==null?blank:parseFloat(stock.icr).toFixed(1)+'×', c: stock.icr<2?'var(--red)':stock.icr<3?'var(--amber)':'var(--ink)' },
+      { l:'Debt hedged',      v: pctOf(stock.hedged_pct), c:'var(--ink)' },
+      { l:'WALE',             v: stock.wale==null?blank:parseFloat(stock.wale).toFixed(1)+'yr', c:'var(--ink)' },
+      { l:'Occupancy',        v: pctOf(stock.occupancy), c: stock.occupancy>0.97?'var(--green)':stock.occupancy>0.93?'var(--ink)':'var(--amber)' },
+    ];
+    document.getElementById('sd-reit').innerHTML = fields.map(m =>
+      `<div class="kc"><div class="kl">${m.l}</div><div class="kv" style="color:${m.c};font-size:15px">${m.v}</div></div>`
+    ).join('');
+    const asof = document.getElementById('sd-reit-asof');
+    if (asof) asof.textContent = stock.fundamentals_asof ? `· as at ${stock.fundamentals_asof} (results-pack date)` : '· awaiting results-pack data';
+  } else {
+    reitWrap.style.display = 'none';
+  }
+
+  // ── TSR for this position (capital + income), holding-period + annualised ─────
+  const tsrWrap = document.getElementById('sd-tsr-wrap');
+  let position = null;  // { units, cost, entry }
+  if (realTrades.length) {
+    position = { units:0, cost:0, entry:null };
+    realTrades.forEach(t => {
+      const sign = String(t.direction).toUpperCase()==='SELL' ? -1 : 1;
+      position.units += sign*(parseInt(t.units)||0);
+      position.cost  += sign*(parseFloat(t.total_cost)||0);
+      if (t.trade_date && (!position.entry || t.trade_date < position.entry)) position.entry = t.trade_date;
+    });
+  } else if (reitHold && reitHold.units_held > 0) {
+    position = { units: parseFloat(reitHold.units_held), cost: parseFloat(reitHold.total_cost)||0, entry: reitHold.first_bought };
+  }
+  if (position && position.units > 0) {
+    tsrWrap.style.display = 'block';
+    const px  = livePrice || prices[prices.length-1]?.close || null;
+    const val = px ? position.units*px : null;
+    const T   = tsr(position.cost, val, incomeRecd, position.entry);
+    const cards = [
+      { l:'Units held',     v: Math.round(position.units).toLocaleString(), c:'var(--ink)' },
+      { l:'Cost basis',     v: f.$k(position.cost), c:'var(--ink)' },
+      { l:'Market value',   v: val!=null?f.$k(val):'—', c:'var(--ink)' },
+      { l:'Capital return', v: T.capPct==null?'—':pctCell(T.capPct), c: T.capPct==null?'var(--muted)':f.clr(T.capPct) },
+      { l:'Income received',v: f.$k(T.inc), c:'var(--teal)' },
+      { l:'Income return',  v: T.incPct==null?'—':pctCell(T.incPct), c:'var(--teal)' },
+      { l:'TSR (total)',    v: T.totalPct==null?'—':pctCell(T.totalPct), c: T.totalPct==null?'var(--muted)':f.clr(T.totalPct), dark:true },
+      { l:'TSR annualised', v: T.annual==null?'—':pctCell(T.annual), c: T.annual==null?'var(--muted)':f.clr(T.annual) },
+      { l:'Holding period', v: T.days==null?'—':(T.days>=365?(T.days/365.25).toFixed(1)+'yr':T.days+'d'), c:'var(--muted)' },
+    ];
+    document.getElementById('sd-tsr').innerHTML = cards.map(m =>
+      `<div class="kc ${m.dark?'dk':''}"><div class="kl">${m.l}</div><div class="kv" style="color:${m.dark?'var(--gold-lt)':m.c};font-size:16px">${m.v}</div></div>`
+    ).join('');
+  } else {
+    tsrWrap.style.display = 'none';
+  }
 
   // 6 layers
   document.getElementById('sd-layers').innerHTML = layers.map(l => `
@@ -2380,10 +2748,15 @@ function buildFullChart(prices, trade) {
   const w = 900, h = 320, padL = 60, padR = 20, padT = 15, padB = 50, volH = 50;
   const chartW = w - padL - padR, chartH = h - padT - padB - volH;
   const closes = prices.map(p => parseFloat(p.close));
-  const highs  = prices.map(p => parseFloat(p.high  || p.close));
-  const lows   = prices.map(p => parseFloat(p.low   || p.close));
-  const vols   = prices.map(p => parseInt(p.volume  || 0));
   const opens  = prices.map(p => parseFloat(p.open  || p.close));
+  const vols   = prices.map(p => parseInt(p.volume  || 0));
+  // Defensive geometry: legacy bootstrap rows stored adjusted_close as `close`
+  // but RAW open/high/low, so for dividend/split names the close can fall
+  // outside the raw high–low band and the candle renders inside-out. Clamp the
+  // wick to always enclose the body so EVERY stock renders a valid candle,
+  // regardless of how consistent the stored OHLC happens to be.
+  const highs  = prices.map((p,i) => Math.max(parseFloat(p.high || p.close), opens[i], closes[i]));
+  const lows   = prices.map((p,i) => Math.min(parseFloat(p.low  || p.close), opens[i], closes[i]));
   const UP='#00B0F0', DN='#00273E', SKY='#00B0F0', TEAL='#4B97B2', INK='#00273E',
         RULE='#d7e0e5', MUT='#5a7682', BG='#f4f8fa', TRED='#c0392b', TGRN='#1f8a4c';
   const minP = Math.min(...lows)*0.997, maxP = Math.max(...highs)*1.003, maxV = Math.max(...vols)||1, n = prices.length;
@@ -2397,7 +2770,7 @@ function buildFullChart(prices, trade) {
   const bbUpper=bbArr.map(b=>b?.upper||null), bbLower=bbArr.map(b=>b?.lower||null);
   let bbFillD=''; const validBB=bbArr.map((b,i)=>b?{i,upper:b.upper,lower:b.lower}:null).filter(Boolean);
   if(validBB.length>1){ bbFillD=validBB.map((b,j)=>j===0?`M${px(b.i)},${py(b.upper)}`:`L${px(b.i)},${py(b.upper)}`).join(' '); bbFillD+=' '+[...validBB].reverse().map(b=>`L${px(b.i)},${py(b.lower)}`).join(' ')+' Z'; }
-  const candles = prices.map((p,i)=>{ const o=parseFloat(p.open||p.close),c=parseFloat(p.close),hi=parseFloat(p.high||p.close),lo=parseFloat(p.low||p.close); const x=px(i),bull=c>=o,col=bull?UP:DN; const bt=py(Math.max(o,c)),bb=py(Math.min(o,c)),bh=Math.max(1,bb-bt); return `<line x1="${x}" y1="${py(hi)}" x2="${x}" y2="${py(lo)}" stroke="${col}" stroke-width="1"/><rect x="${x-candleW/2}" y="${bt}" width="${candleW}" height="${bh}" fill="${bull?'rgba(0,176,240,0.18)':col}" stroke="${col}" stroke-width="1"/>`; }).join('');
+  const candles = prices.map((p,i)=>{ const o=opens[i],c=closes[i],hi=highs[i],lo=lows[i]; const x=px(i),bull=c>=o,col=bull?UP:DN; const bt=py(Math.max(o,c)),bb=py(Math.min(o,c)),bh=Math.max(1,bb-bt); return `<line x1="${x}" y1="${py(hi)}" x2="${x}" y2="${py(lo)}" stroke="${col}" stroke-width="1"/><rect x="${x-candleW/2}" y="${bt}" width="${candleW}" height="${bh}" fill="${bull?'rgba(0,176,240,0.18)':col}" stroke="${col}" stroke-width="1"/>`; }).join('');
   const volBars = prices.map((p,i)=>{ const v=parseInt(p.volume||0),c=parseFloat(p.close),o=parseFloat(p.open||p.close),col=c>=o?UP:DN,bh=(v/maxV)*volH; return `<rect x="${px(i)-candleW/2}" y="${h-padB-bh}" width="${candleW}" height="${bh}" fill="${col}" opacity="0.32"/>`; }).join('');
   const tradeLines = trade ? [
     trade.entry_price?`<line x1="${padL}" y1="${py(parseFloat(trade.entry_price))}" x2="${w-padR}" y2="${py(parseFloat(trade.entry_price))}" stroke="${INK}" stroke-width="1.5" stroke-dasharray="4,3"/><text x="${padL+4}" y="${py(parseFloat(trade.entry_price))-3}" font-size="9" fill="${INK}" font-family="monospace">Entry $${parseFloat(trade.entry_price).toFixed(3)}</text>`:'',
@@ -2409,8 +2782,143 @@ function buildFullChart(prices, trade) {
   const dateLabels = prices.map((p,i)=>{ if(i%10!==0 && i!==n-1) return ''; const date=p.market_date?.slice(5)||''; return `<text x="${px(i)}" y="${h-padB+18}" text-anchor="middle" font-size="9" fill="${MUT}" font-family="monospace">${date}</text>`; }).join('');
   const legend = `<rect x="${padL}" y="${h-15}" width="12" height="2" fill="${SKY}"/><text x="${padL+15}" y="${h-11}" font-size="9" fill="${MUT}">20 DMA</text><rect x="${padL+65}" y="${h-15}" width="12" height="2" fill="${TEAL}"/><text x="${padL+80}" y="${h-11}" font-size="9" fill="${MUT}">50 DMA</text><rect x="${padL+130}" y="${h-15}" width="12" height="2" fill="${INK}"/><text x="${padL+145}" y="${h-11}" font-size="9" fill="${MUT}">200 DMA</text><rect x="${padL+200}" y="${h-15}" width="12" height="2" fill="${TEAL}" opacity="0.5"/><text x="${padL+215}" y="${h-11}" font-size="9" fill="${MUT}">Bollinger</text>${trade?`<rect x="${padL+275}" y="${h-15}" width="12" height="2" fill="${INK}"/><text x="${padL+290}" y="${h-11}" font-size="9" fill="${MUT}">Trade levels</text>`:''}`;
   const divider = `<line x1="${padL}" y1="${h-padB-volH}" x2="${w-padR}" y2="${h-padB-volH}" stroke="${RULE}" stroke-width="0.5"/>`;
-  const hoverZones = prices.map((p,i)=>{ const x=px(i),date=p.market_date||'',o=parseFloat(p.open||p.close),c=parseFloat(p.close),hi=parseFloat(p.high||p.close),lo=parseFloat(p.low||p.close),vol=parseInt(p.volume||0),chg=parseFloat(p.change_pct||0); const tip=`${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`; return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" fill="transparent" style="cursor:crosshair"><title>${tip}</title></rect>`; }).join('');
+  const hoverZones = prices.map((p,i)=>{ const x=px(i),date=p.market_date||'',o=opens[i],c=closes[i],hi=highs[i],lo=lows[i],vol=parseInt(p.volume||0),chg=parseFloat(p.change_pct||0); const tip=`${date}&#10;O: $${o.toFixed(3)}  H: $${hi.toFixed(3)}  L: $${lo.toFixed(3)}  C: $${c.toFixed(3)}&#10;Vol: ${(vol/1000).toFixed(0)}K  Chg: ${chg>=0?'+':''}${(chg*100).toFixed(2)}%`; return `<rect x="${x-Math.max(5,candleW)}" y="${padT}" width="${Math.max(10,candleW*2)}" height="${chartH}" fill="transparent" style="cursor:crosshair"><title>${tip}</title></rect>`; }).join('');
   return `<div style="overflow-x:auto"><svg width="100%" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="background:${BG};border-radius:4px;min-width:600px"><rect width="${w}" height="${h}" fill="${BG}" rx="4"/>${gridLines}${bbFillD?`<path d="${bbFillD}" fill="rgba(75,151,178,0.08)"/>`:''}${maPath(bbUpper,TEAL,'3,3')}${maPath(bbLower,TEAL,'3,3')}${volBars}${divider}${maPath(ma200arr,INK,'6,4')}${maPath(ma50arr,TEAL,'4,3')}${maPath(ma20arr,SKY,'')}${tradeLines}${candles}${hoverZones}${dateLabels}${legend}</svg></div>`;
+}
+
+// ── DOCUMENT UPLOADS ──────────────────────────────────────────────────────────
+// Stores the file in the `documents` Storage bucket + a metadata row. For
+// text/CSV contract notes & distribution advices we parse and PREFILL the
+// relevant form for the user to confirm — never silently writing to holdings or
+// income, since these are real-money records (see TODO.md).
+async function uploadDocument(docType) {
+  const fileEl = document.getElementById('up-' + docType);
+  const status = document.getElementById('doc-status');
+  const file   = fileEl?.files?.[0];
+  if (!file) { status.innerHTML = '<span style="color:var(--red)">Choose a file first.</span>'; return; }
+  const ticker = (document.getElementById('tk-' + docType)?.value || '').toUpperCase().trim() || null;
+  status.textContent = `Uploading ${file.name}…`;
+  try {
+    const path = `${docType}/${Date.now()}_${file.name.replace(/[^A-Za-z0-9._-]/g,'_')}`;
+    const { error: upErr } = await db.storage.from('documents').upload(path, file, { upsert: false });
+    if (upErr) throw upErr;
+
+    // Best-effort parse for text/CSV; PDFs are stored for reference only.
+    let parsed = null, parseMsg = '';
+    const isText = /\.(txt|csv)$/i.test(file.name) || /text|csv/.test(file.type);
+    if (isText && docType !== 'tax_statement') {
+      const text = await file.text();
+      parsed = (docType === 'contract_note') ? parseContractNote(text) : parseDistStatement(text);
+    }
+
+    const { data: row } = await db.from('document_uploads').insert({
+      doc_type: docType, ticker: ticker || parsed?.ticker || null,
+      doc_date: parsed?.date || null, file_path: path, file_name: file.name,
+      parsed, status: parsed ? 'parsed' : 'stored'
+    }).select().maybeSingle();
+
+    if (parsed && docType === 'contract_note') {
+      parseMsg = ` Parsed ${parsed.ticker||''} ${parsed.units||''}@${parsed.price||''}. Opening Record Trade to confirm…`;
+      prefillTradeFromParse(parsed);
+    } else if (parsed && docType === 'distribution_statement') {
+      parseMsg = ` Parsed ${parsed.ticker||''} $${parsed.amount||''}/unit. Opening Income to confirm…`;
+      prefillDistFromParse(parsed);
+    } else if (!isText && docType !== 'tax_statement') {
+      parseMsg = ' Stored. PDF auto-parsing not enabled — enter the details manually (form prefilled where possible).';
+    }
+    status.innerHTML = `<span style="color:var(--green)">Uploaded ${file.name}.</span>${parseMsg}`;
+    fileEl.value = '';
+    loadDocuments();
+  } catch (e) {
+    status.innerHTML = `<span style="color:var(--red)">Upload failed: ${e.message}</span>`;
+  }
+}
+
+// CommSec trade-confirmation parser (text/CSV). Tolerant of layout; returns
+// best-effort {ticker, direction, units, price, brokerage, date, total}.
+function parseContractNote(text) {
+  const out = {};
+  const T = text.replace(/\r/g,'');
+  let m;
+  if ((m = T.match(/\b(BUY|SELL|B U Y|BOUGHT|SOLD)\b/i))) out.direction = /sell|sold/i.test(m[1]) ? 'SELL' : 'BUY';
+  if ((m = T.match(/\b([A-Z]{3})\b(?=.*(?:ordinary|fully paid|units|shares))/i))) out.ticker = m[1];
+  if (!out.ticker && (m = T.match(/(?:code|asx|symbol)[:\s]+([A-Z]{3})\b/i))) out.ticker = m[1];
+  if ((m = T.match(/(?:quantity|units|shares)[:\s]+([\d,]+)/i))) out.units = parseInt(m[1].replace(/,/g,''));
+  if ((m = T.match(/(?:price|@)\s*\$?\s*([\d.]+)/i))) out.price = parseFloat(m[1]);
+  if ((m = T.match(/(?:brokerage|commission)[:\s]+\$?\s*([\d.]+)/i))) out.brokerage = parseFloat(m[1]);
+  if ((m = T.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/))) out.date = normDate(m[1]);
+  if ((m = T.match(/(?:net|total|consideration)[:\s]+\$?\s*([\d,]+\.\d{2})/i))) out.total = parseFloat(m[1].replace(/,/g,''));
+  // CSV row fallback: TICKER,DIR,UNITS,PRICE,DATE
+  if ((!out.ticker || !out.units) && /,/.test(T)) {
+    const cols = (T.split('\n').find(l => /^[A-Z]{3},/.test(l.trim())) || '').split(',');
+    if (cols.length >= 4) { out.ticker=out.ticker||cols[0].trim(); out.units=out.units||parseInt(cols[2]); out.price=out.price||parseFloat(cols[3]); }
+  }
+  return out;
+}
+
+// Distribution / dividend advice parser (text/CSV) → {ticker, amount(per unit), units, date}.
+function parseDistStatement(text) {
+  const out = {};
+  const T = text.replace(/\r/g,'');
+  let m;
+  if ((m = T.match(/(?:code|asx|security|symbol)[:\s]+([A-Z]{3})\b/i))) out.ticker = m[1];
+  if (!out.ticker && (m = T.match(/\b([A-Z]{3})\b/))) out.ticker = m[1];
+  if ((m = T.match(/(?:cents per|per unit|rate|distribution)[:\s$]*([\d.]+)\s*(c|cents)?/i))) {
+    out.amount = /c|cents/i.test(m[2]||'') ? parseFloat(m[1])/100 : parseFloat(m[1]);
+  }
+  if ((m = T.match(/(?:units|holding)[:\s]+([\d,]+)/i))) out.units = parseInt(m[1].replace(/,/g,''));
+  if ((m = T.match(/(?:payment|pay date|date)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i))) out.date = normDate(m[1]);
+  return out;
+}
+
+function normDate(s) {
+  const p = s.split(/[\/\-]/).map(Number);
+  if (p[0] > 31) return `${p[0]}-${String(p[1]).padStart(2,'0')}-${String(p[2]).padStart(2,'0')}`; // yyyy-mm-dd
+  let [d,mo,y] = p; if (y < 100) y += 2000;
+  return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function prefillTradeFromParse(p) {
+  go('enter-trade', document.querySelector('.nav a[data-page="enter-trade"]'));
+  const set = (id,v) => { const e=document.getElementById(id); if (e && v!=null) e.value = v; };
+  set('t-ticker', p.ticker); set('t-units', p.units); set('t-price', p.price);
+  set('t-date', p.date); set('t-brok', p.brokerage); set('t-dir', p.direction);
+  if (typeof updateTradeCalc === 'function') updateTradeCalc();
+}
+
+function prefillDistFromParse(p) {
+  go('income', document.querySelector('.nav a[data-page="income"]'));
+  showAddDist();
+  const set = (id,v) => { const e=document.getElementById(id); if (e && v!=null) e.value = v; };
+  set('d-ticker', p.ticker); set('d-amount', p.amount); set('d-units', p.units); set('d-exdate', p.date);
+}
+
+async function loadDocuments() {
+  if (!db) return;
+  const tbody = document.getElementById('doc-tbody');
+  const { data: docs } = await db.from('document_uploads').select('*').order('created_at',{ascending:false});
+  if (!docs?.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No documents uploaded yet.</td></tr>'; return; }
+  const typeLabel = { contract_note:'Contract note', distribution_statement:'Distribution', tax_statement:'Tax statement' };
+  tbody.innerHTML = '';
+  for (const d of docs) {
+    const tr = document.createElement('tr');
+    const parsedTxt = d.parsed ? Object.entries(d.parsed).map(([k,v])=>`${k}:${v}`).join(' · ') : '—';
+    tr.innerHTML = `
+      <td style="font-size:11px;color:var(--muted)">${(d.created_at||'').slice(0,10)}</td>
+      <td style="font-size:11px">${typeLabel[d.doc_type]||d.doc_type}</td>
+      <td>${d.ticker?`<span class="tkr">${d.ticker}</span>`:'—'}</td>
+      <td style="font-size:11px">${d.file_name||''}</td>
+      <td style="font-size:10px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${parsedTxt}">${parsedTxt}</td>
+      <td><span class="badge ${d.status==='parsed'?'b-buy':'b-hold'}">${d.status}</span></td>
+      <td><a href="#" style="font-size:11px;color:var(--teal)" onclick="downloadDoc('${d.file_path}');return false">Download</a></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function downloadDoc(path) {
+  const { data, error } = await db.storage.from('documents').createSignedUrl(path, 60);
+  if (error) { alert('Could not generate link: ' + error.message); return; }
+  window.open(data.signedUrl, '_blank');
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
