@@ -134,22 +134,21 @@ tfoot td.r{text-align:right}
   <nav class="nav">
     <div class="nav-sec">Overview</div>
     <a class="active" data-page="dashboard">▣ Dashboard</a>
-    <div class="nav-sec">Trading</div>
-    <a data-page="model">◈ Model Portfolio</a>
+    <div class="nav-sec">My Trading</div>
     <a data-page="real">$ Real Portfolio</a>
-    <a data-page="strategies">⚡ Strategy Engine</a>
-    <a data-page="screener">⬡ Stock Screener</a>
-    <div class="nav-sec">Income</div>
     <a data-page="reit">⬡ REIT Holdings</a>
+    <a data-page="income">$ Income Tracker</a>
+    <div class="nav-sec">Strategies</div>
+    <a data-page="strategies">⚡ Strategy Engine</a>
+    <a data-page="model">◈ Model Portfolio</a>
+    <a data-page="screener">⬡ Stock Screener</a>
+    <div class="nav-sec">Signals</div>
     <a data-page="reit-trading">~ REIT Signals</a>
     <a data-page="credit-signals">◈ Credit Signals</a>
     <a data-page="bond-signals">⬡ Bond Signals</a>
-    <a data-page="income">$ Income Tracker</a>
-    <div class="nav-sec">Analysis</div>
-    <a data-page="stock-detail" id="nav-stock-detail" style="display:none">◉ Stock Detail</a>
-    <div class="nav-sec">Signals</div>
     <a data-page="morning">☀ Morning Scan</a>
     <a data-page="bond">~ Bond Market</a>
+    <a data-page="stock-detail" id="nav-stock-detail" style="display:none">◉ Stock Detail</a>
     <div class="nav-sec">Admin</div>
     <a data-page="enter-trade">+ Record Trade</a>
     <a data-page="settings">⚙ Settings</a>
@@ -223,6 +222,7 @@ tfoot td.r{text-align:right}
     <div class="tab-row" style="margin-bottom:16px">
       <button class="tab active" onclick="switchStratType('reversion',this)">📉 Mean Reversion</button>
       <button class="tab" onclick="switchStratType('breakout',this)">🚀 Breakout</button>
+      <button class="tab" onclick="switchStratType('value',this)">💰 Value</button>
     </div>
 
     <div id="strat-reversion-section">
@@ -262,6 +262,21 @@ tfoot td.r{text-align:right}
       </div>
       <div class="sl">Today's breakout signals</div>
       <div id="breakout-strat-results"><div class="empty">Loading breakout signals...</div></div>
+    </div>
+
+    <div id="strat-value-section" style="display:none">
+      <div style="background:var(--cream);border:1px solid var(--rule);border-radius:4px;padding:12px 14px;margin-bottom:16px;font-size:12px">
+        <strong>💰 Value</strong> — low P/E and relative value (cheap vs sector median). Reads the fundamentals table (EODHD). Ranked by how cheap each name is relative to its sector, then by absolute P/E. Negative-earnings names excluded.
+      </div>
+      <div class="sl">Value screen — low P/E &amp; relative value</div>
+      <table>
+        <thead><tr>
+          <th>Ticker</th><th>Company</th><th>Sector</th>
+          <th class="r">P/E</th><th class="r">Fwd P/E</th><th class="r">Sector med</th>
+          <th class="r">vs Sector</th><th class="r">P/B</th><th class="r">Yield</th><th>Flag</th>
+        </tr></thead>
+        <tbody id="value-strat-tbody"><tr><td colspan="10" class="empty">Loading value screen...</td></tr></tbody>
+      </table>
     </div>
   </div>
 
@@ -812,11 +827,59 @@ function wireNav() {
 }
 
 function switchStratType(type, el) {
-  document.querySelectorAll('.tab-row .tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#pg-strategies > .tab-row .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('strat-reversion-section').style.display = type === 'reversion' ? '' : 'none';
   document.getElementById('strat-breakout-section').style.display  = type === 'breakout'  ? '' : 'none';
+  document.getElementById('strat-value-section').style.display     = type === 'value'     ? '' : 'none';
   if (type === 'breakout') loadBreakoutStrat();
+  if (type === 'value')    loadValueStrat();
+}
+
+async function loadValueStrat() {
+  if (!db) return;
+  const el = document.getElementById('value-strat-tbody'); if (!el) return;
+  el.innerHTML = '<tr><td colspan="10" class="empty">Loading value screen...</td></tr>';
+  let data, error;
+  try {
+    ({ data, error } = await db.from('fundamentals')
+      .select('ticker,name,sector,pe,forward_pe,eps,dividend_yield,price_book'));
+  } catch (e) { error = e; }
+  if (error || !data || !data.length) {
+    el.innerHTML = '<tr><td colspan="10" class="empty">No P/E data yet — run fundamentals.sql, then trigger /.netlify/functions/fetch-fundamentals-background to populate.</td></tr>';
+    return;
+  }
+  // positive-earnings only (negative/zero P/E isn't "value", it's loss-making)
+  const rows = data.filter(r => r.pe != null && r.pe > 0 && r.pe < 200);
+  if (!rows.length) { el.innerHTML = '<tr><td colspan="10" class="empty">No positive-P/E names in the fundamentals table yet.</td></tr>'; return; }
+  // sector median P/E for relative value
+  const median = a => { const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const bySector = {}; rows.forEach(r => { const k=r.sector||'—'; (bySector[k]=bySector[k]||[]).push(r.pe); });
+  const medPE = {}; Object.entries(bySector).forEach(([s,a]) => medPE[s]=median(a));
+  rows.forEach(r => { const m=medPE[r.sector||'—']; r.relVal = m ? (1 - r.pe/m)*100 : 0; });
+  // value universe: cheap absolute OR cheap vs sector; rank by relative cheapness then absolute P/E
+  let view = rows.filter(r => r.pe < 18 || r.relVal > 10);
+  view.sort((a,b) => b.relVal - a.relVal || a.pe - b.pe);
+  view = view.slice(0, 60);
+  const yld = v => (v==null) ? '--' : ((v < 1 ? v*100 : v).toFixed(1) + '%');  // EODHD yield is decimal
+  el.innerHTML = view.map(r => {
+    const m = medPE[r.sector||'—'];
+    const flag = r.relVal > 15 ? '<span class="badge b-buy">Value</span>'
+               : r.relVal > 0  ? '<span class="badge b-watch">Cheap-ish</span>'
+               : '<span class="badge b-mod">Fair</span>';
+    return `<tr>
+      <td><span class="tkr">${r.ticker}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${(r.name||'').slice(0,26)}</td>
+      <td style="font-size:11px">${r.sector||'—'}</td>
+      <td class="r">${r.pe.toFixed(1)}</td>
+      <td class="r">${r.forward_pe?r.forward_pe.toFixed(1):'--'}</td>
+      <td class="r" style="color:var(--muted)">${m?m.toFixed(1):'--'}</td>
+      <td class="r" style="color:${r.relVal>0?'var(--green)':'var(--red)'}">${r.relVal>0?'+':''}${r.relVal.toFixed(0)}%</td>
+      <td class="r">${r.price_book?r.price_book.toFixed(2):'--'}</td>
+      <td class="r">${yld(r.dividend_yield)}</td>
+      <td>${flag}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function loadBreakoutStrat() {
