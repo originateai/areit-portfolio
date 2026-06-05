@@ -265,14 +265,19 @@ tfoot td.r{text-align:right}
 
     <div id="strat-value-section" style="display:none">
       <div style="background:var(--cream);border:1px solid var(--rule);border-radius:4px;padding:12px 14px;margin-bottom:16px;font-size:12px">
-        <strong>💰 Value</strong> — low P/E and relative value (cheap vs sector median). Reads the fundamentals table (EODHD). Ranked by how cheap each name is relative to its sector, then by absolute P/E. Negative-earnings names excluded.
+        <strong>💰 Value</strong> — ranks on low P/E and relative value (cheap vs sector-median P/E), and folds in P/B for <em>asset-heavy</em> names (banks, insurers, REITs, utilities) where book value is meaningful. P/B is ignored for capital-light names (asset managers, software) — a high book multiple is normal there, so those rows show P/B greyed with a <code>*</code>. Click any column header to sort. Negative-earnings names excluded.
       </div>
       <div class="sl">Value screen — low P/E &amp; relative value</div>
       <table>
         <thead><tr>
           <th>Ticker</th><th>Company</th><th>Sector</th>
-          <th class="r">P/E</th><th class="r">Fwd P/E</th><th class="r">Sector med</th>
-          <th class="r">vs Sector</th><th class="r">P/B</th><th class="r">Yield</th><th>Flag</th>
+          <th class="r" style="cursor:pointer" onclick="sortValue('pe')">P/E <span class="vsarw" data-k="pe"></span></th>
+          <th class="r" style="cursor:pointer" onclick="sortValue('fpe')">Fwd P/E <span class="vsarw" data-k="fpe"></span></th>
+          <th class="r">Sector med</th>
+          <th class="r" style="cursor:pointer" onclick="sortValue('rel')">vs Sector <span class="vsarw" data-k="rel"></span></th>
+          <th class="r" style="cursor:pointer" onclick="sortValue('pb')">P/B <span class="vsarw" data-k="pb"></span></th>
+          <th class="r" style="cursor:pointer" onclick="sortValue('yld')">Yield <span class="vsarw" data-k="yld"></span></th>
+          <th>Flag</th>
         </tr></thead>
         <tbody id="value-strat-tbody"><tr><td colspan="10" class="empty">Loading value screen...</td></tr></tbody>
       </table>
@@ -838,6 +843,23 @@ function switchStratType(type, el) {
   if (type === 'value')    loadValueStrat();
 }
 
+// Value screen state (held so column-header sorting re-renders without re-querying)
+let valueRows = [];
+let valueSort = { key: 'val', dir: -1 };   // dir: -1 = descending, 1 = ascending
+
+// P/B is only meaningful for asset-heavy businesses. Banks/insurers/REITs/utilities carry
+// real balance-sheet assets, so a low P/B is genuinely cheap. Asset-light names (fund managers
+// like GQG, software) normally trade at high book multiples, so P/B there is noise — ignore it.
+// Decided from the EODHD industry field, since sector alone can't separate a bank from a fundie
+// (both are "Financial Services").
+function valueAssetHeavy(r) {
+  const sec = r.sector || '', ind = r.industry || '';
+  if (sec === 'Real Estate' || sec === 'Utilities') return true;
+  if (/REIT/i.test(ind)) return true;
+  if (/bank|insurance|mortgage|credit services/i.test(ind)) return true;
+  return false;
+}
+
 async function loadValueStrat() {
   if (!db) return;
   const el = document.getElementById('value-strat-tbody'); if (!el) return;
@@ -845,7 +867,7 @@ async function loadValueStrat() {
   let data, error;
   try {
     ({ data, error } = await db.from('fundamentals')
-      .select('ticker,name,sector,pe,forward_pe,eps,dividend_yield,price_book'));
+      .select('ticker,name,sector,industry,pe,forward_pe,eps,dividend_yield,price_book'));
   } catch (e) { error = e; }
   if (error || !data || !data.length) {
     el.innerHTML = '<tr><td colspan="10" class="empty">No P/E data yet — run fundamentals.sql, then trigger /.netlify/functions/fetch-fundamentals-background to populate.</td></tr>';
@@ -854,34 +876,84 @@ async function loadValueStrat() {
   // positive-earnings only (negative/zero P/E isn't "value", it's loss-making)
   const rows = data.filter(r => r.pe != null && r.pe > 0 && r.pe < 200);
   if (!rows.length) { el.innerHTML = '<tr><td colspan="10" class="empty">No positive-P/E names in the fundamentals table yet.</td></tr>'; return; }
-  // sector median P/E for relative value
+
   const median = a => { const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
-  const bySector = {}; rows.forEach(r => { const k=r.sector||'—'; (bySector[k]=bySector[k]||[]).push(r.pe); });
-  const medPE = {}; Object.entries(bySector).forEach(([s,a]) => medPE[s]=median(a));
-  rows.forEach(r => { const m=medPE[r.sector||'—']; r.relVal = m ? (1 - r.pe/m)*100 : 0; });
-  // value universe: cheap absolute OR cheap vs sector; rank by relative cheapness then absolute P/E
-  let view = rows.filter(r => r.pe < 18 || r.relVal > 10);
-  view.sort((a,b) => b.relVal - a.relVal || a.pe - b.pe);
-  view = view.slice(0, 60);
+
+  // sector-median P/E (every name) and sector-median P/B (asset-heavy peers ONLY — book
+  // multiples are only comparable inside the asset-heavy cohort; mixing in fundies skews it)
+  const bySecPE = {}; rows.forEach(r => { const k=r.sector||'—'; (bySecPE[k]=bySecPE[k]||[]).push(r.pe); });
+  const medPE = {}; Object.entries(bySecPE).forEach(([s,a]) => medPE[s]=median(a));
+  const bySecPB = {}; rows.forEach(r => { if (valueAssetHeavy(r) && r.price_book > 0) { const k=r.sector||'—'; (bySecPB[k]=bySecPB[k]||[]).push(r.price_book); } });
+  const medPB = {}; Object.entries(bySecPB).forEach(([s,a]) => medPB[s]=median(a));
+
+  rows.forEach(r => {
+    const mPE = medPE[r.sector||'—'];
+    r.medPE  = mPE;
+    r.relVal = mPE ? (1 - r.pe/mPE)*100 : 0;                 // +% = cheaper than sector on P/E
+    r.assetHeavy = valueAssetHeavy(r);
+    const mPB = medPB[r.sector||'—'];
+    r.relPB  = (r.assetHeavy && r.price_book > 0 && mPB) ? (1 - r.price_book/mPB)*100 : null;  // null = P/B not weighted
+    // composite conviction: P/E primary; for asset-heavy names blend P/B 60/40, else P/E only
+    r.valScore = (r.relPB != null) ? (0.6*r.relVal + 0.4*r.relPB) : r.relVal;
+    // forward P/E is display-only — guard EODHD's implausible analyst-estimate values
+    r.fwdShow = (r.forward_pe != null && r.forward_pe > 0 && r.forward_pe < 200) ? r.forward_pe : null;
+  });
+
+  // value universe: cheap absolute OR cheap vs sector (on the composite)
+  valueRows = rows.filter(r => r.pe < 18 || r.valScore > 10);
+  renderValueRows();
+}
+
+function sortValue(key) {
+  if (valueSort.key === key) { valueSort.dir *= -1; }
+  // price multiples sort cheapest-first by default (ascending); everything else best-first (descending)
+  else { valueSort = { key, dir: (key==='pe' || key==='pb' || key==='fpe') ? 1 : -1 }; }
+  renderValueRows();
+}
+
+function renderValueRows() {
+  const el = document.getElementById('value-strat-tbody'); if (!el) return;
+  const { key, dir } = valueSort;
+  const getv = r => key==='pe'  ? r.pe
+                  : key==='fpe' ? r.fwdShow
+                  : key==='rel' ? r.relVal
+                  : key==='pb'  ? (r.assetHeavy ? r.price_book : null)   // P/B sorts only over names where it counts
+                  : key==='yld' ? r.dividend_yield
+                  : r.valScore;
+  const view = valueRows.slice().sort((a,b) => {
+    const x = getv(a), y = getv(b);
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;            // nulls always sink to the bottom
+    if (y == null) return -1;
+    return (x - y) * dir;
+  }).slice(0, 60);
+
   const yld = v => (v==null) ? '--' : ((v < 1 ? v*100 : v).toFixed(1) + '%');  // EODHD yield is decimal
-  el.innerHTML = view.map(r => {
-    const m = medPE[r.sector||'—'];
-    const flag = r.relVal > 15 ? '<span class="badge b-buy">Value</span>'
-               : r.relVal > 0  ? '<span class="badge b-watch">Cheap-ish</span>'
+  el.innerHTML = view.length ? view.map(r => {
+    const flag = r.valScore > 15 ? '<span class="badge b-buy">Value</span>'
+               : r.valScore > 0  ? '<span class="badge b-watch">Cheap-ish</span>'
                : '<span class="badge b-mod">Fair</span>';
+    const pbCell = !r.price_book ? '<td class="r">--</td>'
+      : r.assetHeavy ? `<td class="r">${r.price_book.toFixed(2)}</td>`
+      : `<td class="r" style="color:var(--muted)" title="P/B ignored — capital-light (${r.industry||'—'})">${r.price_book.toFixed(2)}*</td>`;
     return `<tr>
       <td><span class="tkr">${r.ticker}</span></td>
       <td style="font-size:11px;color:var(--muted)">${(r.name||'').slice(0,26)}</td>
       <td style="font-size:11px">${r.sector||'—'}</td>
       <td class="r">${r.pe.toFixed(1)}</td>
-      <td class="r">${r.forward_pe?r.forward_pe.toFixed(1):'--'}</td>
-      <td class="r" style="color:var(--muted)">${m?m.toFixed(1):'--'}</td>
+      <td class="r">${r.fwdShow?r.fwdShow.toFixed(1):'--'}</td>
+      <td class="r" style="color:var(--muted)">${r.medPE?r.medPE.toFixed(1):'--'}</td>
       <td class="r" style="color:${r.relVal>0?'var(--green)':'var(--red)'}">${r.relVal>0?'+':''}${r.relVal.toFixed(0)}%</td>
-      <td class="r">${r.price_book?r.price_book.toFixed(2):'--'}</td>
+      ${pbCell}
       <td class="r">${yld(r.dividend_yield)}</td>
       <td>${flag}</td>
     </tr>`;
-  }).join('');
+  }).join('') : '<tr><td colspan="10" class="empty">No value names match the screen.</td></tr>';
+
+  // update header sort arrows
+  document.querySelectorAll('#strat-value-section .vsarw').forEach(s => {
+    s.textContent = (s.dataset.k === key) ? (dir < 0 ? '▼' : '▲') : '';
+  });
 }
 
 async function loadBreakoutStrat() {
