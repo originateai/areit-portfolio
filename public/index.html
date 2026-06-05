@@ -134,15 +134,14 @@ tfoot td.r{text-align:right}
   <nav class="nav">
     <div class="nav-sec">Overview</div>
     <a class="active" data-page="dashboard">▣ Dashboard</a>
-    <div class="nav-sec">My Trading</div>
+    <div class="nav-sec">Portfolio</div>
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="reit">⬡ REIT Holdings</a>
-    <a data-page="income">$ Income Tracker</a>
+    <a data-page="income">$ Income</a>
     <div class="nav-sec">Strategies</div>
     <a data-page="strategies">⚡ Strategy Engine</a>
     <a data-page="model">◈ Model Portfolio</a>
     <a data-page="screener">⬡ Stock Screener</a>
-    <div class="nav-sec">Signals</div>
     <a data-page="reit-trading">~ REIT Signals</a>
     <a data-page="credit-signals">◈ Credit Signals</a>
     <a data-page="bond-signals">⬡ Bond Signals</a>
@@ -731,13 +730,16 @@ async function loadDashboard() {
   const el = document.getElementById('dashboard-body'); if (!el) return;
   const money = v => '$' + Math.round(v||0).toLocaleString();
   try {
-    const [xao, xko, real, model, macro] = await Promise.all([
+    const [xao, xko, xjo, real, model, macro] = await Promise.all([
       db.from('index_prices').select('market_date,close').eq('index_code','XAO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
       db.from('index_prices').select('market_date,close').eq('index_code','XKO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
+      db.from('index_prices').select('market_date,close').eq('index_code','XJO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
       db.from('real_trades').select('*').then(r=>r.data||[]),
       db.from('model_trades').select('*').then(r=>r.data||[]),
       db.from('morning_signals').select('*').order('signal_date',{ascending:false}).limit(1).maybeSingle().then(r=>r.data),
     ]);
+    // second index: prefer ASX 300, fall back to ASX 200
+    const idx2 = (xko && xko.length) ? {rows:xko, label:'ASX 300 (XKO)'} : {rows:xjo, label:'ASX 200 (XJO)'};
 
     // value real holdings off latest prices
     const byTicker = {};
@@ -766,7 +768,7 @@ async function loadDashboard() {
       <div class="sl">Market</div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">
         ${miniIndexChart(xao,'All Ordinaries (XAO)','Broad market')}
-        ${miniIndexChart(xko,'ASX 300 (XKO)','Top 300')}
+        ${miniIndexChart(idx2.rows,idx2.label,'Top 300/200')}
       </div>
 
       <div class="sl">Snapshot</div>
