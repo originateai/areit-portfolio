@@ -803,6 +803,7 @@ let currentStratFilter = 'all';
 // chart range-toggle state
 let sdChartPrices = [], sdChartTrade = null, sdChartRange = '1Y';
 let perfSnaps = [], perfRange = 'All';
+let dashIdx = null, dashRange = '1Y';
 const RANGES = ['1D','1W','1M','1Y','All'];
 const RANGE_DAYS = { '1D':1, '1W':7, '1M':31, '1Y':365 };
 
@@ -876,15 +877,16 @@ async function loadDashboard() {
   const money = v => '$' + Math.round(v||0).toLocaleString();
   try {
     const [xao, xko, xjo, real, model, macro] = await Promise.all([
-      db.from('index_prices').select('market_date,close').eq('index_code','XAO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
-      db.from('index_prices').select('market_date,close').eq('index_code','XKO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
-      db.from('index_prices').select('market_date,close').eq('index_code','XJO').order('market_date',{ascending:true}).limit(180).then(r=>r.data||[]),
+      db.from('index_prices').select('market_date,close').eq('index_code','XAO').order('market_date',{ascending:true}).limit(2000).then(r=>r.data||[]),
+      db.from('index_prices').select('market_date,close').eq('index_code','XKO').order('market_date',{ascending:true}).limit(2000).then(r=>r.data||[]),
+      db.from('index_prices').select('market_date,close').eq('index_code','XJO').order('market_date',{ascending:true}).limit(2000).then(r=>r.data||[]),
       db.from('real_trades').select('*').then(r=>r.data||[]),
       db.from('model_trades').select('*').then(r=>r.data||[]),
       db.from('morning_signals').select('*').order('signal_date',{ascending:false}).limit(1).maybeSingle().then(r=>r.data),
     ]);
     // second index: prefer ASX 300, fall back to ASX 200
     const idx2 = (xko && xko.length) ? {rows:xko, label:'ASX 300 (XKO)'} : {rows:xjo, label:'ASX 200 (XJO)'};
+    dashIdx = { xao, idx2 };   // stash for the range toggle
 
     // value real holdings off latest prices
     const byTicker = {};
@@ -910,11 +912,11 @@ async function loadDashboard() {
     const macroDate = macro ? (macro.signal_date || '') : '';
 
     el.innerHTML = `
-      <div class="sl">Market</div>
-      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">
-        ${miniIndexChart(xao,'All Ordinaries (XAO)','Broad market')}
-        ${miniIndexChart(idx2.rows,idx2.label,'Top 300/200')}
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+        <div class="sl" style="margin:0">Market</div>
+        <div id="dash-range" class="rangebar"></div>
       </div>
+      <div id="dash-indices" style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px"></div>
 
       <div class="sl">Snapshot</div>
       <div class="kb">
@@ -941,10 +943,27 @@ async function loadDashboard() {
           <td>${t.total_score!=null?t.total_score+'/7':(t.score!=null?t.score:'')}</td></tr>`).join('')
           || '<tr><td colspan="4" class="empty">No open model trades.</td></tr>'}</tbody>
       </table>`;
+
+    // index charts with range toggle (1D/1W/1M/1Y/All)
+    buildRangeBar('dash-range', dashRange, setDashRange);
+    renderDashIndices();
   } catch (e) {
     el.innerHTML = `<div class="empty">Dashboard error: ${e.message}</div>`;
     console.error('dashboard error', e);
   }
+}
+
+function setDashRange(range) {
+  dashRange = range;
+  buildRangeBar('dash-range', range, setDashRange);
+  renderDashIndices();
+}
+function renderDashIndices() {
+  const el = document.getElementById('dash-indices'); if (!el || !dashIdx) return;
+  const xao = windowByRange(dashIdx.xao, dashRange);
+  const i2  = windowByRange(dashIdx.idx2.rows, dashRange);
+  el.innerHTML = miniIndexChart(xao, 'All Ordinaries (XAO)', `Broad market · ${dashRange}`)
+               + miniIndexChart(i2,  dashIdx.idx2.label,     `Top 300/200 · ${dashRange}`);
 }
 
 
@@ -2427,9 +2446,9 @@ async function loadMorning() {
       ${mg('Yield crv',data.yield_curve_us,'bps')} ${mg('Real yld',data.real_yield,'pct0')}
     </div>
     <div class="sl">Today's equity candidates</div>
-    <div class="info">${data.equities_long?.length?'Longs: '+data.equities_long.map(t=>`<span class="tkr">${t}</span>`).join(' '):'No equity trades today.'}</div>
+    <div class="info">${data.equities_long?.length?'Longs: '+data.equities_long.map(t=>`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${t}')">${t}</span>`).join(' '):'No equity trades today.'}</div>
     <div class="sl">REIT triggers</div>
-    <div class="info">${data.reit_triggers?.length?'🟢 Yield triggers: '+data.reit_triggers.map(t=>`<span class="tkr">${t}</span>`).join(' '):'No REIT yield triggers today.'}</div>
+    <div class="info">${data.reit_triggers?.length?'🟢 Yield triggers: '+data.reit_triggers.map(t=>`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${t}')">${t}</span>`).join(' '):'No REIT yield triggers today.'}</div>
   `;
 }
 
@@ -3188,7 +3207,7 @@ async function loadDocuments() {
     tr.innerHTML = `
       <td style="font-size:11px;color:var(--muted)">${(d.created_at||'').slice(0,10)}</td>
       <td style="font-size:11px">${typeLabel[d.doc_type]||d.doc_type}</td>
-      <td>${d.ticker?`<span class="tkr">${d.ticker}</span>`:'—'}</td>
+      <td>${d.ticker?`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${d.ticker}')">${d.ticker}</span>`:'—'}</td>
       <td style="font-size:11px">${d.file_name||''}</td>
       <td style="font-size:10px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${parsedTxt}">${parsedTxt}</td>
       <td><span class="badge ${d.status==='parsed'?'b-buy':'b-hold'}">${d.status}</span></td>
