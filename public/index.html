@@ -464,15 +464,17 @@ tfoot td.r{text-align:right}
       <div class="kc"><div class="kl">Distributions</div><div class="kv" id="inc-cnt">0</div></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <div class="sl" style="flex:1">Distribution history</div>
-      <button class="btn btn-secondary" onclick="showAddDist()" style="margin-left:12px;font-size:11px">+ Add distribution</button>
+      <div class="sl" style="flex:1">Distributions received — cumulative per stock</div>
+      <button class="btn btn-secondary" onclick="ingestDividends()" style="margin-left:12px;font-size:11px" id="inc-pull-btn">↻ Pull dividends (EODHD)</button>
+      <button class="btn btn-secondary" onclick="showAddDist()" style="margin-left:8px;font-size:11px">+ Add distribution</button>
     </div>
+    <div id="inc-pull-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
     <table>
       <thead><tr>
         <th>Ticker</th><th>Ex-Date</th><th>Pay Date</th><th class="r">$/unit</th>
-        <th class="r">Units held</th><th class="r">Total received</th><th>Notes</th>
+        <th class="r">Units held</th><th class="r">Received</th><th class="r">Cumulative</th><th>Source</th>
       </tr></thead>
-      <tbody id="dist-tbody"><tr><td colspan="7" class="empty">No distributions recorded yet.</td></tr></tbody>
+      <tbody id="dist-tbody"><tr><td colspan="8" class="empty">No distributions recorded yet.</td></tr></tbody>
     </table>
     <div id="add-dist-form" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--rule);background:var(--cream)">
       <div class="sl">Record distribution</div>
@@ -1852,28 +1854,86 @@ async function loadREITSignals() {
 // ── INCOME TRACKER ────────────────────────────────────────────────────────────
 async function loadIncome() {
   if (!db) return;
-  const { data: dists } = await db.from('distributions').select('*').order('ex_date',{ascending:false});
+  const { data: dists } = await db.from('distributions').select('*');
   const tbody = document.getElementById('dist-tbody');
   tbody.innerHTML = '';
-  if (!dists?.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No distributions recorded yet.</td></tr>'; return; }
+  if (!dists?.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No distributions recorded yet. Click “Pull dividends (EODHD)” or add one manually.</td></tr>'; return; }
 
-  const ytd = dists.filter(d => d.ex_date?.startsWith(new Date().getFullYear())).reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+  // Group by ticker, sort each group oldest→newest so the running cumulative builds correctly.
+  const byTicker = {};
+  dists.forEach(d => { (byTicker[d.ticker] = byTicker[d.ticker] || []).push(d); });
+  Object.values(byTicker).forEach(arr => arr.sort((a,b) => (a.ex_date||'').localeCompare(b.ex_date||'')));
+
+  // Order stocks by total received (biggest income contributors first).
+  const tickers = Object.keys(byTicker).sort((a,b) => {
+    const sa = byTicker[a].reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+    const sb = byTicker[b].reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+    return sb - sa;
+  });
+
+  const thisYear = String(new Date().getFullYear());
+  let grandTotal = 0, ytd = 0;
+
+  tickers.forEach(tk => {
+    const rows = byTicker[tk];
+    const stockTotal = rows.reduce((s,d)=>s+parseFloat(d.total_received||0),0);
+    grandTotal += stockTotal;
+
+    // Per-stock header row — cumulative total paid by this holding, click → detail.
+    const hdr = document.createElement('tr');
+    hdr.className = 'clickable';
+    hdr.title = 'Click for full stock detail';
+    hdr.addEventListener('click', () => openSignalDrawer(tk));
+    hdr.style.background = 'var(--cream)';
+    hdr.innerHTML = `
+      <td colspan="6" style="font-weight:600"><span class="tkr">${tk}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:8px">${rows.length} distribution${rows.length!==1?'s':''}</span></td>
+      <td class="r" style="color:var(--teal);font-weight:700">${f.$k(stockTotal)}</td>
+      <td style="font-size:10px;color:var(--muted)">total</td>`;
+    tbody.appendChild(hdr);
+
+    // Each distribution with a running cumulative for this stock.
+    let runtot = 0;
+    rows.forEach(d => {
+      const recv = parseFloat(d.total_received||0);
+      runtot += recv;
+      if (d.ex_date && d.ex_date.startsWith(thisYear)) ytd += recv;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td></td>
+        <td style="font-size:11px">${d.ex_date||'--'}</td>
+        <td style="font-size:11px;color:var(--muted)">${d.pay_date||'--'}</td>
+        <td class="r">${f.$(d.amount_per_unit,4)}</td>
+        <td class="r">${d.units_held?Math.round(d.units_held).toLocaleString():'--'}</td>
+        <td class="r">${f.$k(recv)}</td>
+        <td class="r" style="color:var(--teal);font-weight:600">${f.$k(runtot)}</td>
+        <td style="font-size:10px;color:var(--muted)">${d.source||d.notes||'manual'}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+
   document.getElementById('inc-ytd').textContent = f.$k(ytd);
   document.getElementById('inc-cnt').textContent = dists.length;
+  const projEl = document.getElementById('inc-proj');
+  if (projEl) projEl.textContent = f.$k(grandTotal);  // lifetime income received to date
+}
 
-  dists.forEach(d => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><span class="tkr">${d.ticker}</span></td>
-      <td style="font-size:11px">${d.ex_date}</td>
-      <td style="font-size:11px;color:var(--muted)">${d.pay_date||'--'}</td>
-      <td class="r">${f.$(d.amount_per_unit,4)}</td>
-      <td class="r">${Math.round(d.units_held||0).toLocaleString()}</td>
-      <td class="r" style="color:var(--teal);font-weight:600">${f.$k(d.total_received)}</td>
-      <td style="font-size:10px;color:var(--muted)">${d.notes||''}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+// Trigger the EODHD dividend ingestion, then reload.
+async function ingestDividends() {
+  const btn = document.getElementById('inc-pull-btn');
+  const status = document.getElementById('inc-pull-status');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Pulling…'; }
+  if (status) status.textContent = 'Fetching dividend history from EODHD for your holdings…';
+  try {
+    const res = await fetch('/.netlify/functions/fetch-dividends-background', { method: 'POST' });
+    const out = await res.json().catch(() => ({}));
+    if (status) status.textContent = out.message || `Done — ${out.upserted||0} distributions updated.`;
+  } catch (e) {
+    if (status) status.textContent = 'Dividend pull failed: ' + e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Pull dividends (EODHD)'; }
+    loadIncome();
+  }
 }
 
 function showAddDist() { document.getElementById('add-dist-form').style.display='block'; }
@@ -1884,7 +1944,7 @@ async function saveDist() {
   const amount = parseFloat(document.getElementById('d-amount').value);
   const units  = parseFloat(document.getElementById('d-units').value);
   if (!ticker||!exdate||!amount||!units) { alert('Please fill all fields'); return; }
-  await db.from('distributions').insert({ ticker, ex_date: exdate, amount_per_unit: amount, units_held: units, total_received: amount*units });
+  await db.from('distributions').upsert({ ticker, ex_date: exdate, amount_per_unit: amount, units_held: units, total_received: amount*units, source: 'manual' }, { onConflict: 'ticker,ex_date' });
   document.getElementById('add-dist-form').style.display='none';
   loadIncome();
 }
