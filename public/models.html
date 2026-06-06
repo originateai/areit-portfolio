@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REIT Models</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--ink:#00273E;--navy:#063D58;--sky:#00B0F0;--teal:#4B97B2;--paper:#f5f2ec;--cream:#ede9e0;--rule:#c8c2b4;--green:#1f8a4c;--red:#c0392b;--muted:#6b6660}
+body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;padding-bottom:60px}
+header{background:var(--ink);color:#fff;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+header h1{font-family:'Playfair Display',serif;font-size:19px;font-weight:600}
+header .links a{color:#9fc3d4;font-family:'DM Mono',monospace;font-size:11px;text-decoration:none;margin-left:16px;letter-spacing:0.04em}
+header .links a:hover{color:var(--sky)}
+.wrap{max-width:920px;margin:0 auto;padding:22px}
+.card{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:18px;margin-bottom:20px}
+.card h2{font-family:'Playfair Display',serif;font-size:15px;margin-bottom:12px;font-weight:600}
+label{display:block;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:10px 0 4px}
+input[type=text],input[type=number]{width:100%;padding:9px 11px;border:1px solid var(--rule);border-radius:4px;font-family:'DM Mono',monospace;font-size:13px;background:var(--paper)}
+input[type=file]{font-family:'DM Mono',monospace;font-size:12px;margin-top:4px}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row>div{flex:1;min-width:120px}
+button{background:var(--ink);color:#fff;border:none;border-radius:4px;padding:10px 18px;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:0.04em;cursor:pointer;margin-top:14px}
+button:hover{background:var(--navy)}
+button.dl{background:var(--sky);color:var(--ink);margin-top:0;padding:6px 12px;font-size:11px}
+button:disabled{opacity:0.5;cursor:default}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--navy);color:#fff;text-align:left;padding:8px 10px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.08em;text-transform:uppercase}
+th.r,td.r{text-align:right}
+td{padding:8px 10px;border-bottom:1px solid var(--cream);font-size:13px}
+td.tkr{font-family:'DM Mono',monospace;font-weight:600;color:var(--navy)}
+td.mono{font-family:'DM Mono',monospace}
+tr:last-child td{border-bottom:none}
+.hist{color:var(--muted);font-size:12px}
+.status{font-family:'DM Mono',monospace;font-size:12px;margin-top:10px;min-height:18px}
+.status.ok{color:var(--green)}.status.err{color:var(--red)}
+.empty{color:var(--muted);font-style:italic;padding:18px 0;text-align:center}
+.note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>REIT Models</h1>
+  <div class="links">
+    <a href="/reit-value.html">Value Dashboard →</a>
+    <a href="/">← Dashboard</a>
+  </div>
+</header>
+<div class="wrap">
+
+  <div class="card">
+    <h2>Upload a model workbook</h2>
+    <div class="row">
+      <div><label>Ticker</label><input type="text" id="up-ticker" placeholder="DXI" maxlength="6"></div>
+      <div><label>Version</label><input type="number" id="up-version" value="1" min="1"></div>
+    </div>
+    <label>Workbook (.xlsx)</label>
+    <input type="file" id="up-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+    <br><button id="up-btn" onclick="doUpload()">Upload to Storage</button>
+    <div class="status" id="up-status"></div>
+    <p class="note">Stored privately in the <span class="mono">reit-models</span> bucket at <span class="mono">{ticker}/v{version}.xlsx</span> (overwrites that version). To load the model's numbers into the value tables, run <span class="mono">scripts/export-model.js</span> after uploading.</p>
+  </div>
+
+  <div class="card">
+    <h2>Stored models</h2>
+    <div id="files"><div class="empty">Loading…</div></div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+let db = null;
+
+async function init(){
+  try{
+    const env = await (await fetch('/.netlify/functions/env')).json();
+    db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
+    loadFiles();
+  }catch(e){
+    console.error(e);
+    document.getElementById('files').innerHTML = '<div class="empty">Could not connect to database.</div>';
+  }
+}
+
+function fmtKB(b){ return b==null?'—':(b/1024).toFixed(0)+' KB'; }
+function fmtDate(d){ return d? String(d).slice(0,10):'—'; }
+
+async function loadFiles(){
+  const el = document.getElementById('files');
+  const { data, error } = await db.from('reit_model_files').select('*');
+  if(error){ el.innerHTML = '<div class="empty">'+error.message+'</div>'; return; }
+  if(!data || !data.length){ el.innerHTML = '<div class="empty">No models uploaded yet.</div>'; return; }
+
+  // group by ticker, latest version first
+  const byTicker = {};
+  data.forEach(r => { (byTicker[r.ticker] = byTicker[r.ticker] || []).push(r); });
+  Object.values(byTicker).forEach(rows => rows.sort((a,b)=>(b.model_version||0)-(a.model_version||0)));
+
+  const built = (r,isLatest) => `<tr>
+    <td class="tkr">${isLatest?r.ticker:''}</td>
+    <td class="mono">v${r.model_version}${isLatest?'':' <span class="hist">(history)</span>'}</td>
+    <td>${r.file_name||'—'}</td>
+    <td class="r mono">${fmtKB(r.bytes)}</td>
+    <td class="r hist">${fmtDate(r.uploaded_at)}</td>
+    <td class="r"><button class="dl" onclick="download('${(r.storage_path||'').replace(/'/g,'')}')">Download</button></td>
+  </tr>`;
+
+  let html = '<table><tr><th>Ticker</th><th>Version</th><th>File</th><th class="r">Size</th><th class="r">Date</th><th class="r">Download</th></tr>';
+  Object.keys(byTicker).sort().forEach(tk => {
+    byTicker[tk].forEach((r,i)=> html += built(r, i===0));
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+async function download(path){
+  if(!path) return;
+  try{
+    const r = await (await fetch('/.netlify/functions/get-model-url?path='+encodeURIComponent(path))).json();
+    if(r.url) window.location.href = r.url; else alert('No URL: '+(r.error||'unknown'));
+  }catch(e){ alert('Download failed: '+e.message); }
+}
+
+function readAsBase64(file){
+  return new Promise((res,rej)=>{
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result));   // data URL; function strips the prefix
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+async function doUpload(){
+  const status = document.getElementById('up-status');
+  const btn = document.getElementById('up-btn');
+  const ticker = (document.getElementById('up-ticker').value||'').toUpperCase().trim();
+  const version = document.getElementById('up-version').value||'1';
+  const file = document.getElementById('up-file').files[0];
+  status.className='status';
+  if(!ticker || !file){ status.className='status err'; status.textContent='Ticker and file are required.'; return; }
+  btn.disabled=true; status.textContent='Uploading '+file.name+'…';
+  try{
+    const file_base64 = await readAsBase64(file);
+    const res = await fetch('/.netlify/functions/upload-model', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ticker, model_version: version, file_name: file.name, file_base64 })
+    });
+    const j = await res.json();
+    if(!res.ok) throw new Error(j.error||('HTTP '+res.status));
+    status.className='status ok';
+    status.textContent=`Uploaded ${ticker} v${version} — ${(j.bytes/1024).toFixed(0)} KB.`;
+    loadFiles();
+  }catch(e){ status.className='status err'; status.textContent='Upload failed: '+e.message; }
+  finally{ btn.disabled=false; }
+}
+
+init();
+</script>
+</body>
+</html>

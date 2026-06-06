@@ -144,6 +144,11 @@ tfoot td.r{text-align:right}
     <a data-page="reit-trading">~ REIT Signals</a>
     <a data-page="credit-signals">◈ Credit Signals</a>
     <a data-page="bond-signals">⬡ Bond Signals</a>
+    <div class="nav-sec">Value Layer</div>
+    <a href="/reit-value.html">◎ REIT Value</a>
+    <a href="/models.html">⬢ Models</a>
+    <a href="/assumptions.html">✎ Assumptions</a>
+    <a href="/evidence.html">▦ Market Evidence</a>
     <div class="nav-sec">My Portfolio</div>
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="reit">⬡ REIT Holdings</a>
@@ -801,11 +806,11 @@ let db = null;
 let currentModelFilter = 'open';
 let currentStratFilter = 'all';
 // chart range-toggle state
-let sdChartPrices = [], sdChartTrade = null, sdChartRange = '1Y';
+let sdChartPrices = [], sdChartTrade = null, sdChartRange = '3M';
 let perfSnaps = [], perfRange = 'All';
 let dashIdx = null, dashRange = '1Y';
-const RANGES = ['1D','1W','1M','1Y','All'];
-const RANGE_DAYS = { '1D':1, '1W':7, '1M':31, '1Y':365 };
+const RANGES = ['1D','1W','1M','3M','1Y','All'];
+const RANGE_DAYS = { '1D':1, '1W':7, '1M':31, '3M':92, '1Y':365 };
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -926,6 +931,9 @@ async function loadDashboard() {
         <div class="kc"><div class="kl">Strategies</div><div class="kv gold">5</div><div class="kn"><a href="#" onclick="go('strategies',document.querySelector('.nav a[data-page=&quot;strategies&quot;]'));return false" style="color:var(--teal);text-decoration:none">Open engine →</a></div></div>
       </div>
 
+      <div class="sl">REIT Value Layer — biggest discounts to fair value</div>
+      <div id="dash-value"><div class="empty">Loading value layer…</div></div>
+
       <div class="sl">Current holdings</div>
       <table><thead><tr><th>Ticker</th><th class="r">Units</th><th class="r">Last</th><th class="r">Value</th><th class="r">Weight</th></tr></thead>
         <tbody>${held.length ? held.map(h=>`<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${h.tk}')">
@@ -947,9 +955,40 @@ async function loadDashboard() {
     // index charts with range toggle (1D/1W/1M/1Y/All)
     buildRangeBar('dash-range', dashRange, setDashRange);
     renderDashIndices();
+    renderDashValue();
   } catch (e) {
     el.innerHTML = `<div class="empty">Dashboard error: ${e.message}</div>`;
     console.error('dashboard error', e);
+  }
+}
+
+// REIT value layer — top discounts on the dashboard (links through to /reit-value.html).
+// Degrades quietly if the value-layer schema/grants aren't in place yet.
+async function renderDashValue() {
+  const el = document.getElementById('dash-value'); if (!el) return;
+  try {
+    const { data, error } = await db.from('v_discount_to_fair_value').select('*');
+    if (error || !data || !data.length) {
+      el.innerHTML = `<div class="empty">No model values yet — set up the value layer, then see <a href="/reit-value.html" style="color:var(--teal);text-decoration:none">REIT Value →</a></div>`;
+      return;
+    }
+    const toPct = v => v==null?null:(Math.abs(v)<2?v*100:v);
+    const isBuy = r => { const v=r.buy_signal_value_layer;
+      if (v===true||v==='t'||v==='true'||v===1) return true;
+      if (v===false||v==='f'||v==='false'||v===0) return false;
+      return r.last_price!=null && r.buy_threshold!=null && parseFloat(r.last_price)<=parseFloat(r.buy_threshold); };
+    const rows = data.slice().sort((a,b)=>parseFloat(a.prem_disc_to_fair)-parseFloat(b.prem_disc_to_fair)).slice(0,5);
+    el.innerHTML = `<table><thead><tr><th>Ticker</th><th class="r">Last</th><th class="r">Fair value</th><th class="r">Disc/Prem</th><th class="r">Signal</th></tr></thead>
+      <tbody>${rows.map(r=>{ const pd=toPct(r.prem_disc_to_fair), buy=isBuy(r);
+        return `<tr class="clickable" title="Open the value dashboard" onclick="window.location.href='/reit-value.html'">
+        <td><span class="tkr">${r.ticker}</span></td>
+        <td class="r">${r.last_price!=null?'$'+parseFloat(r.last_price).toFixed(2):'--'}</td>
+        <td class="r">${r.blended_value!=null?'$'+parseFloat(r.blended_value).toFixed(2):'--'}</td>
+        <td class="r" style="color:${pd==null?'var(--muted)':pd<0?'var(--green)':'var(--red)'}">${pd==null?'--':(pd>=0?'+':'')+pd.toFixed(1)+'%'}</td>
+        <td class="r"><span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${buy?'#e7f4ec':'#f0ece2'};color:${buy?'var(--green)':'var(--muted)'}">${buy?'BUY':'WAIT'}</span></td></tr>`; }).join('')}</tbody></table>
+      <div style="margin-top:6px"><a href="/reit-value.html" style="color:var(--teal);text-decoration:none;font-size:12px">Open value dashboard →</a></div>`;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Value layer unavailable.</div>`;
   }
 }
 

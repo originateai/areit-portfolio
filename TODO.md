@@ -62,6 +62,43 @@ rows. Deploy the code only after the migrations are in.
 - Deployed front-end is `public/index.html` (`netlify.toml` → `publish = public`).
 - Root `index.html` is kept as a mirror copy. If you edit one, copy to the other.
 
+## 8. A-REIT VALUE LAYER (Phase 1 built — needs your Supabase steps)
+Full runbook in `SUMMARY.md` (Part 2). The must-dos, in order:
+1. **SQL:** run **`areit_value_layer_schema_v2.sql` ONLY** (it supersedes the old
+   schema.sql + patch_01; idempotent, single transaction). Verified against my code.
+2. **Storage:** create a **Private** bucket named `reit-models`.
+3. **RLS/grants (critical):** for every new table the frontend reads —
+   `reit_model_files`, `reit_prices`, `reit_models`, and the views (esp.
+   `v_discount_to_fair_value`) — add a `for select using (true)` policy AND
+   `grant select to anon, authenticated`. Without this, `models.html` and
+   `reit-value.html` show nothing (same class as the old "silent empty / 400" bug).
+4. **Env:** no new Netlify var needed — functions accept the existing
+   `SUPABASE_SERVICE_KEY`. Set `SUPABASE_SERVICE_ROLE` (or `_KEY`) locally for the script.
+5. **Load models:** `cd scripts && npm install`, then
+   `node export-model.js DXI "../areit models/DXI_…xlsx" 1 --dry-run` to validate the
+   parse, then re-run without `--dry-run`. Repeat for DXC, CIP. The `.xlsx` must have
+   cached values (open+save in Excel first) or it exports nulls.
+6. **Snapshot:** trigger `price-snapshot` once (Netlify → Functions) to fill `reit_prices`.
+
+**Task D (market evidence) — BUILT:** `evidence.html` (add-form + CSV import + recent
+rows + the three benchmark views) and `ingest-evidence.js` (service-role writer).
+Linked under "Value Layer". Also built: **assumptions editor** (`assumptions.html` +
+`save-assumptions.js`) — edit headline assumptions per REIT with cap-rate/leasing
+benchmarks shown alongside; workbook stays source of truth (re-export overwrites). And a
+**REIT Value card** on the main dashboard (top discounts → `reit-value.html`).
+**AI doc-reader — BUILT:** `read-evidence-doc.js` + the "AI document reader" card on
+`evidence.html` (pdf.js extracts text → Claude forced-tool extraction → propose rows →
+you review + Import). Needs `ANTHROPIC_API_KEY` in Netlify env (optional `ANTHROPIC_MODEL`,
+defaults to `claude-opus-4-8`; use `claude-haiku-4-5` for cheaper bulk parsing). No OCR —
+scanned image PDFs won't extract. The `cre_*` tables, `reit_model_assumptions`, and the
+views still need anon SELECT grants (step 3 above) for the pages to display data.
+
+That closes out the entire value-layer brief (Tasks A–D). Remaining open items are all
+yours: run the SQL, grants, bucket, env vars, and the model export/snapshot.
+
+**Could not verify from here:** no Node/EODHD/Supabase in my environment, so the export
+was never run and nothing was written to the DB — validate with `--dry-run` before trusting.
+
 ## 7. Not in scope this session (from BUILD-PLAN, still open)
 - macro → EODHD migration in `morning-scan.js` (still calls Yahoo).
 - Morning-scan determinism (read committed snapshot vs re-fetch live).

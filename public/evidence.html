@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Evidence</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--ink:#00273E;--navy:#063D58;--sky:#00B0F0;--teal:#4B97B2;--paper:#f5f2ec;--cream:#ede9e0;--rule:#c8c2b4;--green:#1f8a4c;--red:#c0392b;--muted:#6b6660}
+body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;padding-bottom:60px}
+header{background:var(--ink);color:#fff;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+header h1{font-family:'Playfair Display',serif;font-size:19px;font-weight:600}
+header .links a{color:#9fc3d4;font-family:'DM Mono',monospace;font-size:11px;text-decoration:none;margin-left:16px}
+header .links a:hover{color:var(--sky)}
+.wrap{max-width:1100px;margin:0 auto;padding:22px}
+.tabs{display:flex;gap:4px;margin-bottom:18px;flex-wrap:wrap}
+.tabs button{background:var(--cream);border:1px solid var(--rule);border-radius:4px;padding:8px 16px;font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;color:var(--muted)}
+.tabs button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.card{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:18px;margin-bottom:20px}
+.card h2{font-family:'Playfair Display',serif;font-size:15px;margin-bottom:4px;font-weight:600}
+.card .sub{font-size:11px;color:var(--muted);margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+label{display:block;font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:3px}
+input,select,textarea{width:100%;padding:7px 9px;border:1px solid var(--rule);border-radius:4px;font-family:'DM Mono',monospace;font-size:12px;background:var(--paper)}
+textarea{font-size:11px;min-height:90px;white-space:pre;overflow-x:auto}
+button.go{background:var(--ink);color:#fff;border:none;border-radius:4px;padding:9px 18px;font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;margin-top:12px}
+button.go:hover{background:var(--navy)}
+button.go:disabled{opacity:.5}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--navy);color:#fff;text-align:left;padding:7px 9px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap}
+td{padding:6px 9px;border-bottom:1px solid var(--cream);white-space:nowrap}
+tr:hover td{background:#fbfaf7}
+.scroll{overflow-x:auto}
+.status{font-family:'DM Mono',monospace;font-size:12px;margin-top:8px;min-height:16px}
+.status.ok{color:var(--green)}.status.err{color:var(--red)}
+.empty{color:var(--muted);font-style:italic;padding:14px 0;text-align:center}
+.hint{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5;word-break:break-word}
+</style>
+</head>
+<body>
+<header>
+  <h1>Market Evidence</h1>
+  <div class="links">
+    <a href="/reit-value.html">Value →</a>
+    <a href="/models.html">Models →</a>
+    <a href="/">← Dashboard</a>
+  </div>
+</header>
+<div class="wrap">
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="card">
+    <h2 id="add-title">Add a record</h2>
+    <div class="sub" id="add-sub"></div>
+    <div class="grid" id="add-form"></div>
+    <button class="go" id="add-btn" onclick="addRow()">Add record</button>
+    <div class="status" id="add-status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Bulk import (CSV)</h2>
+    <div class="sub">Header row must use the column names. Paste rows or choose a .csv — unknown columns are ignored.</div>
+    <input type="file" id="csv-file" accept=".csv,text/csv" onchange="loadCsvFile()" style="margin-bottom:8px">
+    <textarea id="csv-text" spellcheck="false"></textarea>
+    <div class="hint" id="csv-headers"></div>
+    <button class="go" id="csv-btn" onclick="importCsv()">Import CSV</button>
+    <div class="status" id="csv-status"></div>
+  </div>
+
+  <div class="card">
+    <h2>AI document reader</h2>
+    <div class="sub">Upload an ASX result PDF or agent IM — Claude proposes evidence rows for you to review and import. Nothing is inserted automatically.</div>
+    <input type="file" id="ai-file" accept=".pdf,.txt" style="margin-bottom:8px">
+    <button class="go" id="ai-btn" onclick="readDoc()">Read document</button>
+    <div class="status" id="ai-status"></div>
+    <div id="ai-results"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recent records</h2>
+    <div class="scroll" id="recent"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Benchmarks</h2>
+    <div class="sub">Derived from the last 24 months of evidence — use as a reference when setting model assumptions.</div>
+    <h2 style="font-size:13px;margin-top:8px">Market cap rates (by sector / state)</h2>
+    <div class="scroll" id="bm-cap"><div class="empty">—</div></div>
+    <h2 style="font-size:13px;margin-top:16px">Leasing benchmarks</h2>
+    <div class="scroll" id="bm-lease"><div class="empty">—</div></div>
+    <h2 style="font-size:13px;margin-top:16px">REIT cap vs market</h2>
+    <div class="scroll" id="bm-spread"><div class="empty">—</div></div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let db = null;
+
+// field config per table: [key, label, type]  (type: text|num|date)
+const TABLES = {
+  cre_transactions: {
+    label:'Transactions', dateKey:'sale_date',
+    fields:[['asset_name','Asset','text'],['address','Address','text'],['sector','Sector','text'],['sub_sector','Sub-sector','text'],['state','State','text'],['metro','Metro','text'],['sale_price_m','Sale $m','num'],['cap_rate','Cap rate','num'],['passing_income_m','Passing $m','num'],['wale_years','WALE yrs','num'],['area_sqm','Area sqm','num'],['rate_psm','Rate $/sqm','num'],['sale_date','Sale date','date'],['vendor','Vendor','text'],['purchaser','Purchaser','text'],['reit_linked','REIT','text'],['source','Source','text']],
+  },
+  cre_leasing_deals: {
+    label:'Leasing', dateKey:'deal_date',
+    fields:[['property','Property','text'],['tenant','Tenant','text'],['sector','Sector','text'],['sub_sector','Sub-sector','text'],['state','State','text'],['metro','Metro','text'],['area_sqm','Area sqm','num'],['face_rent_psm','Face $/sqm','num'],['effective_rent_psm','Effective $/sqm','num'],['incentive_pct','Incentive','num'],['term_years','Term yrs','num'],['review_type','Review type','text'],['review_pct','Review %','num'],['deal_date','Deal date','date'],['reit_linked','REIT','text'],['source','Source','text']],
+  },
+  cre_developments: {
+    label:'Developments', dateKey:'pc_date',
+    fields:[['project','Project','text'],['location','Location','text'],['state','State','text'],['sector','Sector','text'],['gla_sqm','GLA sqm','num'],['cost_m','Cost $m','num'],['end_value_m','End value $m','num'],['yield_on_cost','Yield on cost','num'],['prelease_pct','Pre-lease','num'],['pc_date','PC date','date'],['status','Status','text'],['reit_linked','REIT','text'],['source','Source','text']],
+  },
+};
+let activeTable = 'cre_transactions';
+
+async function init(){
+  try{
+    const env = await (await fetch('/.netlify/functions/env')).json();
+    db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
+  }catch(e){ console.error(e); }
+  renderTabs();
+  selectTable('cre_transactions');
+  loadBenchmarks();
+}
+
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = Object.entries(TABLES)
+    .map(([k,t])=>`<button data-t="${k}" class="${k===activeTable?'active':''}" onclick="selectTable('${k}')">${t.label}</button>`).join('');
+}
+
+function selectTable(t){
+  activeTable = t;
+  renderTabs();
+  const cfg = TABLES[t];
+  document.getElementById('add-title').textContent = 'Add a '+cfg.label.replace(/s$/,'').toLowerCase()+' record';
+  document.getElementById('add-sub').textContent = 'Table: '+t+' — fill what you have; blanks are skipped.';
+  document.getElementById('add-form').innerHTML = cfg.fields.map(([k,lbl,ty])=>
+    `<div><label>${lbl}</label><input id="f-${k}" type="${ty==='num'?'number':ty==='date'?'date':'text'}" ${ty==='num'?'step="any"':''}></div>`).join('');
+  document.getElementById('csv-headers').textContent = 'Columns: '+cfg.fields.map(f=>f[0]).join(', ');
+  document.getElementById('csv-text').value = '';
+  document.getElementById('csv-file').value = '';
+  document.getElementById('add-status').textContent='';
+  document.getElementById('csv-status').textContent='';
+  loadRecent();
+}
+
+async function post(rows){
+  const res = await fetch('/.netlify/functions/ingest-evidence', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ table: activeTable, rows })
+  });
+  const j = await res.json();
+  if(!res.ok) throw new Error(j.error||('HTTP '+res.status));
+  return j;
+}
+
+async function addRow(){
+  const st = document.getElementById('add-status'); st.className='status';
+  const btn = document.getElementById('add-btn');
+  const row = {};
+  TABLES[activeTable].fields.forEach(([k])=>{ const v=document.getElementById('f-'+k).value; if(v!=='') row[k]=v; });
+  if(!Object.keys(row).length){ st.className='status err'; st.textContent='Nothing to add.'; return; }
+  btn.disabled=true; st.textContent='Saving…';
+  try{
+    const j = await post([row]);
+    st.className='status ok'; st.textContent=`Added ${j.inserted} record.`;
+    TABLES[activeTable].fields.forEach(([k])=>{ document.getElementById('f-'+k).value=''; });
+    loadRecent(); loadBenchmarks();
+  }catch(e){ st.className='status err'; st.textContent='Failed: '+e.message; }
+  finally{ btn.disabled=false; }
+}
+
+function loadCsvFile(){
+  const f = document.getElementById('csv-file').files[0];
+  if(!f) return;
+  const fr = new FileReader();
+  fr.onload = () => document.getElementById('csv-text').value = String(fr.result);
+  fr.readAsText(f);
+}
+
+// minimal CSV parse: header row -> objects. Handles "quoted, fields".
+function parseCsv(text){
+  const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');
+  if(lines.length<2) return [];
+  const split = line => {
+    const out=[]; let cur='', q=false;
+    for(let i=0;i<line.length;i++){ const c=line[i];
+      if(q){ if(c==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+      else { if(c===','){out.push(cur);cur='';} else if(c==='"')q=true; else cur+=c; }
+    }
+    out.push(cur); return out.map(s=>s.trim());
+  };
+  const headers = split(lines[0]);
+  return lines.slice(1).map(l=>{ const cells=split(l); const o={}; headers.forEach((h,i)=>{ if(cells[i]!==undefined && cells[i]!=='') o[h]=cells[i]; }); return o; });
+}
+
+async function importCsv(){
+  const st = document.getElementById('csv-status'); st.className='status';
+  const btn = document.getElementById('csv-btn');
+  const rows = parseCsv(document.getElementById('csv-text').value);
+  if(!rows.length){ st.className='status err'; st.textContent='No rows parsed — need a header line + at least one row.'; return; }
+  btn.disabled=true; st.textContent=`Importing ${rows.length} row(s)…`;
+  try{
+    const j = await post(rows);
+    st.className='status ok'; st.textContent=`Imported ${j.inserted} row(s)${j.dropped?` (${j.dropped} empty/dropped)`:''}.`;
+    loadRecent(); loadBenchmarks();
+  }catch(e){ st.className='status err'; st.textContent='Import failed: '+e.message; }
+  finally{ btn.disabled=false; }
+}
+
+function renderTable(el, rows, cols){
+  if(!rows || !rows.length){ el.innerHTML='<div class="empty">No data.</div>'; return; }
+  const keys = cols || Object.keys(rows[0]).filter(k=>k!=='id' && k!=='ingested_at');
+  let h='<table><tr>'+keys.map(k=>`<th>${k}</th>`).join('')+'</tr>';
+  rows.forEach(r=>{ h+='<tr>'+keys.map(k=>`<td>${r[k]==null?'':r[k]}</td>`).join('')+'</tr>'; });
+  el.innerHTML = h+'</table>';
+}
+
+async function loadRecent(){
+  const el = document.getElementById('recent');
+  const cfg = TABLES[activeTable];
+  const { data, error } = await db.from(activeTable).select('*').order(cfg.dateKey,{ascending:false,nullsFirst:false}).limit(50);
+  if(error){ el.innerHTML='<div class="empty">'+error.message+'</div>'; return; }
+  renderTable(el, data, cfg.fields.map(f=>f[0]));
+}
+
+async function loadBenchmarks(){
+  const v = async (name, elId) => {
+    const el = document.getElementById(elId);
+    const { data, error } = await db.from(name).select('*');
+    if(error){ el.innerHTML='<div class="empty">'+error.message+'</div>'; return; }
+    renderTable(el, data);
+  };
+  v('v_market_cap_rates','bm-cap');
+  v('v_leasing_benchmarks','bm-lease');
+  v('v_reit_vs_market_cap','bm-spread');
+}
+
+// ── AI DOC READER ──────────────────────────────────────────────────────────────
+const GROUP_TABLE = { transactions:'cre_transactions', leasing_deals:'cre_leasing_deals', developments:'cre_developments' };
+
+async function extractPdfText(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let out = '';
+  for (let p = 1; p <= pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    out += content.items.map(i => i.str).join(' ') + '\n';
+  }
+  return out;
+}
+
+async function readDoc(){
+  const st = document.getElementById('ai-status'); st.className='status';
+  const btn = document.getElementById('ai-btn');
+  const results = document.getElementById('ai-results'); results.innerHTML='';
+  const file = document.getElementById('ai-file').files[0];
+  if(!file){ st.className='status err'; st.textContent='Choose a PDF or .txt first.'; return; }
+  btn.disabled=true; st.textContent='Reading '+file.name+'…';
+  try{
+    let text;
+    if(/\.pdf$/i.test(file.name)){
+      if(!window.pdfjsLib) throw new Error('PDF reader not loaded');
+      st.textContent='Extracting text from PDF…';
+      text = await extractPdfText(file);
+    } else {
+      text = await file.text();
+    }
+    if((text||'').trim().length < 30) throw new Error('could not extract meaningful text (scanned image PDFs are not supported)');
+    st.textContent='Asking Claude to extract evidence…';
+    const res = await fetch('/.netlify/functions/read-evidence-doc', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, source: file.name })
+    });
+    const j = await res.json();
+    if(!res.ok) throw new Error(j.error||('HTTP '+res.status));
+    const total = (j.transactions?.length||0)+(j.leasing_deals?.length||0)+(j.developments?.length||0);
+    st.className='status ok'; st.textContent=`Found ${total} proposed row(s) via ${j.model||'Claude'}. Review and import below.`;
+    renderProposed(j);
+  }catch(e){ st.className='status err'; st.textContent='Read failed: '+e.message; }
+  finally{ btn.disabled=false; }
+}
+
+function csvFromRows(rows, tableKey){
+  const headers = TABLES[tableKey].fields.map(f=>f[0]);
+  const esc = v => { const s = v==null?'':String(v); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const lines = [headers.join(',')];
+  rows.forEach(r => lines.push(headers.map(h=>esc(r[h])).join(',')));
+  return lines.join('\n');
+}
+
+let aiProposed = { transactions:[], leasing_deals:[], developments:[] };
+
+function renderProposed(j){
+  aiProposed = j;
+  const el = document.getElementById('ai-results');
+  el.innerHTML = '';
+  let any = false;
+  Object.entries(GROUP_TABLE).forEach(([grp, tableKey])=>{
+    const rows = j[grp] || [];
+    if(!rows.length) return;
+    any = true;
+    const label = TABLES[tableKey].label;
+    const wrap = document.createElement('div'); wrap.style.marginTop='14px';
+    const head = document.createElement('div');
+    head.innerHTML = `<b style="font-size:13px">${label} — ${rows.length} proposed</b>`;
+    const btn = document.createElement('button');
+    btn.className='go'; btn.style.cssText='margin:0 0 0 10px;padding:5px 12px';
+    btn.textContent = `Review in ${label} tab →`;
+    btn.onclick = () => loadToCsv(tableKey, grp);
+    head.appendChild(btn);
+    const prev = document.createElement('div'); prev.className='scroll'; prev.style.marginTop='6px';
+    wrap.appendChild(head); wrap.appendChild(prev); el.appendChild(wrap);
+    renderTable(prev, rows, TABLES[tableKey].fields.map(f=>f[0]));
+  });
+  if(!any) el.innerHTML = '<div class="empty">No evidence rows found in this document.</div>';
+}
+
+function loadToCsv(tableKey, grp){
+  const rows = aiProposed[grp] || [];
+  selectTable(tableKey);
+  document.getElementById('csv-text').value = csvFromRows(rows, tableKey);
+  const st = document.getElementById('csv-status'); st.className='status ok';
+  st.textContent = `${rows.length} AI-proposed row(s) loaded — review, edit if needed, then Import CSV.`;
+  document.getElementById('csv-text').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+init();
+</script>
+</body>
+</html>

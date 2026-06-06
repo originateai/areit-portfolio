@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REIT Value Layer</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--ink:#00273E;--navy:#063D58;--sky:#00B0F0;--teal:#4B97B2;--paper:#f5f2ec;--cream:#ede9e0;--rule:#c8c2b4;--green:#1f8a4c;--red:#c0392b;--amber:#b8943f;--muted:#6b6660}
+body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;padding-bottom:60px}
+header{background:var(--ink);color:#fff;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+header h1{font-family:'Playfair Display',serif;font-size:19px;font-weight:600}
+header .links a{color:#9fc3d4;font-family:'DM Mono',monospace;font-size:11px;text-decoration:none;margin-left:16px;letter-spacing:0.04em}
+header .links a:hover{color:var(--sky)}
+.wrap{max-width:1100px;margin:0 auto;padding:22px}
+.macro{background:#fff;border:1px solid var(--rule);border-left:3px solid var(--teal);border-radius:6px;padding:12px 16px;margin-bottom:18px;font-size:13px}
+.macro b{font-family:'DM Mono',monospace}
+.card{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:0;overflow:hidden;margin-bottom:22px}
+.card h2{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;padding:14px 16px 0}
+.card .sub{font-size:11px;color:var(--muted);padding:2px 16px 12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--navy);color:#fff;text-align:left;padding:9px 11px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap}
+th.r,td.r{text-align:right}
+td{padding:9px 11px;border-bottom:1px solid var(--cream);font-size:13px;white-space:nowrap}
+td.tkr{font-family:'DM Mono',monospace;font-weight:700;color:var(--navy)}
+td.mono{font-family:'DM Mono',monospace}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fbfaf7}
+.chip{display:inline-block;padding:2px 9px;border-radius:3px;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:0.05em}
+.chip.buy{background:#e7f4ec;color:var(--green)}
+.chip.wait{background:#f3efe6;color:var(--muted)}
+.disc{font-family:'DM Mono',monospace;font-weight:600}
+.empty{color:var(--muted);font-style:italic;padding:22px;text-align:center}
+.note{font-size:11px;color:var(--muted);padding:10px 16px;line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>REIT Value Layer</h1>
+  <div class="links">
+    <a href="/models.html">Models →</a>
+    <a href="/">← Dashboard</a>
+  </div>
+</header>
+<div class="wrap">
+
+  <div class="macro" id="macro">Loading macro…</div>
+
+  <div class="card">
+    <h2>Discount to fair value</h2>
+    <div class="sub">Cheapest first — last price vs blended bottom-up value. BUY when price ≤ buy threshold.</div>
+    <div id="value-table"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Composite ranking — discount × macro</h2>
+    <div class="sub">Where the bottom-up discount and the top-down REIT macro agree. Composite = (−premium/discount) × macro score.</div>
+    <div id="composite-table"><div class="empty">Loading…</div></div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+let db = null, macroScore = 0;
+
+async function init(){
+  try{
+    const env = await (await fetch('/.netlify/functions/env')).json();
+    db = supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
+    await loadMacro();
+    loadValue();
+  }catch(e){
+    console.error(e);
+    document.getElementById('value-table').innerHTML='<div class="empty">Could not connect to database.</div>';
+  }
+}
+
+// Treat values |v|<2 as fractions (e.g. -0.12 = -12%); otherwise already a percent.
+function asPct(v){ if(v==null||isNaN(v)) return null; return Math.abs(v)<2 ? v*100 : v; }
+function fmtPct(v){ const p=asPct(v); return p==null?'—':(p>=0?'+':'')+p.toFixed(1)+'%'; }
+function fmt$(v){ return (v==null||isNaN(v))?'—':'$'+parseFloat(v).toFixed(2); }
+function fmtNum(v,d=1){ return (v==null||isNaN(v))?'—':parseFloat(v).toFixed(d); }
+
+async function loadMacro(){
+  const el = document.getElementById('macro');
+  try{
+    const { data } = await db.from('morning_signals')
+      .select('signal_date,macro_score,reit_macro_score,reit_macro_signal')
+      .order('signal_date',{ascending:false}).limit(1);
+    const r = (data||[])[0];
+    if(r){
+      macroScore = (r.reit_macro_score != null ? r.reit_macro_score : r.macro_score) || 0;
+      el.innerHTML = `REIT macro: <b>${r.reit_macro_signal||'—'}</b> &middot; score <b>${macroScore>0?'+':''}${macroScore}</b> &middot; <span style="color:var(--muted)">as at ${String(r.signal_date).slice(0,10)}</span>`;
+    } else { el.textContent='No macro snapshot yet — composite uses macro 0.'; }
+  }catch(e){ el.textContent='Macro unavailable ('+e.message+').'; }
+}
+
+async function loadValue(){
+  const { data, error } = await db.from('v_discount_to_fair_value').select('*');
+  const tEl = document.getElementById('value-table');
+  const cEl = document.getElementById('composite-table');
+  if(error){ tEl.innerHTML='<div class="note">Could not read v_discount_to_fair_value — confirm the view exists and is granted to anon.<br>'+error.message+'</div>'; cEl.innerHTML=''; return; }
+  if(!data || !data.length){ tEl.innerHTML='<div class="empty">No current models priced yet. Run export-model.js, then the price snapshot.</div>'; cEl.innerHTML=''; return; }
+
+  // cheapest first (most negative premium = biggest discount)
+  const rows = data.slice().sort((a,b)=>(num(a.prem_disc_to_fair))-(num(b.prem_disc_to_fair)));
+
+  let html = '<table><tr><th>Ticker</th><th class="r">Last</th><th class="r">Blended value</th><th class="r">Buy ≤</th><th class="r">NPV/hurdle</th><th class="r">Prem/Disc</th><th class="r">EQ</th><th class="r">Takeover</th><th class="r">Signal</th></tr>';
+  rows.forEach(r=>{
+    const pd = asPct(r.prem_disc_to_fair);
+    const isBuy = buySignal(r);
+    html += `<tr>
+      <td class="tkr">${r.ticker}</td>
+      <td class="r mono">${fmt$(r.last_price)}</td>
+      <td class="r mono">${fmt$(r.blended_value)}</td>
+      <td class="r mono">${fmt$(r.buy_threshold)}</td>
+      <td class="r mono">${fmt$(r.npv_per_unit_at_hurdle)}</td>
+      <td class="r disc" style="color:${pd==null?'var(--muted)':pd<0?'var(--green)':'var(--red)'}">${fmtPct(r.prem_disc_to_fair)}</td>
+      <td class="r mono">${fmtNum(r.eq_score)}</td>
+      <td class="r mono">${fmt$(r.takeover_value)}</td>
+      <td class="r"><span class="chip ${isBuy?'buy':'wait'}">${isBuy?'BUY':'WAIT'}</span></td>
+    </tr>`;
+  });
+  html+='</table>';
+  tEl.innerHTML = html;
+
+  // composite = (−prem_disc_to_fair) × macroScore ; only meaningful at a discount
+  const comp = rows.map(r=>{
+    const discPts = -(asPct(r.prem_disc_to_fair)||0);   // positive = cheap
+    return { ...r, _disc: discPts, _composite: discPts * macroScore };
+  }).sort((a,b)=> b._composite - a._composite);
+
+  let ch = '<table><tr><th>Ticker</th><th class="r">Discount</th><th class="r">Macro</th><th class="r">Composite</th><th class="r">Signal</th></tr>';
+  comp.forEach(r=>{
+    const sig = buySignal(r);
+    ch += `<tr>
+      <td class="tkr">${r.ticker}</td>
+      <td class="r disc" style="color:${r._disc>0?'var(--green)':'var(--muted)'}">${r._disc>=0?'+':''}${r._disc.toFixed(1)}%</td>
+      <td class="r mono">${macroScore>0?'+':''}${macroScore}</td>
+      <td class="r mono"><b>${r._composite.toFixed(1)}</b></td>
+      <td class="r"><span class="chip ${sig?'buy':'wait'}">${sig?'BUY':'WAIT'}</span></td>
+    </tr>`;
+  });
+  ch+='</table>';
+  ch+='<div class="note">Composite is a ranking aid, not a target price: it rewards names that are both cheap (bottom-up) and supported by the REIT macro. A negative or zero macro score collapses it toward 0.</div>';
+  cEl.innerHTML = ch;
+}
+
+function num(v){ return v==null?NaN:parseFloat(v); }
+
+// v_discount_to_fair_value.buy_signal_value_layer is a Postgres boolean
+// (last_price <= buy_threshold). Handle true/false/'t'/'f'/1/0, and fall back to
+// comparing price vs threshold when the field is null.
+function buySignal(r){
+  const v = r.buy_signal_value_layer;
+  if (v === true  || v === 't' || v === 'true'  || v === 1) return true;
+  if (v === false || v === 'f' || v === 'false' || v === 0) return false;
+  return r.last_price!=null && r.buy_threshold!=null && num(r.last_price)<=num(r.buy_threshold);
+}
+
+init();
+</script>
+</body>
+</html>
