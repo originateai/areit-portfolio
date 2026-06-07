@@ -64,10 +64,12 @@ tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
 <div class="note" id="note"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// --- config: reads globals from your config.js if present, else edit these two lines ---
-const SB_URL = window.SUPABASE_URL || 'https://opziisvjfkjwwdbclniw.supabase.co';
-const SB_KEY = window.SUPABASE_ANON_KEY || window.SUPABASE_KEY || 'PASTE_YOUR_SUPABASE_ANON_KEY';
-const sb = window.supabase.createClient(SB_URL, SB_KEY);
+// --- config: fetch public Supabase creds from the serverless env endpoint (same pattern as index.html) ---
+let sb;
+async function initSb(){
+ const env = await (await fetch('/.netlify/functions/env')).json();
+ sb = window.supabase.createClient(env.SUPABASE_URL, env.SUPABASE_ANON);
+}
 const SECTOR={DXI:'Industrial',CIP:'Industrial',DXC:'Convenience/Net-lease',WPR:'Service stations',RGN:'Convenience retail',CQR:'Convenience+net-lease',ARF:'Social infrastructure',HDN:'Daily-needs retail',ASK:'Self-storage'};
 const FY=['FY24A','FY25A','FY26E','FY27E','FY28E','FY29E','FY30E'];
 let D={},R=[],sortK='irr',asc=false;
@@ -185,5 +187,5 @@ async function save(t){const rows=[];
  alert(error?('Save failed: '+error.message+'\n(You likely need to be signed in, or add an insert RLS policy.)'):'Saved '+rows.length+' broker row(s) for '+t+'.');}
 document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortK===k)asc=!asc;else{sortK=k;asc=false;}render();});
 document.getElementById('note').innerHTML='<b>Our value</b> is the equity DCF (EPS discounted at 12% with our terminal PE). <b>Buy@12%</b> = price for a 12% IRR (at/below = BUY). NAV, asset DCF and takeover (*) are reference only, not blended in. Prices live from reit_prices; update them with a one-line SQL or the EODHD snapshot. Not investment advice.';
-load();
+initSb().then(load).catch(e=>{document.getElementById('status').innerHTML='<b>Could not load config.</b><br>'+(e.message||e);});
 </script></body></html>
