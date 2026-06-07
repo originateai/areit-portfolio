@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A-REIT Value Layer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#063D58;--sky:#00B0F0;--teal:#4B97B2;--ink:#00273E;--paper:#f6f8fa;--card:#fff;--line:#e3e9ee;--buy:#1a8f5e;--wait:#c8860a;--mute:#5a7184}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--paper);color:var(--ink);font-size:14px}
+.num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+header{background:linear-gradient(120deg,var(--ink),var(--navy));color:#fff;padding:26px 32px;display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px}
+header h1{font-weight:600;font-size:22px}header .sub{color:#9fc4d6;font-size:13px;margin-top:4px}
+.badge{background:var(--sky);color:var(--ink);font-weight:600;padding:6px 14px;border-radius:20px;font-size:12px}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 32px 60px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:22px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.kpi .l{color:var(--mute);font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.kpi .v{font-size:26px;font-weight:600;margin-top:6px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+thead th{background:var(--navy);color:#dCEAF2;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:12px 10px;text-align:right;cursor:pointer;white-space:nowrap}
+thead th:first-child,thead th:nth-child(2){text-align:left}
+tbody td{padding:13px 10px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+tbody td:first-child,tbody td:nth-child(2){text-align:left}
+tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
+.tkr{font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace}
+.nm small{color:var(--mute);display:block;font-size:11px}
+.tag{font-size:10px;font-weight:600;padding:2px 7px;border-radius:5px}
+.ext{background:#eaf0f4;color:var(--teal)}.int{background:#e3f6ee;color:var(--buy)}
+.sig{font-weight:700;padding:4px 10px;border-radius:6px;font-size:12px;font-family:'IBM Plex Mono',monospace}
+.sig.buy{background:#e3f6ee;color:var(--buy)}.sig.wait{background:#fdf3e0;color:var(--wait)}
+.pos{color:var(--buy)}.neg{color:#c0392b}
+.detail{display:none;background:#fbfdfe}.detail.open{display:table-row}.detail .pad{padding:20px 22px}
+.detail-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:26px}
+.cf{width:100%;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.cf table{border:0;border-radius:0}.cf th,.cf td{font-size:12px;padding:8px 9px}
+.cf thead th{background:var(--teal);color:#fff}.cf td:first-child{text-align:left;color:var(--mute);font-weight:500}
+.cf tr.hl td{background:#f0f7fb;font-weight:600;color:var(--ink)}
+.cf tr.cons td{background:#e9f6fc;font-weight:700;color:var(--navy)}
+.bkin{width:46px;text-align:right;border:1px solid var(--line);border-radius:4px;padding:3px 4px;font-family:'IBM Plex Mono',monospace;font-size:11px}
+.bkname{width:84px;border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-size:11px}
+.upbtn{background:var(--navy);color:#fff;border:0;border-radius:6px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer}
+.lenses{display:flex;flex-direction:column;gap:9px}
+.lens{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.lens .ll{font-size:12px;color:var(--mute)}.lens .lv{font-weight:600;font-family:'IBM Plex Mono',monospace}
+.lens.our{border:2px solid var(--sky);background:#f3fbfe}
+.lens.head{background:var(--navy);color:#fff;border:0}.lens.head .ll{color:#bcd;font-weight:600}
+.lens.refhead{background:#eef2f5;border:0}.lens.refhead .ll{color:var(--mute);font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.06em}
+.note{color:var(--mute);font-size:12px;line-height:1.7;margin-top:26px;border-top:1px solid var(--line);padding-top:18px}
+#status{padding:40px;text-align:center;color:var(--mute)}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.detail-grid{grid-template-columns:1fr}.hideS{display:none}}
+</style></head><body>
+<header><div><h1>A-REIT Value Layer</h1>
+<div class="sub" id="asof">Live from Supabase &middot; our value = equity DCF at our PE &middot; click a row to expand</div></div>
+<div class="badge">Required return: 12%</div></header>
+<div class="wrap"><div id="status">Loading models from Supabase&hellip;</div>
+<div id="content" style="display:none">
+<div class="kpis" id="kpis"></div>
+<table id="tbl"><thead><tr>
+<th data-k="tkr">Ticker</th><th data-k="name">REIT</th><th data-k="price">Price</th>
+<th data-k="epsy">EPS yld</th><th data-k="dpsy">DPS yld</th><th data-k="irr">IRR</th>
+<th data-k="buy12">Buy@12%</th><th data-k="nav" class="hideS">NAV*</th>
+<th data-k="takeover" class="hideS">Takeover*</th><th data-k="tkup">T.upside*</th>
+<th data-k="eq" class="hideS">EQ</th><th data-k="g">Gearing</th><th data-k="sig">Signal</th>
+</tr></thead><tbody id="body"></tbody></table>
+<div class="note" id="note"></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// --- config: reads globals from your config.js if present, else edit these two lines ---
+const SB_URL = window.SUPABASE_URL || 'https://opziisvjfkjwwdbclniw.supabase.co';
+const SB_KEY = window.SUPABASE_ANON_KEY || window.SUPABASE_KEY || 'PASTE_YOUR_SUPABASE_ANON_KEY';
+const sb = window.supabase.createClient(SB_URL, SB_KEY);
+const SECTOR={DXI:'Industrial',CIP:'Industrial',DXC:'Convenience/Net-lease',WPR:'Service stations',RGN:'Convenience retail',CQR:'Convenience+net-lease',ARF:'Social infrastructure',HDN:'Daily-needs retail',ASK:'Self-storage'};
+const FY=['FY24A','FY25A','FY26E','FY27E','FY28E','FY29E','FY30E'];
+let D={},R=[],sortK='irr',asc=false;
+const pct=x=>x==null?'&ndash;':(x*100).toFixed(1)+'%';
+const dol=x=>x==null?'&ndash;':'$'+Number(x).toFixed(2);
+
+async function load(){
+ try{
+  const [o,md,pr,ac,fc,br] = await Promise.all([
+   sb.from('reit_model_outputs').select('*').eq('model_version',1),
+   sb.from('reit_models').select('ticker,name,mgmt_model,securities_m').eq('is_current',true),
+   sb.from('reit_prices').select('*'),
+   sb.from('reit_model_actuals').select('*'),
+   sb.from('reit_model_forecasts').select('*').eq('model_version',1),
+   sb.from('reit_broker_forecasts').select('*')]);
+  for(const x of [o,md,pr,ac,fc,br]) if(x.error) throw x.error;
+  const M={},P={},OUT={};
+  md.data.forEach(r=>M[r.ticker]=r); pr.data.forEach(r=>P[r.ticker]=r); o.data.forEach(r=>OUT[r.ticker]=r);
+  const ser=(rows,tk,col)=>FY.map(fy=>{const r=rows.find(z=>z.ticker===tk&&z.fy===fy);return r&&r[col]!=null?Number(r[col]):null;});
+  const all=[...ac.data,...fc.data];
+  for(const tk of Object.keys(OUT)){
+   const out=OUT[tk],price=P[tk]?Number(P[tk].last_price):Number(out.price_at_build);
+   D[tk]={name:(M[tk]||{}).name||tk,sector:SECTOR[tk]||'',mgmt:(M[tk]||{}).mgmt_model==='internal'?'INT':'ext',price,
+     epu:ser(all,tk,'epu').map((v,i)=>v!=null?v:ser(all,tk,'ffo_per_unit')[i]),
+     dpu:ser(all,tk,'dpu'),noi:ser(all,tk,'noi_m'),ffo:ser(all,tk,'ffo_m'),
+     nta:ser(all,tk,'nta'),gearing:ser(all,tk,'gearing'),ocf:ser(all,tk,'ocf_cover'),affo:ser(all,tk,'affo_cover'),
+     nav:Number(out.nav_nta),eqdcf:Number(out.equity_dcf_value),buy12:Number(out.buy_threshold),
+     irr:Number(out.breakeven_irr),termpe:Number(out.terminal_pe),bizdcf:Number(out.business_dcf_value),
+     takeover:Number(out.takeover_value),tkup:Number(out.takeover_upside),eq:out.eq_score,
+     brokers:br.data.filter(b=>b.ticker===tk).slice(0,4)};
+  }
+  document.getElementById('status').style.display='none';
+  document.getElementById('content').style.display='block';
+  document.getElementById('asof').innerHTML='Live from Supabase &middot; prices as at '+((pr.data[0]||{}).price_date||'today')+' &middot; click a row to expand';
+  render();
+ }catch(e){
+  document.getElementById('status').innerHTML='<b>Could not load.</b><br>'+(e.message||e)+
+   '<br><br>Check that SUPABASE_ANON_KEY is set (config.js) and that the seed + RLS read policy have run.';
+ }}
+
+function rows(){return Object.entries(D).map(([t,m])=>{
+ const epsy=m.epu[2]/100/m.price,dpsy=m.dpu[2]/100/m.price,g=m.gearing[1],buy=m.price<=m.buy12;
+ return {tkr:t,name:m.name,price:m.price,epsy,dpsy,irr:m.irr,buy12:m.buy12,nav:m.nav,takeover:m.takeover,tkup:m.tkup,eq:m.eq,g,sig:buy?1:0,m};});}
+function kpis(){const buys=R.filter(r=>r.sig).length;
+ const avgD=R.reduce((a,r)=>a+(r.price/r.nav-1),0)/R.length,avgT=R.reduce((a,r)=>a+r.tkup,0)/R.length;
+ document.getElementById('kpis').innerHTML=[['Models',R.length],['Clear 12% today',buys],['Avg price vs NAV',pct(avgD)],['Avg takeover upside*',pct(avgT)]]
+  .map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v num">${k[1]}</div></div>`).join('');}
+function spark(arr){const v=arr.slice(2).filter(x=>x!=null),mn=Math.min(...v),mx=Math.max(...v),w=150,h=34;
+ const pts=v.map((y,i)=>`${(i/(v.length-1))*w},${h-((y-mn)/((mx-mn)||1))*(h-6)-3}`).join(' ');
+ return `<svg width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="var(--sky)" stroke-width="2"/></svg>`;}
+function cfTable(m){const r=(l,a,f,c)=>`<tr class="${c||''}"><td>${l}</td>`+a.map(x=>`<td class="num">${x==null?'&ndash;':f(x)}</td>`).join('')+'</tr>';
+ return `<div class="cf"><table><thead><tr><th style="text-align:left">$m / cps / x</th>${FY.map(f=>`<th>${f}</th>`).join('')}</tr></thead><tbody>
+ ${r('NOI ($m)',m.noi,x=>x.toFixed(1))}${r('FFO ($m)',m.ffo,x=>x.toFixed(1))}
+ ${r('EPS = FFO/u (cps)',m.epu,x=>x.toFixed(1),'hl')}${r('DPS (cps)',m.dpu,x=>x.toFixed(1))}
+ ${r('NTA ($)',m.nta,x=>x.toFixed(2))}${r('Gearing',m.gearing,x=>(x*100).toFixed(0)+'%')}
+ ${r('OCF cover (x)',m.ocf,x=>x.toFixed(2))}${r('AFFO cover (x)',m.affo,x=>x.toFixed(2))}</tbody></table></div>`;}
+function consensus(t,m){const our=m.epu.slice(2);
+ const head=`<thead><tr><th style="text-align:left">Source</th>${['FY26','FY27','FY28','FY29','FY30'].map(f=>`<th>${f}</th>`).join('')}<th>Val $</th><th>Tgt ret</th></tr></thead>`;
+ const ourRow=`<tr class="hl"><td>Our model</td>${our.map(x=>`<td class="num">${x==null?'&ndash;':x.toFixed(1)}</td>`).join('')}<td class="num">${m.eqdcf.toFixed(2)}</td><td class="num">${(m.irr*100).toFixed(1)}%</td></tr>`;
+ const bk=b=>{const d=m.brokers[b-1]||{};const ev=k=>d[k]!=null?d[k]:'';
+  return `<tr><td><input class="bkname" id="bn_${t}_${b}" placeholder="Broker ${b}" value="${d.broker_name||''}"></td>`+
+   ['eps_fy26','eps_fy27','eps_fy28','eps_fy29','eps_fy30'].map((k,j)=>`<td><input type="number" step="0.1" class="bkin" id="bk_${t}_${b}_${j}" value="${ev(k)}" oninput="cons('${t}')"></td>`).join('')+
+   `<td><input type="number" step="0.01" class="bkin" id="bkv_${t}_${b}" value="${ev('valuation')}" oninput="cons('${t}')"></td>`+
+   `<td><input type="number" step="0.1" class="bkin" id="bkr_${t}_${b}" value="${d.target_return!=null?(d.target_return*100):''}" oninput="cons('${t}')"></td></tr>`;};
+ const consRow=`<tr class="cons"><td>Consensus</td>${our.map((x,j)=>`<td class="num" id="cons_${t}_${j}">${x==null?'&ndash;':x.toFixed(1)}</td>`).join('')}<td class="num" id="consv_${t}">${m.eqdcf.toFixed(2)}</td><td class="num" id="consr_${t}">${(m.irr*100).toFixed(1)}%</td></tr>`;
+ return `<div style="margin-top:16px"><div style="font-weight:600;margin-bottom:8px;color:var(--navy);display:flex;justify-content:space-between;align-items:center">
+   <span>Consensus &mdash; our forecast, valuation &amp; target return vs brokers</span><button class="upbtn" onclick="save('${t}')">Save to platform</button></div>
+   <div class="cf"><table>${head}<tbody>${ourRow}${[1,2,3,4].map(bk).join('')}${consRow}</tbody></table></div>
+   <div style="font-size:11px;color:var(--mute);margin-top:6px">EPS in cps, valuation in $, target return in %. Consensus = average of our model + populated brokers. Save writes to reit_broker_forecasts (needs you signed in).</div></div>`;}
+function lenses(r){const m=r.m,up=v=>`<span class="${v>=0?'pos':'neg'}">${pct(v)}</span>`;
+ return `<div class="lenses">
+ <div class="lens head"><span class="ll">OUR VALUE &mdash; equity DCF at our PE (12%)</span></div>
+ <div class="lens our"><span class="ll">Buy price for 12% IRR</span><span class="lv">${dol(m.buy12)}</span></div>
+ <div class="lens"><span class="ll">IRR at current price</span><span class="lv">${pct(m.irr)}</span></div>
+ <div class="lens"><span class="ll">EPS yield (FY26)</span><span class="lv">${pct(r.epsy)}</span></div>
+ <div class="lens"><span class="ll">DPS yield (FY26)</span><span class="lv">${pct(r.dpsy)}</span></div>
+ <div class="lens"><span class="ll">Terminal FFO multiple</span><span class="lv">${m.termpe.toFixed(1)}x</span></div>
+ <div class="lens"><span class="ll">EPS growth FY26&rarr;FY30</span><span class="lv">${spark(m.epu)}</span></div>
+ <div class="lens refhead"><span class="ll">Reference only &mdash; NOT used in our value</span></div>
+ <div class="lens"><span class="ll">NAV / NTA</span><span class="lv">${dol(m.nav)}</span></div>
+ <div class="lens"><span class="ll">Business / asset DCF</span><span class="lv">${dol(m.bizdcf)}</span></div>
+ <div class="lens"><span class="ll">Takeover / control</span><span class="lv">${dol(m.takeover)} (${up(m.tkup)})</span></div></div>`;}
+function render(){
+ R=rows();
+ R.sort((a,b)=>{let x=a[sortK],y=b[sortK];if(typeof x==='string')return asc?x.localeCompare(y):y.localeCompare(x);return asc?x-y:y-x;});
+ kpis();
+ document.getElementById('body').innerHTML=R.map((r,i)=>{const m=r.m;
+  return `<tr class="main" onclick="tog(${i})"><td><span class="tkr">${r.tkr}</span></td><td class="nm">${r.name}<small>${m.sector}</small></td>
+   <td class="num">${dol(r.price)}</td><td class="num">${pct(r.epsy)}</td><td class="num">${pct(r.dpsy)}</td><td class="num"><b>${pct(r.irr)}</b></td>
+   <td class="num">${dol(r.buy12)}</td><td class="num hideS">${dol(r.nav)}</td><td class="num hideS">${dol(r.takeover)}</td>
+   <td class="num ${r.tkup>=0?'pos':'neg'}">${pct(r.tkup)}</td><td class="num hideS">${m.eq==null?'&ndash;':m.eq}</td>
+   <td class="num">${(r.g*100).toFixed(0)}% <span class="tag ${m.mgmt==='INT'?'int':'ext'}">${m.mgmt}</span></td>
+   <td><span class="sig ${r.sig?'buy':'wait'}">${r.sig?'BUY':'WAIT'}</span></td></tr>
+  <tr class="detail" id="d${i}"><td colspan="13"><div class="pad"><div class="detail-grid">
+   <div><div style="font-weight:600;margin-bottom:10px;color:var(--navy)">Multi-year cash flows</div>${cfTable(m)}${consensus(r.tkr,m)}</div>
+   <div><div style="font-weight:600;margin-bottom:10px;color:var(--navy)">Valuation</div>${lenses(r)}</div></div></div></td></tr>`;}).join('');}
+function tog(i){document.getElementById('d'+i).classList.toggle('open');}
+function cons(t){const our=D[t].epu.slice(2);
+ for(let j=0;j<5;j++){let v=[our[j]].filter(x=>x!=null);
+  for(let b=1;b<=4;b++){const x=parseFloat(document.getElementById('bk_'+t+'_'+b+'_'+j).value);if(!isNaN(x))v.push(x);}
+  document.getElementById('cons_'+t+'_'+j).textContent=v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):'&ndash;';}
+ let vv=[D[t].eqdcf],rr=[D[t].irr*100];
+ for(let b=1;b<=4;b++){const v=parseFloat(document.getElementById('bkv_'+t+'_'+b).value);if(!isNaN(v))vv.push(v);
+  const r=parseFloat(document.getElementById('bkr_'+t+'_'+b).value);if(!isNaN(r))rr.push(r);}
+ document.getElementById('consv_'+t).textContent=(vv.reduce((a,b)=>a+b,0)/vv.length).toFixed(2);
+ document.getElementById('consr_'+t).textContent=(rr.reduce((a,b)=>a+b,0)/rr.length).toFixed(1)+'%';}
+async function save(t){const rows=[];
+ for(let b=1;b<=4;b++){const nm=document.getElementById('bn_'+t+'_'+b).value.trim();if(!nm)continue;
+  const g=id=>{const x=parseFloat(document.getElementById(id).value);return isNaN(x)?null:x;};
+  rows.push({ticker:t,broker_name:nm,eps_fy26:g('bk_'+t+'_'+b+'_0'),eps_fy27:g('bk_'+t+'_'+b+'_1'),eps_fy28:g('bk_'+t+'_'+b+'_2'),
+   eps_fy29:g('bk_'+t+'_'+b+'_3'),eps_fy30:g('bk_'+t+'_'+b+'_4'),valuation:g('bkv_'+t+'_'+b),
+   target_return:(()=>{const r=g('bkr_'+t+'_'+b);return r==null?null:r/100;})(),note_date:new Date().toISOString().slice(0,10)});}
+ if(!rows.length){alert('Enter at least one broker name first.');return;}
+ const {error}=await sb.from('reit_broker_forecasts').upsert(rows,{onConflict:'ticker,broker_name,note_date'});
+ alert(error?('Save failed: '+error.message+'\n(You likely need to be signed in, or add an insert RLS policy.)'):'Saved '+rows.length+' broker row(s) for '+t+'.');}
+document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortK===k)asc=!asc;else{sortK=k;asc=false;}render();});
+document.getElementById('note').innerHTML='<b>Our value</b> is the equity DCF (EPS discounted at 12% with our terminal PE). <b>Buy@12%</b> = price for a 12% IRR (at/below = BUY). NAV, asset DCF and takeover (*) are reference only, not blended in. Prices live from reit_prices; update them with a one-line SQL or the EODHD snapshot. Not investment advice.';
+load();
+</script></body></html>
