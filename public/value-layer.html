@@ -10,6 +10,8 @@ body{font-family:'IBM Plex Sans',sans-serif;background:var(--paper);color:var(--
 header{background:linear-gradient(120deg,var(--ink),var(--navy));color:#fff;padding:26px 32px;display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px}
 header h1{font-weight:600;font-size:22px}header .sub{color:#9fc4d6;font-size:13px;margin-top:4px}
 .badge{background:var(--sky);color:var(--ink);font-weight:600;padding:6px 14px;border-radius:20px;font-size:12px}
+.back{display:inline-block;color:#cdeaf8;text-decoration:none;font-size:12px;font-weight:600;margin-bottom:10px;opacity:.9}
+.back:hover{opacity:1;text-decoration:underline}
 .wrap{max-width:1280px;margin:0 auto;padding:24px 32px 60px}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:22px 0}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
@@ -48,7 +50,7 @@ tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
 #status{padding:40px;text-align:center;color:var(--mute)}
 @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.detail-grid{grid-template-columns:1fr}.hideS{display:none}}
 </style></head><body>
-<header><div><h1>A-REIT Value Layer</h1>
+<header><div><a class="back" href="/">&larr; Dashboard</a><h1>A-REIT Value Layer</h1>
 <div class="sub" id="asof">Live from Supabase &middot; our value = equity DCF at our PE &middot; click a row to expand</div></div>
 <div class="badge">Required return: 12%</div></header>
 <div class="wrap"><div id="status">Loading models from Supabase&hellip;</div>
