@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+scripts/node_modules/
+
+# Env / secrets
+.env
+.env.*
+*.local
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
