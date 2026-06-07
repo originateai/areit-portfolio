@@ -12,6 +12,22 @@ header h1{font-weight:600;font-size:22px}header .sub{color:#9fc4d6;font-size:13p
 .badge{background:var(--sky);color:var(--ink);font-weight:600;padding:6px 14px;border-radius:20px;font-size:12px}
 .back{display:inline-block;color:#cdeaf8;text-decoration:none;font-size:12px;font-weight:600;margin-bottom:10px;opacity:.9}
 .back:hover{opacity:1;text-decoration:underline}
+.upload{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.upload .uh{font-weight:600;color:var(--navy);margin-bottom:4px}
+.upload .us{font-size:12px;color:var(--mute);margin-bottom:12px}
+.upload input[type=file]{font-size:13px}
+.upbtn{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
+.upbtn:hover{background:var(--ink)}
+.upbtn:disabled{opacity:.5;cursor:default}
+.ustat{font-size:12px;margin-top:10px}
+.ustat.err{color:var(--down,#c0392b)}.ustat.ok{color:var(--buy)}
+.rev{margin-top:14px;overflow-x:auto}
+.rev table{width:100%;border-collapse:collapse;font-size:12px}
+.rev th{background:var(--navy);color:#dCEAF2;font-weight:500;text-transform:uppercase;font-size:10px;letter-spacing:.05em;padding:6px 8px;text-align:right;white-space:nowrap}
+.rev th:first-child,.rev th:nth-child(2){text-align:left}
+.rev td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.rev td:first-child,.rev td:nth-child(2){text-align:left}
+.rev tr.bad td{background:#fdecea;color:var(--down,#c0392b)}
 .wrap{max-width:1280px;margin:0 auto;padding:24px 32px 60px}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:22px 0}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
@@ -56,6 +72,14 @@ tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
 <div class="wrap"><div id="status">Loading models from Supabase&hellip;</div>
 <div id="content" style="display:none">
 <div class="kpis" id="kpis"></div>
+<div class="upload">
+ <div class="uh">📄 Upload broker research</div>
+ <div class="us">Drop in one or more broker notes (PDF or text). Claude reads each, identifies the research house, and extracts its FY26&ndash;FY30 forecasts, price target and expected return for every REIT covered &mdash; then slots them into the consensus table. Review before importing.</div>
+ <input type="file" id="brk-file" accept=".pdf,.txt" multiple>
+ <button class="upbtn" id="brk-btn" onclick="readBrokerDocs()">Read with Claude</button>
+ <div class="ustat" id="brk-status"></div>
+ <div class="rev" id="brk-review"></div>
+</div>
 <table id="tbl"><thead><tr>
 <th data-k="tkr">Ticker</th><th data-k="name">REIT</th><th data-k="price">Price</th>
 <th data-k="epsy">EPS yld</th><th data-k="dpsy">DPS yld</th><th data-k="irr">IRR</th>
@@ -65,6 +89,10 @@ tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
 </tr></thead><tbody id="body"></tbody></table>
 <div class="note" id="note"></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
 <script>
 // --- config: fetch public Supabase creds from the serverless env endpoint (same pattern as index.html) ---
 let sb;
@@ -189,5 +217,65 @@ async function save(t){const rows=[];
  alert(error?('Save failed: '+error.message+'\n(You likely need to be signed in, or add an insert RLS policy.)'):'Saved '+rows.length+' broker row(s) for '+t+'.');}
 document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortK===k)asc=!asc;else{sortK=k;asc=false;}render();});
 document.getElementById('note').innerHTML='<b>Our value</b> is the equity DCF (EPS discounted at 12% with our terminal PE). <b>Buy@12%</b> = price for a 12% IRR (at/below = BUY). NAV, asset DCF and takeover (*) are reference only, not blended in. Prices live from reit_prices; update them with a one-line SQL or the EODHD snapshot. Not investment advice.';
+// ── BROKER RESEARCH UPLOAD (Claude doc-reader → review → import) ──────────────
+let brkRows=[];
+async function extractPdfText(file){
+ const buf=await file.arrayBuffer();
+ const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+ let out='';
+ for(let p=1;p<=pdf.numPages;p++){const pg=await pdf.getPage(p);const c=await pg.getTextContent();out+=c.items.map(i=>i.str).join(' ')+'\n';}
+ return out;
+}
+async function readBrokerDocs(){
+ const st=document.getElementById('brk-status'),btn=document.getElementById('brk-btn');
+ const files=[...document.getElementById('brk-file').files];
+ document.getElementById('brk-review').innerHTML='';brkRows=[];
+ if(!files.length){st.className='ustat err';st.textContent='Choose one or more PDF/.txt files first.';return;}
+ btn.disabled=true;st.className='ustat';
+ const today=new Date().toISOString().slice(0,10);
+ try{
+  for(const file of files){
+   st.textContent='Reading '+file.name+'…';
+   let text;
+   if(/\.pdf$/i.test(file.name)){if(!window.pdfjsLib)throw new Error('PDF reader not loaded');text=await extractPdfText(file);}
+   else text=await file.text();
+   if((text||'').trim().length<30)throw new Error(file.name+': could not extract text (scanned-image PDFs are not supported).');
+   st.textContent='Asking Claude to read '+file.name+'…';
+   const res=await fetch('/.netlify/functions/parse-broker-note',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,source:file.name})});
+   const j=await res.json();if(!res.ok)throw new Error(j.error||('HTTP '+res.status));
+   const nd=j.note_date||today;
+   (j.forecasts||[]).forEach(f=>{if(!f.ticker)return;brkRows.push({broker_name:j.broker_name||'',note_date:nd,ticker:String(f.ticker).toUpperCase().replace(/\.(AX|AU)$/,''),
+     eps_fy26:f.eps_fy26,eps_fy27:f.eps_fy27,eps_fy28:f.eps_fy28,eps_fy29:f.eps_fy29,eps_fy30:f.eps_fy30,valuation:f.valuation,target_return:f.target_return,_src:file.name});});
+  }
+  if(!brkRows.length){st.className='ustat err';st.textContent='No forecasts found in the uploaded note(s).';return;}
+  st.className='ustat ok';st.textContent='Extracted '+brkRows.length+' forecast row(s). Review and import below.';
+  renderBrokerReview();
+ }catch(e){st.className='ustat err';st.textContent='Read failed: '+e.message;}
+ finally{btn.disabled=false;}
+}
+function renderBrokerReview(){
+ const n=x=>x==null||x===''?'&ndash;':Number(x).toFixed(1);
+ const d2=x=>x==null||x===''?'&ndash;':'$'+Number(x).toFixed(2);
+ const pc=x=>x==null||x===''?'&ndash;':(Number(x)*100).toFixed(1)+'%';
+ const head='<thead><tr><th>Broker</th><th>Ticker</th><th>FY26</th><th>FY27</th><th>FY28</th><th>FY29</th><th>FY30</th><th>Val $</th><th>Tgt ret</th><th>Date</th></tr></thead>';
+ const body=brkRows.map(r=>{const known=!!D[r.ticker];return `<tr class="${known?'':'bad'}" title="${known?'':'Not in the value layer — will still import if the ticker exists in stocks'}">`+
+   `<td>${r.broker_name||'<i>?</i>'}</td><td>${r.ticker}</td><td>${n(r.eps_fy26)}</td><td>${n(r.eps_fy27)}</td><td>${n(r.eps_fy28)}</td><td>${n(r.eps_fy29)}</td><td>${n(r.eps_fy30)}</td><td>${d2(r.valuation)}</td><td>${pc(r.target_return)}</td><td>${r.note_date}</td></tr>`;}).join('');
+ document.getElementById('brk-review').innerHTML=`<table>${head}<tbody>${body}</tbody></table>`+
+   `<div style="margin-top:10px"><button class="upbtn" id="brk-import" onclick="importBrokerForecasts()">Import ${brkRows.length} forecast(s) to platform</button></div>`;
+}
+async function importBrokerForecasts(){
+ const st=document.getElementById('brk-status'),btn=document.getElementById('brk-import');
+ if(!brkRows.length)return;btn.disabled=true;st.className='ustat';st.textContent='Importing…';
+ try{
+  const rows=brkRows.map(({_src,...r})=>r);
+  const res=await fetch('/.netlify/functions/ingest-broker-forecasts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});
+  const j=await res.json();if(!res.ok)throw new Error(j.error||('HTTP '+res.status));
+  st.className=(j.errors&&j.errors.length)?'ustat err':'ustat ok';
+  st.innerHTML='Imported '+j.upserted+' forecast(s).'+((j.errors&&j.errors.length)?(' Skipped '+j.errors.length+': '+j.errors.slice(0,3).join('; ')):'')+' Refreshing…';
+  brkRows=[];document.getElementById('brk-review').innerHTML='';document.getElementById('brk-file').value='';
+  await load();
+ }catch(e){st.className='ustat err';st.textContent='Import failed: '+e.message;btn.disabled=false;}
+}
+
 initSb().then(load).catch(e=>{document.getElementById('status').innerHTML='<b>Could not load config.</b><br>'+(e.message||e);});
 </script></body></html>
