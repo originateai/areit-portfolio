@@ -2698,9 +2698,11 @@ async function loadAlerts() {
 // ── STOCK DETAIL FULL PAGE ────────────────────────────────────────────────────
 let previousPage  = 'model';
 let currentTicker = null;
+let reitValueOrigin = null; // set when arriving from the value layer, so Back returns there (symmetric nav)
 
 async function openSignalDrawer(ticker) {
   if (!db) return;
+  reitValueOrigin = null; // default: a normal open clears any prior value-layer origin
   currentTicker = ticker;
 
   // Remember which page we came from
@@ -3034,6 +3036,8 @@ async function refreshLivePrice(ticker) {
 
 
 function closeStockDetail() {
+  // If we came from the value layer, go back the same way we came (to that REIT's value view).
+  if (reitValueOrigin) { const u = reitValueOrigin; reitValueOrigin = null; window.location.href = u; return; }
   document.getElementById('pg-stock-detail').classList.remove('active');
   const navItem = document.getElementById('nav-stock-detail');
   if (navItem) { navItem.style.display = 'none'; navItem.classList.remove('active'); }
@@ -3278,7 +3282,10 @@ function handleDeepLink(){
   if(!m)return;
   const tk=m[1].toUpperCase().replace(/\.(AX|AU)$/,'');
   (function go(n){
-    if(typeof db!=='undefined'&&db&&typeof openSignalDrawer==='function'){ openSignalDrawer(tk); }
+    if(typeof db!=='undefined'&&db&&typeof openSignalDrawer==='function'){
+      openSignalDrawer(tk);
+      reitValueOrigin='/value-layer.html#stock='+tk; // arrived from value layer -> Back returns there
+    }
     else if(n<150){ setTimeout(()=>go(n+1),100); }
   })(0);
 }

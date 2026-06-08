@@ -152,9 +152,11 @@ async function load(){
      dpu:ser(all,tk,'dpu'),noi:ser(all,tk,'noi_m'),ffo:ser(all,tk,'ffo_m'),
      nta:ser(all,tk,'nta'),gearing:ser(all,tk,'gearing'),ocf:ser(all,tk,'ocf_cover'),affo:ser(all,tk,'affo_cover'),
      nav:Number(out.nav_nta),eqdcf:Number(out.equity_dcf_value),buy12:Number(out.buy_threshold),
-     irr:Number(out.breakeven_irr),termpe:Number(out.terminal_pe),bizdcf:Number(out.business_dcf_value),
+     priceBuild:Number(out.price_at_build),irrBuild:Number(out.breakeven_irr),
+     termpe:Number(out.terminal_pe),bizdcf:Number(out.business_dcf_value),
      takeover:Number(out.takeover_value),tkup:Number(out.takeover_upside),eq:out.eq_score,
      brokers:br.data.filter(b=>b.ticker===tk).slice(0,4)};
+   D[tk].irr=irrAtPrice(D[tk]); // live IRR at the current price (not the stale build-time breakeven)
   }
   document.getElementById('status').style.display='none';
   document.getElementById('content').style.display='block';
@@ -167,11 +169,22 @@ async function load(){
  }}
 
 const NTA_DISCOUNT_TRIGGER=0.10; // a 10%+ discount to NTA flags a value trigger (landlord screen)
+const REQ_RETURN=0.12;           // required return; the price for this IRR is the Buy@12% threshold
+// IRR at the current (live) price, interpolated from two model anchors:
+//   equity DCF value -> 12% required return, and price-at-build -> stored breakeven IRR.
+// price->IRR is monotonic, and at price==buy12 (==equity DCF) this returns exactly 12%, so
+// "BUY = IRR>=12%" coincides exactly with price<=buy12 and recomputes as the live price moves.
+function irrAtPrice(m){
+ const dcf=m.eqdcf,pb=m.priceBuild,be=m.irrBuild;
+ if([dcf,pb,be].some(x=>x==null||isNaN(x))||Math.abs(pb-dcf)<1e-6)return be;
+ return REQ_RETURN+((be-REQ_RETURN)/(pb-dcf))*(m.price-dcf);
+}
 function rows(){return Object.entries(D).map(([t,m])=>{
- const epsy=m.epu[2]/100/m.price,dpsy=m.dpu[2]/100/m.price,g=m.gearing[1],buy=m.price<=m.buy12;
+ const epsy=m.epu[2]/100/m.price,dpsy=m.dpu[2]/100/m.price,g=m.gearing[1];
+ const irr=m.irr,buy=irr>=REQ_RETURN; // BUY is driven by the live IRR, not a separate price test
  const discNTA=(m.nav&&!isNaN(m.nav))?(m.price/m.nav-1):null; // negative = trading below NTA
  const value=discNTA!=null&&discNTA<=-NTA_DISCOUNT_TRIGGER?1:0;
- return {tkr:t,name:m.name,price:m.price,epsy,dpsy,irr:m.irr,buy12:m.buy12,nav:m.nav,discNTA,value,takeover:m.takeover,tkup:m.tkup,eq:m.eq,g,sig:buy?1:0,m};});}
+ return {tkr:t,name:m.name,price:m.price,epsy,dpsy,irr,buy12:m.buy12,nav:m.nav,discNTA,value,takeover:m.takeover,tkup:m.tkup,eq:m.eq,g,sig:buy?1:0,m};});}
 function kpis(){const buys=R.filter(r=>r.sig).length;
  const avgD=R.reduce((a,r)=>a+(r.price/r.nav-1),0)/R.length,avgT=R.reduce((a,r)=>a+r.tkup,0)/R.length;
  document.getElementById('kpis').innerHTML=[['Models',R.length],['Clear 12% today',buys],['Avg price vs NAV',pct(avgD)],['Avg takeover upside*',pct(avgT)]]
