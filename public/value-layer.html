@@ -48,6 +48,10 @@ tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
 .sig.val{background:#e6f0fa;color:var(--navy);margin-left:4px}
 .pos{color:var(--buy)}.neg{color:#c0392b}
 .tkr.lnk{cursor:pointer;text-decoration:underline dotted}.tkr.lnk:hover{color:var(--sky)}
+.vtabs{display:flex;gap:2px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+.vtab{background:none;border:none;border-bottom:2px solid transparent;padding:8px 14px;font-size:12px;font-weight:600;color:var(--mute);cursor:pointer}
+.vtab.active{color:var(--navy);border-bottom-color:var(--sky)}
+.vtab:hover{color:var(--navy)}
 .detail{display:none;background:#fbfdfe}.detail.open{display:table-row}.detail .pad{padding:20px 22px}
 .detail-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:26px}
 .cf{width:100%;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
@@ -123,11 +127,21 @@ async function load(){
   // Live last price from the EODHD-fed `prices` table (reit_prices is a stale manual seed).
   // Pull the most recent close per ticker (bounded to the last ~25 days), fall back to seed.
   const tickers=Object.keys(OUT);
-  const cutoff=new Date(Date.now()-25*864e5).toISOString().slice(0,10);
-  const LP={};let priceDate=null;
+  const LP={};let priceDate=null,priceLive=false;
+  // 1) live intraday from EODHD (same feed the dashboard uses) — one call for all REITs
   try{
-   const lpRes=await sb.from('prices').select('ticker,close,market_date').in('ticker',tickers).gte('market_date',cutoff).order('market_date',{ascending:false});
-   (lpRes.data||[]).forEach(r=>{if(LP[r.ticker]==null){LP[r.ticker]=Number(r.close);if(!priceDate)priceDate=r.market_date;}});
+   const lr=await fetch('/.netlify/functions/bulk-live-prices?tickers='+tickers.join(','));
+   const lj=await lr.json();
+   Object.entries(lj.prices||{}).forEach(([t,p])=>{if(p&&p.price){LP[t]=Number(p.price);priceLive=true;}});
+  }catch(_){}
+  // 2) fall back to the latest EOD close for any ticker the live feed didn't return
+  try{
+   const miss=tickers.filter(t=>LP[t]==null);
+   if(miss.length){
+    const cutoff=new Date(Date.now()-25*864e5).toISOString().slice(0,10);
+    const lpRes=await sb.from('prices').select('ticker,close,market_date').in('ticker',miss).gte('market_date',cutoff).order('market_date',{ascending:false});
+    (lpRes.data||[]).forEach(r=>{if(LP[r.ticker]==null){LP[r.ticker]=Number(r.close);if(!priceDate)priceDate=r.market_date;}});
+   }
   }catch(_){}
   const ser=(rows,tk,col)=>FY.map(fy=>{const r=rows.find(z=>z.ticker===tk&&z.fy===fy);return r&&r[col]!=null?Number(r[col]):null;});
   const all=[...ac.data,...fc.data];
@@ -144,8 +158,9 @@ async function load(){
   }
   document.getElementById('status').style.display='none';
   document.getElementById('content').style.display='block';
-  document.getElementById('asof').innerHTML='Live from Supabase &middot; prices as at '+(priceDate||(pr.data[0]||{}).price_date||'today')+' &middot; click a row to expand, click a ticker for full trading data';
+  document.getElementById('asof').innerHTML='Live from Supabase &middot; '+(priceLive?'live EODHD prices':'prices as at '+(priceDate||(pr.data[0]||{}).price_date||'today'))+' &middot; click a row to expand, click a ticker for full trading data';
   render();
+  expandFromHash();
  }catch(e){
   document.getElementById('status').innerHTML='<b>Could not load.</b><br>'+(e.message||e)+
    '<br><br>Check that SUPABASE_ANON_KEY is set (config.js) and that the seed + RLS read policy have run.';
@@ -210,10 +225,19 @@ function render(){
    <td class="num ${r.tkup>=0?'pos':'neg'}">${pct(r.tkup)}</td><td class="num hideS">${m.eq==null?'&ndash;':m.eq}</td>
    <td class="num">${(r.g*100).toFixed(0)}% <span class="tag ${m.mgmt==='INT'?'int':'ext'}">${m.mgmt}</span></td>
    <td><span class="sig ${r.sig?'buy':'wait'}">${r.sig?'BUY':'WAIT'}</span>${r.value?'<span class="sig val">VALUE</span>':''}</td></tr>
-  <tr class="detail" id="d${i}"><td colspan="14"><div class="pad"><div class="detail-grid">
+  <tr class="detail" id="d${i}"><td colspan="14"><div class="pad">
+   <div class="vtabs"><button class="vtab active">📊 Our Value model</button><button class="vtab" onclick="event.stopPropagation();window.location.href='/index.html#stock=${r.tkr}'">📈 Trading &amp; history &rarr;</button></div>
+   <div class="detail-grid">
    <div><div style="font-weight:600;margin-bottom:10px;color:var(--navy)">Multi-year cash flows</div>${cfTable(m)}${consensus(r.tkr,m)}</div>
    <div><div style="font-weight:600;margin-bottom:10px;color:var(--navy)">Valuation</div>${lenses(r)}</div></div></div></td></tr>`;}).join('');}
 function tog(i){document.getElementById('d'+i).classList.toggle('open');}
+function expandFromHash(){
+ const m=(location.hash||'').match(/stock=([A-Za-z0-9.]+)/i);if(!m)return;
+ const tk=m[1].toUpperCase().replace(/\.(AX|AU)$/,'');
+ const i=R.findIndex(r=>r.tkr===tk);if(i<0)return;
+ const d=document.getElementById('d'+i);if(d){d.classList.add('open');d.scrollIntoView({behavior:'smooth',block:'center'});}
+}
+window.addEventListener('hashchange',expandFromHash);
 function cons(t){const our=D[t].epu.slice(2);
  for(let j=0;j<5;j++){let v=[our[j]].filter(x=>x!=null);
   for(let b=1;b<=4;b++){const x=parseFloat(document.getElementById('bk_'+t+'_'+b+'_'+j).value);if(!isNaN(x))v.push(x);}

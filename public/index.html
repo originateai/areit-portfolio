@@ -741,6 +741,12 @@ tfoot td.r{text-align:right}
       </div>
     </div>
 
+    <!-- REIT view toggle (Value model ↔ Trading) — shown only for A-REITs we model -->
+    <div id="sd-tabs" class="tab-row" style="display:none;margin-bottom:16px">
+      <button class="tab" onclick="window.location.href='/value-layer.html#stock='+currentTicker">📊 Our Value Model</button>
+      <button class="tab active">📈 Trading &amp; History</button>
+    </div>
+
     <!-- Key metrics row -->
     <div id="sd-metrics" class="kb" style="margin-bottom:18px"></div>
 
@@ -2831,6 +2837,8 @@ async function openSignalDrawer(ticker) {
   // Every field is ALWAYS shown for a REIT. Missing data renders as a labelled
   // blank placeholder ("—"), ready to receive data — never hidden.
   const reitWrap = document.getElementById('sd-reit-wrap');
+  const sdTabs = document.getElementById('sd-tabs');
+  if (sdTabs) sdTabs.style.display = stock?.is_reit ? 'flex' : 'none';
   if (stock?.is_reit) {
     reitWrap.style.display = 'block';
     const px       = livePrice || prices[prices.length-1]?.close || null;
