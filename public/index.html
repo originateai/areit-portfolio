@@ -3263,7 +3263,19 @@ async function downloadDoc(path) {
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function() { wireNav(); init(); });
+// Deep link: other pages (e.g. value-layer.html) can open a stock's full trading
+// data via /index.html#stock=TICKER. Poll until the DB client + drawer are ready.
+function handleDeepLink(){
+  const m=(location.hash||'').match(/stock=([A-Za-z0-9.]+)/i);
+  if(!m)return;
+  const tk=m[1].toUpperCase().replace(/\.(AX|AU)$/,'');
+  (function go(n){
+    if(typeof db!=='undefined'&&db&&typeof openSignalDrawer==='function'){ openSignalDrawer(tk); }
+    else if(n<150){ setTimeout(()=>go(n+1),100); }
+  })(0);
+}
+window.addEventListener('hashchange', handleDeepLink);
+document.addEventListener("DOMContentLoaded", function() { wireNav(); init(); handleDeepLink(); });
 </script>
 
 

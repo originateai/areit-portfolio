@@ -45,7 +45,9 @@ tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
 .ext{background:#eaf0f4;color:var(--teal)}.int{background:#e3f6ee;color:var(--buy)}
 .sig{font-weight:700;padding:4px 10px;border-radius:6px;font-size:12px;font-family:'IBM Plex Mono',monospace}
 .sig.buy{background:#e3f6ee;color:var(--buy)}.sig.wait{background:#fdf3e0;color:var(--wait)}
+.sig.val{background:#e6f0fa;color:var(--navy);margin-left:4px}
 .pos{color:var(--buy)}.neg{color:#c0392b}
+.tkr.lnk{cursor:pointer;text-decoration:underline dotted}.tkr.lnk:hover{color:var(--sky)}
 .detail{display:none;background:#fbfdfe}.detail.open{display:table-row}.detail .pad{padding:20px 22px}
 .detail-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:26px}
 .cf{width:100%;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
@@ -83,7 +85,7 @@ tbody tr.main{cursor:pointer}tbody tr.main:hover{background:#eef5f9}
 <table id="tbl"><thead><tr>
 <th data-k="tkr">Ticker</th><th data-k="name">REIT</th><th data-k="price">Price</th>
 <th data-k="epsy">EPS yld</th><th data-k="dpsy">DPS yld</th><th data-k="irr">IRR</th>
-<th data-k="buy12">Buy@12%</th><th data-k="nav" class="hideS">NAV*</th>
+<th data-k="buy12">Buy@12%</th><th data-k="nav" class="hideS">NAV*</th><th data-k="discNTA">Disc/NTA</th>
 <th data-k="takeover" class="hideS">Takeover*</th><th data-k="tkup">T.upside*</th>
 <th data-k="eq" class="hideS">EQ</th><th data-k="g">Gearing</th><th data-k="sig">Signal</th>
 </tr></thead><tbody id="body"></tbody></table>
@@ -118,10 +120,19 @@ async function load(){
   for(const x of [o,md,pr,ac,fc,br]) if(x.error) throw x.error;
   const M={},P={},OUT={};
   md.data.forEach(r=>M[r.ticker]=r); pr.data.forEach(r=>P[r.ticker]=r); o.data.forEach(r=>OUT[r.ticker]=r);
+  // Live last price from the EODHD-fed `prices` table (reit_prices is a stale manual seed).
+  // Pull the most recent close per ticker (bounded to the last ~25 days), fall back to seed.
+  const tickers=Object.keys(OUT);
+  const cutoff=new Date(Date.now()-25*864e5).toISOString().slice(0,10);
+  const LP={};let priceDate=null;
+  try{
+   const lpRes=await sb.from('prices').select('ticker,close,market_date').in('ticker',tickers).gte('market_date',cutoff).order('market_date',{ascending:false});
+   (lpRes.data||[]).forEach(r=>{if(LP[r.ticker]==null){LP[r.ticker]=Number(r.close);if(!priceDate)priceDate=r.market_date;}});
+  }catch(_){}
   const ser=(rows,tk,col)=>FY.map(fy=>{const r=rows.find(z=>z.ticker===tk&&z.fy===fy);return r&&r[col]!=null?Number(r[col]):null;});
   const all=[...ac.data,...fc.data];
   for(const tk of Object.keys(OUT)){
-   const out=OUT[tk],price=P[tk]?Number(P[tk].last_price):Number(out.price_at_build);
+   const out=OUT[tk],price=LP[tk]!=null?LP[tk]:(P[tk]?Number(P[tk].last_price):Number(out.price_at_build));
    D[tk]={name:(M[tk]||{}).name||tk,sector:SECTOR[tk]||'',mgmt:(M[tk]||{}).mgmt_model==='internal'?'INT':'ext',price,
      epu:ser(all,tk,'epu').map((v,i)=>v!=null?v:ser(all,tk,'ffo_per_unit')[i]),
      dpu:ser(all,tk,'dpu'),noi:ser(all,tk,'noi_m'),ffo:ser(all,tk,'ffo_m'),
@@ -133,16 +144,19 @@ async function load(){
   }
   document.getElementById('status').style.display='none';
   document.getElementById('content').style.display='block';
-  document.getElementById('asof').innerHTML='Live from Supabase &middot; prices as at '+((pr.data[0]||{}).price_date||'today')+' &middot; click a row to expand';
+  document.getElementById('asof').innerHTML='Live from Supabase &middot; prices as at '+(priceDate||(pr.data[0]||{}).price_date||'today')+' &middot; click a row to expand, click a ticker for full trading data';
   render();
  }catch(e){
   document.getElementById('status').innerHTML='<b>Could not load.</b><br>'+(e.message||e)+
    '<br><br>Check that SUPABASE_ANON_KEY is set (config.js) and that the seed + RLS read policy have run.';
  }}
 
+const NTA_DISCOUNT_TRIGGER=0.10; // a 10%+ discount to NTA flags a value trigger (landlord screen)
 function rows(){return Object.entries(D).map(([t,m])=>{
  const epsy=m.epu[2]/100/m.price,dpsy=m.dpu[2]/100/m.price,g=m.gearing[1],buy=m.price<=m.buy12;
- return {tkr:t,name:m.name,price:m.price,epsy,dpsy,irr:m.irr,buy12:m.buy12,nav:m.nav,takeover:m.takeover,tkup:m.tkup,eq:m.eq,g,sig:buy?1:0,m};});}
+ const discNTA=(m.nav&&!isNaN(m.nav))?(m.price/m.nav-1):null; // negative = trading below NTA
+ const value=discNTA!=null&&discNTA<=-NTA_DISCOUNT_TRIGGER?1:0;
+ return {tkr:t,name:m.name,price:m.price,epsy,dpsy,irr:m.irr,buy12:m.buy12,nav:m.nav,discNTA,value,takeover:m.takeover,tkup:m.tkup,eq:m.eq,g,sig:buy?1:0,m};});}
 function kpis(){const buys=R.filter(r=>r.sig).length;
  const avgD=R.reduce((a,r)=>a+(r.price/r.nav-1),0)/R.length,avgT=R.reduce((a,r)=>a+r.tkup,0)/R.length;
  document.getElementById('kpis').innerHTML=[['Models',R.length],['Clear 12% today',buys],['Avg price vs NAV',pct(avgD)],['Avg takeover upside*',pct(avgT)]]
@@ -178,6 +192,7 @@ function lenses(r){const m=r.m,up=v=>`<span class="${v>=0?'pos':'neg'}">${pct(v)
  <div class="lens"><span class="ll">DPS yield (FY26)</span><span class="lv">${pct(r.dpsy)}</span></div>
  <div class="lens"><span class="ll">Terminal FFO multiple</span><span class="lv">${m.termpe.toFixed(1)}x</span></div>
  <div class="lens"><span class="ll">EPS growth FY26&rarr;FY30</span><span class="lv">${spark(m.epu)}</span></div>
+ <div class="lens"><span class="ll">Discount / premium to NTA${r.value?' &mdash; <b style="color:var(--navy)">VALUE TRIGGER</b>':''}</span><span class="lv ${r.discNTA==null?'':(r.discNTA<0?'pos':'neg')}">${pct(r.discNTA)}</span></div>
  <div class="lens refhead"><span class="ll">Reference only &mdash; NOT used in our value</span></div>
  <div class="lens"><span class="ll">NAV / NTA</span><span class="lv">${dol(m.nav)}</span></div>
  <div class="lens"><span class="ll">Business / asset DCF</span><span class="lv">${dol(m.bizdcf)}</span></div>
@@ -187,13 +202,15 @@ function render(){
  R.sort((a,b)=>{let x=a[sortK],y=b[sortK];if(typeof x==='string')return asc?x.localeCompare(y):y.localeCompare(x);return asc?x-y:y-x;});
  kpis();
  document.getElementById('body').innerHTML=R.map((r,i)=>{const m=r.m;
-  return `<tr class="main" onclick="tog(${i})"><td><span class="tkr">${r.tkr}</span></td><td class="nm">${r.name}<small>${m.sector}</small></td>
+  return `<tr class="main" onclick="tog(${i})"><td><span class="tkr lnk" title="Open full trading data" onclick="event.stopPropagation();window.location.href='/index.html#stock=${r.tkr}'">${r.tkr}</span></td><td class="nm">${r.name}<small>${m.sector}</small></td>
    <td class="num">${dol(r.price)}</td><td class="num">${pct(r.epsy)}</td><td class="num">${pct(r.dpsy)}</td><td class="num"><b>${pct(r.irr)}</b></td>
-   <td class="num">${dol(r.buy12)}</td><td class="num hideS">${dol(r.nav)}</td><td class="num hideS">${dol(r.takeover)}</td>
+   <td class="num">${dol(r.buy12)}</td><td class="num hideS">${dol(r.nav)}</td>
+   <td class="num ${r.discNTA==null?'':(r.discNTA<0?'pos':'neg')}">${pct(r.discNTA)}</td>
+   <td class="num hideS">${dol(r.takeover)}</td>
    <td class="num ${r.tkup>=0?'pos':'neg'}">${pct(r.tkup)}</td><td class="num hideS">${m.eq==null?'&ndash;':m.eq}</td>
    <td class="num">${(r.g*100).toFixed(0)}% <span class="tag ${m.mgmt==='INT'?'int':'ext'}">${m.mgmt}</span></td>
-   <td><span class="sig ${r.sig?'buy':'wait'}">${r.sig?'BUY':'WAIT'}</span></td></tr>
-  <tr class="detail" id="d${i}"><td colspan="13"><div class="pad"><div class="detail-grid">
+   <td><span class="sig ${r.sig?'buy':'wait'}">${r.sig?'BUY':'WAIT'}</span>${r.value?'<span class="sig val">VALUE</span>':''}</td></tr>
+  <tr class="detail" id="d${i}"><td colspan="14"><div class="pad"><div class="detail-grid">
    <div><div style="font-weight:600;margin-bottom:10px;color:var(--navy)">Multi-year cash flows</div>${cfTable(m)}${consensus(r.tkr,m)}</div>
    <div><div style="font-weight:600;margin-bottom:10px;color:var(--navy)">Valuation</div>${lenses(r)}</div></div></div></td></tr>`;}).join('');}
 function tog(i){document.getElementById('d'+i).classList.toggle('open');}
