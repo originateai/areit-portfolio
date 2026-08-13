@@ -14,11 +14,12 @@ A personal ASX trading & research platform. Generates daily equity/REIT signals,
 - **Email:** Resend.
 
 ## Architecture conventions — IMPORTANT
-- **Flat SPA. NO React, NO bundler.** The app is standalone HTML. Main file is `public/index.html` (root `index.html` mirrors it). Do not introduce a build step or framework.
+- **Flat SPA. NO React, NO bundler.** The app is standalone HTML. Main file is `public/index.html` — **the single source of truth**. Do not introduce a build step or framework.
+- **No mirror files.** The old root-level duplicates (`index.html`, `morning-scan.js`, `fetch-indicators.js`, `eodhd-client.js`) were deleted 2026-08-13 — they had silently drifted from the deployed copies. Only `public/` and `netlify/functions/` deploy (see `netlify.toml`). Never re-create a second copy of a deployed file.
 - **Serverless functions** live in `netlify/functions/`.
 - **All technical indicators are self-calculated client-side from raw price data** (`adjusted_close`): Wilder RSI, SMA20/50/200, Bollinger, MACD, ATR, ROC, volume ratio. Do not switch to a pre-computed indicator feed without being asked.
 - **Prefer clean rewrites over patches.** Don't stack band-aids on a broken function — rewrite it cleanly. Avoid over-engineered solutions.
-- **Workflow:** files are deployed via GitHub Desktop / GitHub web UI (not CLI). When handing over changes, give complete files where practical.
+- **Workflow:** commit and push to `main`; Netlify auto-deploys. Git CLI works via GitHub Desktop's bundled binary (`%LOCALAPPDATA%\GitHubDesktop\app-*\resources\app\git\cmd\git.exe`) — git is not on PATH. Node IS installed, so `node --check` every changed function before pushing.
 
 ## Pipeline (scheduled functions, AEST)
 1. `fetch-prices.js` — ~4pm. Pulls EOD prices from EODHD into `prices` (open/high/low/close/volume + adjusted_close).
@@ -65,7 +66,8 @@ Two-level structure. Each asset class scored on **its own inputs** — no single
 - **Model Portfolio** — system paper trades, performance shown separately.
 - **Trading History** — closed-trade ledger (model + real); open positions show TSR-to-date.
 
-**Strategies section (rule lens):** Value, Momentum, Mean reversion, Breakout, ML model. Each shows rule + current signals + (honest) backtest stats.
+**Strategies section (rule lens):** Value, Momentum, Mean reversion. Each shows rule + current signals + (honest) backtest stats.
+- **Breakout was removed (2026-08-13)** along with the ORB confirmation scan (`orb-scan.js`) — the platform is income-focused, not momentum-trading. Recoverable from git history if ever needed.
 - **Value is cross-cohort:** equities & earnings-driven REITs (developers/managers) screen on low P/E + earnings yield; landlord REITs screen on NTA discount + implied-vs-book cap gap + yield (with NTA discount + coverage as the value-trap filter).
 
 ## Implied cap rate (landlords only)

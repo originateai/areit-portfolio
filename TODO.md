@@ -58,9 +58,10 @@ rows. Deploy the code only after the migrations are in.
 - The CommSec/registry regexes in `parseContractNote` / `parseDistStatement` are
   best-effort — validate against your real documents and tighten as needed.
 
-## 6. Mirror files
+## 6. Mirror files — RESOLVED 2026-08-13
 - Deployed front-end is `public/index.html` (`netlify.toml` → `publish = public`).
-- Root `index.html` is kept as a mirror copy. If you edit one, copy to the other.
+- The root mirror copies were deleted (they had drifted). There is now **one** copy of each
+  file. Do not re-create root duplicates.
 
 ## 8. A-REIT VALUE LAYER (Phase 1 built — needs your Supabase steps)
 Full runbook in `SUMMARY.md` (Part 2). The must-dos, in order:

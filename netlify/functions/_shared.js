@@ -123,7 +123,6 @@ const emailStyles = `
   .macro-detail { font-size:12px; color:#555; margin:0; line-height:1.6; }
   /* Trade cards */
   .trade-card { border:1px solid #e0e6ed; border-left:3px solid #1a3a5c; margin:0 28px 10px; padding:14px; background:#fff; }
-  .trade-card.breakout { border-left-color:#b8943f; }
   .trade-header { display:table; width:100%; }
   .trade-left { display:table-cell; vertical-align:top; }
   .trade-right { display:table-cell; vertical-align:top; text-align:right; width:120px; }

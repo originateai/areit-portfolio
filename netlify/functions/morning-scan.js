@@ -180,155 +180,6 @@ function scoreREITMacro({ us10yr, aus10yr, us10yrChange, aus10yrChange,
   return { score, rating, emoji, signals };
 }
 
-// ── BREAKOUT SCANNER ──────────────────────────────────────────────────────────
-// Finds stocks making 52W highs or breaking key resistance on strong volume
-// Separate strategy from mean reversion — momentum/breakout approach
-async function scanBreakouts(db, stocks, livePrices, macroScore) {
-  const breakouts = [];
-
-  try {
-    const tickers = stocks.map(s => s.ticker);
-
-    // Fetch 365 calendar days per-ticker = ~252 trading days = exactly 1 year (52 weeks)
-    // stocks.high_52w is never populated (all null) so we calculate it ourselves.
-    // Per-ticker fetch avoids Supabase's 1000-row cap on multi-ticker queries.
-    const cutoff52w = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const priceMap = {};
-    const PARALLEL = 8;
-    for (let i = 0; i < tickers.length; i += PARALLEL) {
-      const group = tickers.slice(i, i + PARALLEL);
-      const results = await Promise.all(group.map(ticker =>
-        db.from('prices')
-          .select('ticker,market_date,close,high,low,volume')
-          .eq('ticker', ticker)
-          .gte('market_date', cutoff52w)
-          .order('market_date', { ascending: false })
-          .limit(280)  // 280 rows covers 365 calendar days of trading
-      ));
-      results.forEach(({ data }) => {
-        (data||[]).forEach(p => {
-          if (!priceMap[p.ticker]) priceMap[p.ticker] = [];
-          priceMap[p.ticker].push(p);
-        });
-      });
-    }
-
-    if (!Object.keys(priceMap).length) return breakouts;
-
-    for (const stock of stocks) {
-      try {
-        const ticker   = stock.ticker;
-        const live     = livePrices[ticker];
-        const prices   = priceMap[ticker] || [];
-        if (!live || prices.length < 10) continue;
-
-        const price    = live.close || live.price;
-        if (!price) continue;
-
-        // Calculate 52W high/low from price history (prices are desc order)
-        const high52w = Math.max(...prices.map(p => parseFloat(p.high || p.close || 0)));
-        const low52w  = Math.min(...prices.filter(p => parseFloat(p.low || p.close) > 0).map(p => parseFloat(p.low || p.close)));
-
-        // Volume ratio
-        const todayVol = live.volume || 0;
-        const avgVol   = prices.slice(1, 21).reduce((s, p) => s + parseInt(p.volume || 0), 0) / Math.min(prices.length - 1, 20);
-        const volRatio = avgVol > 0 ? todayVol / avgVol : 0;
-
-        // Recent resistance — highest close in last 20 days (excluding today)
-        const recentHigh = Math.max(...prices.slice(1, 21).map(p => parseFloat(p.close || 0)));
-
-        // Breakout conditions
-        const signals = [];
-        let breakoutScore = 0;
-
-        // Macro must be positive for breakout trades
-        if (macroScore < 0) continue;
-
-        // 1. Near or breaking 52W high
-        if (high52w && price >= high52w * 0.98) {
-          signals.push(`Near 52W high $${high52w.toFixed(3)}`);
-          breakoutScore += 2;
-        }
-        if (high52w && price > high52w) {
-          signals.push(`🚀 NEW 52W HIGH $${price.toFixed(3)}`);
-          breakoutScore += 2; // extra for actual new high
-        }
-
-        // 2. Breaking recent resistance (20-day high)
-        if (recentHigh > 0 && price > recentHigh * 1.01) {
-          signals.push(`Breaking 20d resistance $${recentHigh.toFixed(3)}`);
-          breakoutScore += 2;
-        }
-
-        // 3. Volume confirmation — critical for breakout validity
-        if (volRatio > 3.0) {
-          signals.push(`Volume ${volRatio.toFixed(1)}× avg — very strong`);
-          breakoutScore += 3;
-        } else if (volRatio > 2.0) {
-          signals.push(`Volume ${volRatio.toFixed(1)}× avg — strong`);
-          breakoutScore += 2;
-        } else if (volRatio > 1.5) {
-          signals.push(`Volume ${volRatio.toFixed(1)}× avg — elevated`);
-          breakoutScore += 1;
-        }
-
-        // 4. Not too extended from 52W low (avoid chasing exhausted moves)
-        if (low52w && high52w) {
-          const pctOfRange = (price - low52w) / (high52w - low52w);
-          if (pctOfRange > 0.85) {
-            signals.push(`${(pctOfRange*100).toFixed(0)}% of 52W range`);
-            breakoutScore += 1;
-          }
-        }
-
-        // 5. Positive day (price up)
-        if (live.change > 0) {
-          const changePct = live.change / (price - live.change);
-          if (changePct > 0.02) {
-            signals.push(`Up ${(changePct*100).toFixed(1)}% today`);
-            breakoutScore += 1;
-          }
-        }
-
-        // For morning scan: flag stocks within 3% of 52W high as candidates for ORB scan
-        // The ORB scan at 10:30am confirms the actual breakout with live intraday prices
-        // Don't require actual break here — that's the ORB scan's job
-        const near52wHigh = high52w && price >= high52w * 0.97;
-        if (!near52wHigh) continue;          // must be within 3% of 52W high
-        if (volRatio < 1.5) continue;        // some volume confirmation
-        if (breakoutScore < 3) continue;
-
-        // Dynamic stop — just below breakout point (previous resistance)
-        const stopPrice  = parseFloat((Math.max(recentHigh * 0.98, price * 0.97)).toFixed(3));
-        const targetPrice = parseFloat((price * 1.06).toFixed(3)); // 6% target for breakouts
-
-        breakouts.push({
-          ticker,
-          name:         stock.name,
-          price,
-          breakout_score: breakoutScore,
-          signals,
-          stop_price:   stopPrice,
-          target_price: targetPrice,
-          vol_ratio:    parseFloat(volRatio.toFixed(2)),
-          high_52w:     high52w,
-          strategy:     'BREAKOUT',
-        });
-
-      } catch(e) {
-        // skip this stock silently
-      }
-    }
-
-    // Sort by score then volume
-    return breakouts.sort((a, b) => b.breakout_score - a.breakout_score || b.vol_ratio - a.vol_ratio);
-
-  } catch(e) {
-    console.error('Breakout scan error:', e.message);
-    return [];
-  }
-}
-
 // ── PRE-SCREEN FROM DB ────────────────────────────────────────────────────────
 // Reads yesterday's prices and daily_analysis from Supabase
 // Returns tickers worth doing full analysis on
@@ -463,7 +314,7 @@ function getSectorSignals({ sp500Change, nasdaqChange, ironOreChange, goldChange
 
 // ── BUILD EMAIL ───────────────────────────────────────────────────────────────
 function buildEmail(data) {
-  const { market, macro, reitMacro, equityTrades, breakouts, reitResults, headlines, reitHeadlines, rateNews } = data;
+  const { market, macro, reitMacro, equityTrades, reitResults, headlines, reitHeadlines, rateNews } = data;
   const { sp500Change, nasdaqChange, vix, us10yr, aus10yr, aud, audChange, vnqChange } = market;
   const { score, signal, reasons } = macro;
 
@@ -561,29 +412,6 @@ function buildEmail(data) {
       </td></tr>
     </table>`).join('');
 
-  // ── Breakout cards ────────────────────────────────────────────────────────
-  const breakoutRows = breakouts.map(b=>`
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #d7e0e5;border-left:3px solid ${TEAL};margin-bottom:10px;">
-      <tr><td style="padding:14px 16px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td style="font-family:Arial,Helvetica,sans-serif;">
-            <span style="font-size:16px;font-weight:700;color:${NAVY};font-family:Courier New,monospace;">${b.ticker}</span>
-            <span style="font-size:11px;color:${MUT};margin-left:8px;">${b.name||''}</span>
-            <div style="font-size:10px;color:${TEAL};font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-top:3px;">Breakout ${b.breakout_score}/8 &middot; Vol ${b.vol_ratio?b.vol_ratio.toFixed(1)+'x':'--'}</div>
-          </td>
-          <td align="right" style="font-family:Arial,Helvetica,sans-serif;"><span style="font-size:18px;font-weight:700;color:${TXT};font-family:Courier New,monospace;">${$3(b.price)}</span></td>
-        </tr></table>
-        <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#5a6b75;line-height:1.7;margin:8px 0 0;">${(b.signals||[]).slice(0,3).join(' &nbsp;&middot;&nbsp; ')}</div>
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px;border-top:1px solid ${RULE};"><tr>
-          <td align="center" style="padding-top:10px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:9px;color:${MUT};text-transform:uppercase;letter-spacing:1px;">52W High</div><div style="font-size:14px;font-weight:700;font-family:Courier New,monospace;color:${TXT};margin-top:3px;">${b.high52w?$3(b.high52w):'--'}</div></td>
-          <td align="center" style="padding-top:10px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:9px;color:${MUT};text-transform:uppercase;letter-spacing:1px;">Stop</div><div style="font-size:14px;font-weight:700;font-family:Courier New,monospace;color:${DN};margin-top:3px;">${$3(b.stop_price)}</div></td>
-          <td align="center" style="padding-top:10px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:9px;color:${MUT};text-transform:uppercase;letter-spacing:1px;">Target</div><div style="font-size:14px;font-weight:700;font-family:Courier New,monospace;color:${UP};margin-top:3px;">${$3(b.target_price)}</div><div style="font-size:9px;color:${MUT};margin-top:2px;">+6%</div></td>
-          <td align="center" style="padding-top:10px;font-family:Arial,Helvetica,sans-serif;"><div style="font-size:9px;color:${MUT};text-transform:uppercase;letter-spacing:1px;">Entry</div><div style="font-size:12px;font-weight:700;color:${TEAL};margin-top:3px;">10:45am</div><div style="font-size:9px;color:${MUT};margin-top:2px;">After ORB</div></td>
-        </tr></table>
-        <div style="background:#eef5f8;border-left:3px solid ${TEAL};padding:10px 14px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#5a6b75;line-height:1.7;margin-top:10px;">Confirm price still above ${$3(b.price)} at 10:45am before entering. Wait for the ORB confirmation email at 10:30am.</div>
-      </td></tr>
-    </table>`).join('');
-
   const macroBg = signal==='RISK_ON'?'#eef6f0':signal==='RISK_OFF'?'#fbeeee':ALT;
   const macroBar= signal==='RISK_ON'?UP:signal==='RISK_OFF'?DN:TEAL;
 
@@ -639,9 +467,6 @@ function buildEmail(data) {
   <tr><td class="px" style="padding:10px 32px 4px;">${tradeRows}</td></tr>`
   :`<tr><td class="px" style="${S.sec}"><div style="${S.label}">Equity Signals</div></td></tr>
   <tr><td class="px" style="padding:8px 32px 10px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:${MUT};">No signals today &mdash; min score 5/7 required.</td></tr>`}
-
-  ${breakouts.length?`<tr><td class="px" style="${S.sec}"><div style="${S.label}">Breakout Signals &mdash; Confirm at 10:45am</div></td></tr>
-  <tr><td class="px" style="padding:10px 32px 4px;">${breakoutRows}</td></tr>`:''}
 
   <!-- REIT UNIVERSE -->
   <tr><td class="px" style="${S.sec}"><div style="${S.label}">REIT Universe &mdash; Moelis Coverage (${reitResults.length})</div></td></tr>
@@ -907,11 +732,6 @@ const run = async () => {
     const reitTriggers = reitResults.filter(r => r.yield_trigger_fired).map(r => r.ticker);
     console.log(`Analysis complete — equities:${equityResults.length} scored, top:${topEquities.length} reits:${reitResults.length} triggers:${reitTriggers.length}`);
 
-    // 8c. Breakout scanner
-    const breakoutResults = await scanBreakouts(db, equityStocks||[], livePrices, macro.score);
-    const topBreakouts = breakoutResults.slice(0, 6);
-    console.log(`Breakouts found: ${breakoutResults.length}, top: ${topBreakouts.length}`);
-
     // 9. Save scoring results back to daily_analysis
     // IMPORTANT: only write scoring/signal columns — never overwrite the indicator columns
     // (rsi14, ma200, above_ma200, bb_position etc) that fetch-indicators already populated.
@@ -927,28 +747,13 @@ const run = async () => {
       dps_yield: r.dps_yield, yield_trigger_fired: r.yield_trigger_fired,
     }));
 
-    // Breakout signals — these are new rows so safe to write all columns
-    const breakoutAnalysis = (topBreakouts||[]).map(b => ({
-      ticker: b.ticker, analysis_date: today, close: b.price,
-      vol_ratio: b.vol_ratio,
-      breakout_score: b.breakout_score,  // separate from 7-layer total_score
-      total_score: null,                 // never overwrite 7-layer score with breakout score
-      signal: 'BREAKOUT',
-      conviction: b.breakout_score >= 6 ? 'EXCEPTIONAL' : 'STRONG',
-      signal_reasons: b.signals,
-    }));
-
     // Write scoring updates in chunks — these upsert only scoring columns onto existing indicator rows
     const SCORE_CHUNK = 50;
     for (let i = 0; i < scoringUpdates.length; i += SCORE_CHUNK) {
       await db.from('daily_analysis')
         .upsert(scoringUpdates.slice(i, i + SCORE_CHUNK), { onConflict: 'ticker,analysis_date' });
     }
-    if (breakoutAnalysis.length > 0) {
-      await db.from('daily_analysis')
-        .upsert(breakoutAnalysis, { onConflict: 'ticker,analysis_date' });
-    }
-    console.log(`Scoring saved: ${scoringUpdates.length} stocks, ${breakoutAnalysis.length} breakouts`);
+    console.log(`Scoring saved: ${scoringUpdates.length} stocks`);
 
     // 10. Save model trades — no duplicates
     // Auto-expire trades older than hold_days (default 3)
@@ -1036,7 +841,7 @@ const run = async () => {
 
     // 12. Send email — send-once guard (atomic claim via unique constraint)
     const { subject, html } = buildEmail({
-      market, macro, reitMacro, equityTrades: topEquities, breakouts: topBreakouts, reitResults,
+      market, macro, reitMacro, equityTrades: topEquities, reitResults,
       headlines, reitHeadlines, rateNews, sectorSignals,
       nikkei: nikkeiData, shanghai: shanghaiData, futures: futuresData
     });
