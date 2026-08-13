@@ -33,6 +33,15 @@ A personal ASX trading & research platform. Generates daily equity/REIT signals,
 - **Adjusted vs raw OHLC:** the history bootstrap stored `adjusted_close` as close but RAW open/high/low — this detaches candle bodies from wicks for stocks with dividends/splits. Fix is to store both raw and adjusted consistently and pick one per chart.
 - **Point-in-time discipline (critical for any fundamental/backtest work):** half-yearly REIT figures (NTA, WACR, NPI, WALE, occupancy, hedge position) must be dated to the **results-pack RELEASE date**, never the period end — or you get look-ahead bias.
 - **Deploy order:** run SQL migrations in Supabase **before** deploying code that depends on them.
+- **⚠ CENTS vs DOLLARS — two conventions live side by side.** In `reit_model_forecasts`/`reit_model_actuals`, `dpu`, `epu` and `ffo_per_unit` are **cents** (the workbooks label them "(cps)") while `nta` and every valuation output are **dollars**. `public/value-layer.html` divides by 100 before using them against price (`m.epu[2]/100/m.price`). But `stocks.dps_fy26` uses the **dollars** convention. Both are internally consistent — do NOT "fix" one in isolation, you will shift every yield by 100×. `scripts/export-model.js` now enforces the split with separate `cents`/`dollars` range guards.
+
+## Model export hardening (2026-08-13)
+`scripts/export-model.js` reads ~60 fixed cell addresses. It used to fail **silently** — insert one row in a workbook and every reference below it shifts, writing wrong-but-plausible numbers into real-money BUY signals. Three guards now run before anything is written, and any failure aborts the export:
+1. **Label check** — each cell declares the label its row must carry in column B. The workbooks label every row (e.g. `B7` = "Industrial cap rate (WACR)"), so a shifted row stops matching. No named ranges needed — the workbooks have none.
+2. **Range check** — each value declares a plausible range (cap rate 0.5–25%, gearing 0–150%, …).
+3. **Null check** — required fields must be non-null, which catches a workbook saved without recalculating.
+
+Verified: all 5 workbooks pass, and a simulated row-insert is rejected with 10 errors (it would otherwise have written `cap_rate = 77.5`). Re-validate any edited workbook with `--dry-run` before committing it.
 
 ## Recently done (this session)
 - **Chart rewrite** (`buildChart`): brand-mono candles (sky up `#00B0F0` / ink down `#00273E`), fixed reversed ordering (query was `ascending:false` but chart drew oldest-first), fixed candle geometry, added price axis + crosshair + OHLC tooltip.
