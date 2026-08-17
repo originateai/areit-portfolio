@@ -57,13 +57,14 @@ exports.handler = async (event) => {
     const tickers = [...new Set(models.map(m => m.ticker))];
 
     // ── everything the engine needs, in as few round trips as possible ────────
-    const [assumptions, forecasts, prices, stocks, fundamentals, taxRows] = await Promise.all([
+    const [assumptions, forecasts, prices, stocks, fundamentals, assetRows, taxRows] = await Promise.all([
       db.from('reit_model_assumptions').select('*').in('ticker', tickers),
       db.from('reit_model_forecasts').select('*').in('ticker', tickers),
       db.from('reit_prices').select('*').in('ticker', tickers),
       db.from('stocks').select('*').in('ticker', tickers),
       db.from('reit_fundamentals').select('*').in('ticker', tickers)
         .order('release_date', { ascending: false }),
+      db.from('reit_assets').select('*').in('ticker', tickers),
       db.from('tax_settings').select('*').lte('effective_from', asOf)
         .order('effective_from', { ascending: false }).limit(1),
     ]);
@@ -85,7 +86,8 @@ exports.handler = async (event) => {
       return m;
     };
     const aMap = by(assumptions.data), fMap = by(forecasts.data), pMap = by(prices.data),
-          sMap = by(stocks.data),      nMap = by(fundamentals.data);
+          sMap = by(stocks.data),      nMap = by(fundamentals.data),
+          asMap = by(assetRows.data);
 
     const results = [];
 
@@ -122,6 +124,7 @@ exports.handler = async (event) => {
         subclass: subclassOf(s),
         price: px.last_price != null ? Number(px.last_price) : null,
         model, assumptions: a, forecasts: fc,
+        assets: asMap[tk] || [],      // bottom-up NAV input; supersedes the top-down cap-rate lens
         net_debt: netDebt,
         npi,
       }, taxFns);
@@ -142,6 +145,7 @@ exports.handler = async (event) => {
         discount_to_fair_value: v.discount_to_fair_value,
         method_values: v.method_values,
         weights: v.weights,
+        asset_detail: v.method_detail.asset_nav ? v.method_detail.asset_nav.inputs : null,
         implied_cap_rate: v.implied_cap_rate,
         irr_pre_tax: v.irr_pre_tax,
         irr_post_tax: v.irr_post_tax,

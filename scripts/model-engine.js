@@ -47,11 +47,18 @@ const ENGINE_VERSION = 'model-engine-1.0.0';
  * Weights are renormalised over whichever methods actually produced a value, so a
  * missing input shifts weight to the survivors rather than silently scoring zero. */
 const BLEND_WEIGHTS = {
-  landlord:     { cap_rate_nav: 0.40, nta: 0.15, ddm: 0.25, ffo_multiple: 0.20 },
-  developer:    { cap_rate_nav: 0.20, nta: 0.20, ddm: 0.20, ffo_multiple: 0.40 },
-  fund_manager: { cap_rate_nav: 0.00, nta: 0.10, ddm: 0.30, ffo_multiple: 0.60 },
-  default:      { cap_rate_nav: 0.30, nta: 0.15, ddm: 0.30, ffo_multiple: 0.25 },
+  landlord:     { asset_nav: 0.40, cap_rate_nav: 0.40, nta: 0.15, ddm: 0.25, ffo_multiple: 0.20 },
+  developer:    { asset_nav: 0.20, cap_rate_nav: 0.20, nta: 0.20, ddm: 0.20, ffo_multiple: 0.40 },
+  fund_manager: { asset_nav: 0.00, cap_rate_nav: 0.00, nta: 0.10, ddm: 0.30, ffo_multiple: 0.60 },
+  default:      { asset_nav: 0.30, cap_rate_nav: 0.30, nta: 0.15, ddm: 0.30, ffo_multiple: 0.25 },
 };
+
+/* asset_nav and cap_rate_nav are the SAME LENS at different resolutions — one
+ * values every asset at its own cap rate, the other values the portfolio at a
+ * blended one. Counting both double-weights the asset view and drowns out the
+ * earnings and book lenses. Where the bottom-up figure exists it wins outright;
+ * the top-down one is the fallback for REITs with no asset register. */
+const SUPERSEDES = { asset_nav: 'cap_rate_nav' };
 
 const M = 1e6;
 const num = v => (v === null || v === undefined || v === '' || Number.isNaN(Number(v))) ? null : Number(v);
@@ -95,6 +102,7 @@ function normaliseInputs(raw) {
     base_noi:   ok(num(a.base_noi_m)) ? num(a.base_noi_m) * M : null,
     net_debt:   num(raw.net_debt),                             // $ if known
     npi:        num(raw.npi),                                  // $ ANNUALISED
+    assets:     raw.assets || [],                              // reit_assets rows, raw
     forecasts,
   };
 }
@@ -132,6 +140,75 @@ function capRateNav(i) {
     noi, cap_rate: i.cap_rate, asset_value: assets, net_debt: netDebt,
     net_debt_source: ok(i.net_debt) ? 'reported' : 'implied from gearing',
     securities: i.securities,
+  });
+}
+
+/* ── METHOD 1b: ASSET-LEVEL NAV (bottom-up) ───────────────────────────────────
+ * The honest version of method 1. Instead of one portfolio NOI over one blended
+ * cap rate, value EVERY asset at ITS OWN cap rate and sum:
+ *
+ *   asset value_i = income_i / cap_i
+ *   portfolio     = sum(asset value_i x ownership_i)
+ *   equity        = portfolio - net debt
+ *   per unit      = equity / securities
+ *
+ * This matters because a blended cap rate is a weighted average that hides the
+ * spread. A portfolio of one 4.9% data centre and one 5.4% secondary industrial
+ * is not the same asset as two 5.15% assets, and only the bottom-up view can
+ * show which end of the book is carrying the valuation.
+ *
+ * Overrides win over scraped values, so an edited cap rate survives a workbook
+ * re-export. Excluded rows drop out entirely.
+ *
+ * Worked: two assets, $61.5m @ 5.0% and $17.3m @ 4.9%, net debt $400m, 600m units
+ *   61.5/0.05 = $1,230m ; 17.3/0.049 = $353.06m ; portfolio = $1,583.06m
+ *   equity = 1,583.06 - 400 = $1,183.06m -> /600m = $1.9718
+ */
+function assetLevelNav(i) {
+  const rows = (i.assets || []).filter(a => !a.is_excluded);
+  if (!rows.length)      return skip('no asset register rows');
+  if (!ok(i.securities)) return skip('no securities on issue');
+
+  const priced = [];
+  const unpriced = [];
+  for (const a of rows) {
+    const income = num(a.income_override_m) ?? num(a.passing_income_m);
+    const cap    = num(a.cap_rate_override) ?? num(a.cap_rate);
+    const own    = num(a.ownership_pct) ?? 1;
+    if (!ok(income) || !ok(cap) || cap <= 0) { unpriced.push(a.asset_name); continue; }
+    priced.push({
+      asset_name: a.asset_name, sector: a.sector, state: a.state,
+      income_m: income, cap_rate: cap, ownership_pct: own,
+      value_m: (income / cap) * own,
+      overridden: num(a.cap_rate_override) !== null || num(a.income_override_m) !== null,
+    });
+  }
+  if (!priced.length) return skip('no asset row has both income and a cap rate');
+
+  const portfolioM = priced.reduce((s, a) => s + a.value_m, 0);
+  const assets = portfolioM * M;
+  const incomeM = priced.reduce((s, a) => s + a.income_m * a.ownership_pct, 0);
+
+  const netDebt = ok(i.net_debt) ? i.net_debt
+                : ok(i.gearing)  ? assets * i.gearing
+                : null;
+  if (netDebt === null) return skip('no net debt and no gearing to imply it from');
+
+  // The blended cap rate this bottom-up view implies — the number a top-down
+  // model would have used, now derived rather than assumed.
+  const impliedBlended = portfolioM > 0 ? incomeM / portfolioM : null;
+
+  return val((assets - netDebt) / i.securities, {
+    assets_priced: priced.length,
+    assets_unpriced: unpriced,
+    portfolio_value_m: portfolioM,
+    income_m: incomeM,
+    implied_blended_cap: impliedBlended,
+    cap_rate_range: [Math.min(...priced.map(a => a.cap_rate)), Math.max(...priced.map(a => a.cap_rate))],
+    net_debt: netDebt,
+    net_debt_source: ok(i.net_debt) ? 'reported' : 'implied from gearing',
+    securities: i.securities,
+    breakdown: priced,
   });
 }
 
@@ -247,7 +324,13 @@ function impliedCapRate(i) {
  * recorded cannot be audited (SPEC §5.2). */
 function blend(methods, subclass) {
   const w = BLEND_WEIGHTS[subclass] || BLEND_WEIGHTS.default;
-  const live = Object.keys(w).filter(k => methods[k] && ok(methods[k].value) && w[k] > 0);
+  let live = Object.keys(w).filter(k => methods[k] && ok(methods[k].value) && w[k] > 0);
+
+  // Drop any method superseded by a finer-resolution one that actually produced
+  // a value, so the same lens is never counted twice.
+  const superseded = new Set();
+  live.forEach(k => { if (SUPERSEDES[k]) superseded.add(SUPERSEDES[k]); });
+  live = live.filter(k => !superseded.has(k));
   if (!live.length) return { fair_value: null, weights_applied: {}, reason: 'no method produced a value' };
 
   const totalW = live.reduce((s, k) => s + w[k], 0);
@@ -324,6 +407,7 @@ function valuate(raw, taxFns) {
   const i = normaliseInputs(raw);
 
   const methods = {
+    asset_nav:    assetLevelNav(i),
     cap_rate_nav: capRateNav(i),
     nta:          ntaValue(i),
     ddm:          ddmValue(i),
@@ -409,7 +493,7 @@ function hurdleTest(v, targets = { irr: 0.12, yield: 0.07 }) {
 }
 
 module.exports = {
-  ENGINE_VERSION, BLEND_WEIGHTS,
+  ENGINE_VERSION, BLEND_WEIGHTS, SUPERSEDES,
   valuate, hurdleTest, blend, computeIrr, normaliseInputs,
-  capRateNav, ntaValue, ddmValue, ffoMultipleValue, impliedCapRate,
+  assetLevelNav, capRateNav, ntaValue, ddmValue, ffoMultipleValue, impliedCapRate,
 };

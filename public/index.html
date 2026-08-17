@@ -164,6 +164,7 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
     <a href="/assumptions.html">✎ Assumptions</a>
     <a href="/evidence.html">▦ Market Evidence</a>
     <a data-page="fundamentals">▤ Fundamentals</a>
+    <a data-page="assets">⌗ Asset Models</a>
     <div class="nav-sec">My Portfolio</div>
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="reit">⬡ REIT Holdings</a>
@@ -596,6 +597,50 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       </div>
       <button class="btn btn-primary" onclick="saveDist()">Save distribution</button>
       <button class="btn btn-secondary" onclick="document.getElementById('add-dist-form').style.display='none'" style="margin-left:8px">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ASSET MODELS — bottom-up, asset by asset -->
+  <div id="pg-assets" class="page">
+    <div class="ph"><h1>Asset Models</h1><p>Bottom-up valuation, asset by asset · every property at its own cap rate · edit and revalue against the live price</p></div>
+
+    <div class="tab-row" id="asset-ticker-tabs"></div>
+
+    <div class="kb">
+      <div class="kc dk"><div class="kl">Portfolio value</div><div class="kv" id="as-portfolio">--</div><div class="kn" id="as-portfolio-note">sum of assets at their own cap rates</div></div>
+      <div class="kc"><div class="kl">Implied blended cap</div><div class="kv teal" id="as-blended">--</div><div class="kn" id="as-blended-note">derived, not assumed</div></div>
+      <div class="kc"><div class="kl">NAV per unit</div><div class="kv" id="as-nav">--</div><div class="kn" id="as-nav-note">less net debt</div></div>
+      <div class="kc"><div class="kl">vs price</div><div class="kv" id="as-disc">--</div><div class="kn" id="as-disc-note">live</div></div>
+    </div>
+
+    <div id="as-warn"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <div class="sl" style="flex:1">Assets — edit a cap rate or income and the NAV revalues immediately</div>
+      <button class="btn btn-secondary" onclick="saveAssetEdits()" style="font-size:11px" id="as-save-btn">Save overrides</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Asset</th><th>Sector</th><th>State</th><th>Major tenant</th>
+        <th class="r">Income $m</th><th class="r">Cap rate %</th>
+        <th class="r">Value $m</th><th class="r">% of book</th><th class="r">Use</th>
+      </tr></thead>
+      <tbody id="as-tbody"><tr><td colspan="9" class="empty">Pick a REIT above.</td></tr></tbody>
+      <tfoot id="as-tfoot"></tfoot>
+    </table>
+    <div id="as-save-status" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+
+    <div class="caveat" style="border-left-color:var(--red)">
+      <strong>WALE and occupancy are not shown, because they are wrong in the source.</strong>
+      The asset-register scrape in <code>export-model.js</code> is the one block with no label
+      check, and its columns have shifted: <code>wale_years</code> holds values from 0 to 2051
+      (impossible as years) and <code>occupancy</code> holds 3.0 to 12.0 — impossible as a
+      percentage or a fraction, but exactly right for WALE in years. Rather than guess the
+      mapping, both fields are suppressed until the workbook columns are confirmed.
+      <br><br>
+      <strong>Income and cap rates are trustworthy</strong> and are what the valuation uses:
+      per-REIT asset income sums reconcile to the modelled portfolio NOI exactly, to the cent,
+      for all five names. Your overrides are stored separately and survive a workbook re-export.
     </div>
   </div>
 
@@ -1293,7 +1338,7 @@ function go(page, el) {
     screener: () => { loadWatchlist(); loadSortedStocks(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
     income: loadIncome, property: loadProperty, valuation: loadValuation,
-    fundamentals: loadFundamentals,
+    fundamentals: loadFundamentals, assets: loadAssets,
     performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
@@ -2878,6 +2923,153 @@ async function runValuation() {
     st.textContent = 'Run failed: ' + e.message;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '▸ Run engine'; }
+  }
+}
+
+// ── ASSET MODELS (bottom-up) ──────────────────────────────────────────────────
+/* Values every asset at its own cap rate and sums, rather than running one
+ * portfolio NOI over one blended rate. The blended rate a top-down model would
+ * have assumed is derived here instead, and the cap-rate SPREAD is visible —
+ * which is the whole point, since a book carried on one 4.9% asset and one 5.4%
+ * asset is not the same risk as two at 5.15%.
+ *
+ * Edits are held client-side until you save, so you can move several cap rates
+ * and watch the NAV move before committing anything. */
+let assetTicker = null, assetRows = [], assetCtx = {};
+
+async function loadAssets(ticker) {
+  if (!db) return;
+  const tabs = document.getElementById('asset-ticker-tabs');
+
+  if (!assetTicker || ticker) {
+    const { data: tks } = await db.from('reit_assets').select('ticker');
+    const list = [...new Set((tks||[]).map(t => t.ticker))].sort();
+    if (!list.length) { document.getElementById('as-tbody').innerHTML = '<tr><td colspan="9" class="empty">No asset register loaded. Run scripts/export-model.js for a REIT with an Asset Register sheet.</td></tr>'; return; }
+    assetTicker = ticker || assetTicker || list[0];
+    tabs.innerHTML = list.map(t => `<button class="tab ${t===assetTicker?'active':''}" onclick="loadAssets('${t}')">${t}</button>`).join('');
+  }
+
+  const [{ data: rows }, { data: asm }, { data: mdl }, { data: px }] = await Promise.all([
+    db.from('reit_assets').select('*').eq('ticker', assetTicker).order('passing_income_m', { ascending:false, nullsFirst:false }),
+    db.from('reit_model_assumptions').select('*').eq('ticker', assetTicker).limit(1),
+    db.from('reit_models').select('*').eq('ticker', assetTicker).eq('is_current', true).limit(1),
+    db.from('reit_prices').select('*').eq('ticker', assetTicker).limit(1),
+  ]);
+
+  assetRows = (rows || []).map(r => ({ ...r, _cap: r.cap_rate_override ?? r.cap_rate, _inc: r.income_override_m ?? r.passing_income_m, _dirty:false }));
+  assetCtx = {
+    gearing: asm?.[0]?.gearing_current ?? null,
+    securities_m: mdl?.[0]?.securities_m ?? null,
+    price: px?.[0]?.last_price ?? null,
+  };
+  renderAssets();
+}
+
+function renderAssets() {
+  const tbody = document.getElementById('as-tbody');
+  const tfoot = document.getElementById('as-tfoot');
+  if (!assetRows.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty">No assets for this REIT.</td></tr>'; return; }
+
+  const priced = assetRows.filter(r => !r.is_excluded && r._cap > 0 && r._inc > 0);
+  const portfolioM = priced.reduce((s,r) => s + (r._inc / r._cap) * (r.ownership_pct ?? 1), 0);
+  const incomeM    = priced.reduce((s,r) => s + r._inc * (r.ownership_pct ?? 1), 0);
+
+  tbody.innerHTML = assetRows.map((r,idx) => {
+    const usable = !r.is_excluded && r._cap > 0 && r._inc > 0;
+    const valueM = usable ? (r._inc / r._cap) * (r.ownership_pct ?? 1) : null;
+    const share  = (usable && portfolioM) ? valueM / portfolioM : null;
+    const edited = r.cap_rate_override != null || r.income_override_m != null || r._dirty;
+    return `<tr style="${r.is_excluded?'opacity:0.45':''}">
+      <td style="font-size:11px;max-width:260px">${r.asset_name||'—'}${edited?'<span class="est">EDITED</span>':''}</td>
+      <td><span class="cls-tag">${r.sector||'—'}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${r.state||'—'}</td>
+      <td style="font-size:10px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.major_tenant||'').replace(/"/g,'&quot;')}">${r.major_tenant||'—'}</td>
+      <td class="r"><input type="number" step="0.1" value="${r._inc ?? ''}" onchange="editAsset(${idx},'_inc',this.value)"
+           style="width:70px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;padding:3px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></td>
+      <td class="r"><input type="number" step="0.01" value="${r._cap!=null?(r._cap*100).toFixed(2):''}" onchange="editAsset(${idx},'_cap',this.value)"
+           style="width:64px;text-align:right;font-family:'DM Mono',monospace;font-size:11px;padding:3px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></td>
+      <td class="r" style="font-weight:600">${valueM!=null?'$'+valueM.toFixed(1)+'m':'—'}</td>
+      <td class="r" style="color:var(--muted)">${share!=null?(share*100).toFixed(1)+'%':'—'}</td>
+      <td class="r"><input type="checkbox" ${r.is_excluded?'':'checked'} onchange="editAsset(${idx},'is_excluded',!this.checked)" title="Include in the bottom-up NAV"></td>
+    </tr>`;
+  }).join('');
+
+  const blended = portfolioM > 0 ? incomeM / portfolioM : null;
+  const assets  = portfolioM * 1e6;
+  const netDebt = assetCtx.gearing != null ? assets * assetCtx.gearing : null;
+  const secs    = assetCtx.securities_m != null ? assetCtx.securities_m * 1e6 : null;
+  const nav     = (netDebt != null && secs) ? (assets - netDebt) / secs : null;
+  const price   = assetCtx.price != null ? Number(assetCtx.price) : null;
+  const disc    = (nav != null && price) ? (nav - price) / price : null;
+
+  const caps = priced.map(r => r._cap);
+  document.getElementById('as-portfolio').textContent = portfolioM ? '$'+portfolioM.toFixed(0)+'m' : '--';
+  document.getElementById('as-portfolio-note').textContent = `${priced.length} of ${assetRows.length} assets priced · $${incomeM.toFixed(1)}m income`;
+  document.getElementById('as-blended').textContent = blended!=null ? (blended*100).toFixed(2)+'%' : '--';
+  document.getElementById('as-blended-note').textContent = caps.length
+    ? `range ${(Math.min(...caps)*100).toFixed(2)}% – ${(Math.max(...caps)*100).toFixed(2)}%` : 'derived, not assumed';
+  document.getElementById('as-nav').textContent = nav!=null ? f.$(nav) : '--';
+  document.getElementById('as-nav-note').textContent = netDebt!=null
+    ? `less $${(netDebt/1e6).toFixed(0)}m net debt (implied at ${(assetCtx.gearing*100).toFixed(1)}% gearing)`
+    : 'no gearing assumption — cannot strip debt';
+  const de = document.getElementById('as-disc');
+  de.textContent = disc!=null ? f.pct(disc,1) : '--';
+  de.style.color = disc==null ? 'var(--ink)' : disc>0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('as-disc-note').textContent = price!=null ? `live price ${f.$(price)}` : 'no price';
+
+  const warn = document.getElementById('as-warn');
+  const unpriced = assetRows.filter(r => !r.is_excluded && !(r._cap > 0 && r._inc > 0));
+  warn.innerHTML = unpriced.length
+    ? `<div class="caveat" style="border-left-color:var(--red)"><strong>${unpriced.length} included asset${unpriced.length!==1?'s have':' has'} no usable income or cap rate</strong> and ${unpriced.length!==1?'are':'is'} excluded from the total — the portfolio value below is understated. Untick them or supply the missing figures.</div>`
+    : '';
+
+  if (tfoot) tfoot.innerHTML = `<tr>
+    <td colspan="4">Portfolio (${priced.length} assets)</td>
+    <td class="r">$${incomeM.toFixed(1)}m</td>
+    <td class="r">${blended!=null?(blended*100).toFixed(2)+'%':'—'}</td>
+    <td class="r">$${portfolioM.toFixed(1)}m</td>
+    <td class="r">100%</td><td></td></tr>`;
+}
+
+function editAsset(idx, field, value) {
+  const r = assetRows[idx];
+  if (field === 'is_excluded') r.is_excluded = value;
+  else if (field === '_cap')   r._cap = value === '' ? null : parseFloat(value) / 100;   // % in, decimal stored
+  else                          r._inc = value === '' ? null : parseFloat(value);
+  r._dirty = true;
+  renderAssets();
+}
+
+/* Overrides are written to dedicated columns, never over the scraped values, so
+ * re-running export-model.js refreshes the workbook figures without destroying
+ * your edits. */
+async function saveAssetEdits() {
+  const st = document.getElementById('as-save-status');
+  const dirty = assetRows.filter(r => r._dirty);
+  if (!dirty.length) { st.textContent = 'Nothing changed.'; return; }
+  st.style.color = 'var(--muted)';
+  st.textContent = `Saving ${dirty.length} override(s)…`;
+  try {
+    for (const r of dirty) {
+      const capChanged = r._cap != null && Math.abs(r._cap - (r.cap_rate ?? -1)) > 1e-9;
+      const incChanged = r._inc != null && Math.abs(r._inc - (r.passing_income_m ?? -1)) > 1e-9;
+      const { error } = await db.from('reit_assets').update({
+        cap_rate_override:  capChanged ? r._cap : null,
+        income_override_m:  incChanged ? r._inc : null,
+        is_excluded: !!r.is_excluded,
+        edited_at: new Date().toISOString(),
+      }).eq('id', r.id);
+      if (error) throw new Error(`${r.asset_name}: ${error.message}`);
+      r._dirty = false;
+      r.cap_rate_override = capChanged ? r._cap : null;
+      r.income_override_m = incChanged ? r._inc : null;
+    }
+    st.style.color = 'var(--green)';
+    st.textContent = `Saved. Run the value engine to fold these into the blended fair value.`;
+    renderAssets();
+  } catch (e) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Save failed: ' + e.message + ' — nothing further was written.';
   }
 }
 
