@@ -2473,12 +2473,28 @@ function renderIncomeHoldings() {
   const tot  = incomeRoll.total || incomeRoll.totals || {};
   const L    = LENS[incomeLens];
 
-  // ── hurdle scorecard — always post-tax, whatever lens is on screen ──────────
+  /* The hurdle verdict comes from the engine, not from re-deriving it here — it
+   * lives in a top-level `hurdle` object and is measured on MARKET value (the
+   * capital that could be redeployed today), with the on-cost view alongside.
+   * post_tax_irr lives there too, NOT in totals. */
+  const hz = incomeRoll.hurdle || {};
+  const ptIrr   = hz.post_tax_irr ?? tot.post_tax_irr ?? null;
+  const ptYield = hz.post_tax_yield ?? tot.post_tax_yield_on_market ?? tot.post_tax_yield_on_cost ?? null;
+
   const setTile = (id, txt) => { const el=document.getElementById(id); if (el) el.textContent = txt; };
   setTile('inc-total',   tot.cash_income     != null ? f.$k(tot.cash_income)     : '--');
   setTile('inc-posttax', tot.post_tax_income != null ? f.$k(tot.post_tax_income) : '--');
-  setTile('inc-ytc',     tot.post_tax_yield_on_cost != null ? f.pct0(tot.post_tax_yield_on_cost) : '--');
-  setTile('inc-irr',     tot.post_tax_irr    != null ? f.pct0(tot.post_tax_irr)  : '--');
+  setTile('inc-ytc',     ptYield != null ? f.pct0(ptYield) : '--');
+  setTile('inc-irr',     ptIrr   != null ? f.pct0(ptIrr)   : '--');
+
+  // Show BOTH denominators — on cost is what he paid, on market is what the
+  // capital is worth now, and they differ by 219bps here.
+  const yn = document.getElementById('inc-ytc-note');
+  if (yn) yn.textContent = tot.post_tax_yield_on_cost != null
+    ? `on market · ${f.pct0(tot.post_tax_yield_on_cost)} on cost`
+    : 'on market';
+  const irn = document.getElementById('inc-irr-note');
+  if (irn && ptIrr == null) irn.textContent = 'needs the value engine';
 
   // A missing figure is unknown, not a failure — badge stays neutral until we know.
   const badge = (id, val, target) => {
@@ -2490,8 +2506,15 @@ function renderIncomeHoldings() {
     el.textContent = pass ? `✓ ${(target*100).toFixed(0)}% target`
                           : `${Math.round(gap)}bps short`;
   };
-  badge('inc-ytc-badge', tot.post_tax_yield_on_cost, INCOME_TARGET_YIELD);
-  badge('inc-irr-badge', tot.post_tax_irr,           INCOME_TARGET_IRR);
+  badge('inc-ytc-badge', ptYield, INCOME_TARGET_YIELD);
+  badge('inc-irr-badge', ptIrr,   INCOME_TARGET_IRR);
+
+  const pt = document.getElementById('inc-posttax-note');
+  if (pt && tot.cash_income && tot.post_tax_income != null) {
+    const keep = tot.post_tax_income / tot.cash_income;
+    pt.textContent = `you keep ${(keep*100).toFixed(0)}c of every dollar` +
+      (tot.franking_credits ? ` · ${f.$k(tot.franking_credits)} franking credits` : ' · no franking credits');
+  }
 
   const gr = document.getElementById('inc-total-note');
   if (gr) gr.textContent = `forward 12m · cash${tot.gross_income!=null?' · '+f.$k(tot.gross_income)+' grossed up':''}`;
