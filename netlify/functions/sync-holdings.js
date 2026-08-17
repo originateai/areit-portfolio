@@ -41,13 +41,16 @@ function getDB() {
 
 // SPEC §2.2 — the canonical asset_class enum. Classification is DATA, never a
 // hardcoded ticker list in JS.
-const ASSET_CLASSES = ['equity', 'reit', 'lit', 'credit', 'bond_hybrid', 'property'];
+const ASSET_CLASSES = ['equity', 'reit', 'lic', 'lit', 'credit', 'bond_hybrid', 'property'];
 
-// `stocks.asset_class` currently stores 'lic' (listed investment company) where
-// the SPEC enum says 'lit'. They are the same cohort for every purpose this
-// platform has (SPEC §4.3 treats 'equity' and 'lit' identically), so the value
-// is normalised rather than left outside the enum. Flagged in the report.
-const CLASS_ALIASES = { lic: 'lit' };
+// 'lic' and 'lit' are BOTH first-class values, not spellings of one thing.
+// A LIC is a company: it pays franked dividends out of taxed profits. A LIT is a
+// trust: flow-through, typically unfranked. That is the opposite franking
+// treatment, so collapsing one into the other would hand the tax engine the
+// wrong default profile (SPEC §4.3) the first time a LIC is held. An earlier
+// revision aliased lic -> lit; the enum was widened instead. SPEC §2.2 updated
+// to match.
+const CLASS_ALIASES = {};
 
 const EPS = 1e-9;
 
@@ -58,7 +61,7 @@ const EPS = 1e-9;
  *
  * Worked examples:
  *   classify({asset_class:'reit'})                    -> 'reit'
- *   classify({asset_class:'lic'})                     -> 'lit'
+ *   classify({asset_class:'lic'})                     -> 'lic'  (NOT 'lit')
  *   classify({asset_class:null, is_reit:true})        -> 'reit'
  *   classify({asset_class:null, universe:'REIT'})     -> 'reit'
  *   classify({asset_class:null, universe:'ASX500'})   -> null   (no guess)

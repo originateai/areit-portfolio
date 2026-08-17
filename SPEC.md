@@ -258,9 +258,10 @@ Used when actual component data is absent, and **flagged as an assumption**:
 
 | Asset class | Default assumption |
 |---|---|
-| `credit`, `bond_hybrid` | 100% unfranked interest — worst-case, and correct for MXT/GCI/QRI |
+| `credit`, `bond_hybrid` | 100% unfranked interest — worst-case, and correct for MXT/GCI/QRI/PCI |
 | `reit` (landlord) | typical split with a tax-deferred portion; **estimate only, must be marked** |
-| `equity`, `lit` | franked per actual franking history |
+| `equity`, `lic` | franked per actual franking history (a LIC is a **company** — it pays out of taxed profits) |
+| `lit` | unfranked by default (a LIT is a flow-through **trust** — franking is the exception) |
 
 Where a real annual tax statement exists, it **always** supersedes the default.
 

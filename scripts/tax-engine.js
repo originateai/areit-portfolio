@@ -233,10 +233,19 @@ function defaultProfile(assetClass, overrides = {}) {
       p = { ...base, tax_deferred: 0.30, unfranked: 0.70, source: 'default:reit',
             assumption_note: 'ASSUMED 30% tax-deferred / 70% unfranked (SPEC §4.3, §4.5 illustration). Class-level default, not a figure for any named REIT. Supersede with the annual tax statement.' };
       break;
+    // A LIC is a COMPANY: it pays dividends out of taxed profits, so franking is
+    // the right default. A LIT is a TRUST: flow-through, so its distributions are
+    // typically UNfranked and belong in the case below. Putting both in the
+    // franked bucket would apply the optimistic assumption to the vehicle that
+    // does not earn it, and overstate its post-tax yield.
     case 'equity':
-    case 'lit':
+    case 'lic':
       p = { ...base, franked: 1, franking_level: 1, source: `default:${cls}`,
             assumption_note: 'ASSUMED 100% franked at 100% franking (SPEC §4.3 says use actual franking history). This is the OPTIMISTIC end — supply franking_level from history where known.' };
+      break;
+    case 'lit':
+      p = { ...base, unfranked: 1, source: 'default:lit',
+            assumption_note: 'ASSUMED 100% unfranked (SPEC §4.3). A LIT is a flow-through trust, so franking is the exception rather than the rule — supersede with actual franking history or the annual tax statement.' };
       break;
     case 'property':
       p = { ...base, path: 'property', source: 'default:property',

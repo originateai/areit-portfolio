@@ -547,7 +547,12 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <div class="lens-note" id="inc-lens-note">What actually hits your bank account.</div>
     </div>
 
-    <div class="sl">Holdings — every position, listed and direct property</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1">Holdings — every position, listed and direct property</div>
+      <button class="btn btn-secondary" onclick="syncHoldings()" style="font-size:11px" id="inc-sync-btn"
+              title="Re-derive holdings from the trade ledger. Manual rows are never overwritten.">↻ Refresh from trades</button>
+    </div>
+    <div id="inc-sync-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
     <table>
       <thead><tr>
         <th>Holding</th><th>Class</th><th class="r">Units</th><th class="r">Cost</th>
@@ -2402,6 +2407,41 @@ async function loadIncome() {
 /* Pull the forward-income rollup and lay it over the tax engine.
  * Both endpoints are additive: if either is unavailable the page still renders what
  * it has and says so, rather than showing a confident wrong number or a blank. */
+/* Re-derives `holdings` from the immutable `real_trades` ledger. `skipped_manual`
+ * and `unclassified` are surfaced loudly rather than logged: the first means a
+ * position is silently missing from the register, the second means the tax engine
+ * has no profile for it and will fall back to a worst-case assumption. */
+async function syncHoldings() {
+  const btn = document.getElementById('inc-sync-btn');
+  const st  = document.getElementById('inc-sync-status');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Syncing…'; }
+  st.style.color = 'var(--muted)';
+  st.textContent = 'Re-deriving holdings from the trade ledger…';
+  try {
+    const res = await fetch('/.netlify/functions/sync-holdings');
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || res.status);
+    const bits = [];
+    if (out.inserted?.length)  bits.push(`${out.inserted.length} added`);
+    if (out.updated?.length)   bits.push(`${out.updated.length} updated`);
+    if (out.unchanged?.length) bits.push(`${out.unchanged.length} unchanged`);
+    st.textContent = bits.join(' · ') || 'Nothing to do.';
+    const problems = [];
+    if (out.skipped_manual?.length)
+      problems.push(`SKIPPED (manual row already exists, so the ledger position is not registered): ${out.skipped_manual.join(', ')}`);
+    if (out.unclassified?.length)
+      problems.push(`UNCLASSIFIED (no asset_class — the tax engine will assume worst case): ${out.unclassified.join(', ')}`);
+    if (problems.length) { st.style.color = 'var(--red)'; st.textContent += '\n' + problems.join('\n'); }
+    st.style.whiteSpace = 'pre-wrap';
+    loadIncomeHoldings();
+  } catch (e) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Sync failed: ' + e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh from trades'; }
+  }
+}
+
 async function loadIncomeHoldings() {
   const tbody = document.getElementById('inc-holdings-tbody');
   if (!tbody) return;
@@ -2468,6 +2508,13 @@ function renderIncomeHoldings() {
     }
     if (tot.listed_income != null && tot.property_income) {
       notes.push(`Split: ${f.$k(tot.listed_income)} listed · ${f.$k(tot.property_income)} direct property.`);
+    }
+    /* Yield on market is computed only over rows that have BOTH income and a price.
+     * Quoting it without saying which slice of the book that covers is misleading —
+     * TCF has no price row, so it drops out of the denominator entirely. */
+    if (tot.cash_yield_on_market_basis != null && tot.equity_value &&
+        Math.abs(tot.cash_yield_on_market_basis - tot.equity_value) > 1) {
+      notes.push(`Yield on market covers ${f.$k(tot.cash_yield_on_market_basis)} of a ${f.$k(tot.equity_value)} book — holdings with no current price are excluded from that ratio.`);
     }
     const trailing = rows.filter(r => r.forward_source === 'trailing_12m').map(r => r.ticker);
     if (trailing.length) {
