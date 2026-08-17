@@ -151,12 +151,17 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
   <nav class="nav">
     <div class="nav-sec">Overview</div>
     <a class="active" data-page="dashboard">▣ Dashboard</a>
-    <div class="nav-sec">Strategies</div>
-    <a data-page="strategies">⚡ Strategy Engine</a>
-    <a data-page="screener">⬡ Stock Screener</a>
+    <div class="nav-sec">Signals</div>
     <a data-page="reit-trading">~ REIT Signals</a>
     <a data-page="credit-signals">◈ Credit Signals</a>
     <a data-page="bond-signals">⬡ Bond Signals</a>
+    <!-- CULLED 2026-08-17: Strategy Engine (momentum / mean reversion) and Stock
+         Screener (ASX500 equities) are momentum-trading surfaces, not income or
+         REIT tools. Their pages and loaders remain in this file and are still
+         reachable via go('strategies') / go('screener') — only the nav entries
+         are gone, so nothing is lost and the 0-7 scoring stack is untouched.
+         Delete the pages outright once you're sure you don't want them back. -->
+
     <div class="nav-sec">Value Layer</div>
     <a href="/value-layer.html">◉ Value Layer</a>
     <a href="/reit-value.html">◎ REIT Value</a>
@@ -171,12 +176,13 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
     <a data-page="reit">⬡ REIT Holdings</a>
     <a data-page="bond-holdings">~ Bond Holdings</a>
     <a data-page="credit-holdings">◈ Credit Holdings</a>
+    <a data-page="manage">✎ Manage Holdings</a>
     <a data-page="property">⌂ Direct Property</a>
     <a data-page="income">$ Income &amp; Tax</a>
     <a data-page="valuation">◈ Value Engine</a>
     <a data-page="performance">▲ Total Portfolio</a>
-    <div class="nav-sec">Model Portfolio</div>
-    <a data-page="model">◈ Model Portfolio</a>
+    <!-- CULLED 2026-08-17: Model Portfolio tracked paper trades off the equity
+         technical signals. Page and loader retained; nav entry removed. -->
     <div class="nav-sec">Market Data</div>
     <a data-page="morning">☀ Morning Scan</a>
     <a data-page="bond">~ Bond Market</a>
@@ -599,6 +605,38 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <button class="btn btn-primary" onclick="saveDist()">Save distribution</button>
       <button class="btn btn-secondary" onclick="document.getElementById('add-dist-form').style.display='none'" style="margin-left:8px">Cancel</button>
     </div>
+  </div>
+
+  <!-- MANAGE HOLDINGS -->
+  <div id="pg-manage" class="page">
+    <div class="ph"><h1>Manage Holdings</h1><p>Edit, reclassify, close or delete a position · asset class drives both the tax profile and the valuation method</p></div>
+
+    <div class="caveat">
+      <strong>Asset class is not cosmetic.</strong> It selects the default tax profile — a
+      <code>credit</code> holding is assumed 100% unfranked interest and taxed at your full
+      marginal rate, while <code>lic</code> is assumed franked. It also selects which valuation
+      methods apply. Misclassify a position and its post-tax yield will be wrong in a way that
+      looks entirely plausible.
+      <br><br>
+      Rows sourced from <code>trades</code> are rebuilt from the ledger whenever you press
+      <em>Refresh from trades</em>. To hand-edit one permanently, switch its source to
+      <code>manual</code> — sync then leaves it alone.
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+      <div class="sl" style="flex:1">Open and closed positions</div>
+      <button class="btn btn-secondary" onclick="addManualHolding()" style="font-size:11px">+ Add position</button>
+      <button class="btn btn-primary" onclick="saveManageEdits()" style="font-size:11px;margin-left:8px">Save changes</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Asset class</th><th class="r">Units</th><th class="r">Cost base $</th>
+        <th class="r">Brokerage $</th><th>Entry date</th><th>Account</th><th>Source</th>
+        <th class="r">Open</th><th></th>
+      </tr></thead>
+      <tbody id="mg-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <div id="mg-status" style="font-size:11px;margin-top:8px;white-space:pre-wrap"></div>
   </div>
 
   <!-- ANALYST COVERAGE -->
@@ -1406,7 +1444,7 @@ function go(page, el) {
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
-    income: loadIncome, property: loadProperty, valuation: loadValuation,
+    income: loadIncome, property: loadProperty, valuation: loadValuation, manage: loadManage,
     fundamentals: loadFundamentals, assets: loadAssets, analysts: loadAnalysts,
     performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
@@ -2992,6 +3030,118 @@ async function runValuation() {
     st.textContent = 'Run failed: ' + e.message;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '▸ Run engine'; }
+  }
+}
+
+// ── MANAGE HOLDINGS ───────────────────────────────────────────────────────────
+/* Edit / reclassify / close / delete. Changes are held client-side until saved so
+ * several edits commit together, and a delete always asks first — this is the
+ * register the entire income and tax stack reads from. */
+const ASSET_CLASSES = ['reit','equity','lic','lit','credit','bond_hybrid','property'];
+let manageRows = [], manageDeleted = [];
+
+async function loadManage() {
+  if (!db) return;
+  const { data, error } = await db.from('holdings').select('*').order('ticker');
+  const tb = document.getElementById('mg-tbody');
+  if (error) { tb.innerHTML = `<tr><td colspan="10" class="empty">${error.message}</td></tr>`; return; }
+  manageRows = (data||[]).map(r => ({ ...r, _dirty:false, _new:false }));
+  manageDeleted = [];
+  renderManage();
+}
+
+function renderManage() {
+  const tb = document.getElementById('mg-tbody');
+  if (!manageRows.length) { tb.innerHTML = '<tr><td colspan="10" class="empty">No holdings. Add one, or press “Refresh from trades” on the Income page.</td></tr>'; return; }
+  const inp = (i,f,v,type,w) => `<input type="${type}" value="${v??''}" onchange="editHolding(${i},'${f}',this.value)"
+     style="width:${w};font-family:'DM Mono',monospace;font-size:11px;padding:3px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)${type==='number'?';text-align:right':''}">`;
+
+  tb.innerHTML = manageRows.map((r,i) => `<tr style="${r.is_open?'':'opacity:0.5'}">
+    <td>${inp(i,'ticker',r.ticker,'text','64px')}</td>
+    <td><select onchange="editHolding(${i},'asset_class',this.value)"
+          style="font-size:11px;padding:3px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
+        <option value="" ${!r.asset_class?'selected':''}>— unset —</option>
+        ${ASSET_CLASSES.map(c=>`<option value="${c}" ${r.asset_class===c?'selected':''}>${c}</option>`).join('')}
+      </select>${!r.asset_class?'<span class="hz fail" title="No asset class — the tax engine will assume worst case">!</span>':''}</td>
+    <td class="r">${inp(i,'units',r.units,'number','80px')}</td>
+    <td class="r">${inp(i,'cost_base',r.cost_base,'number','96px')}</td>
+    <td class="r">${inp(i,'brokerage',r.brokerage,'number','72px')}</td>
+    <td>${inp(i,'entry_date',r.entry_date,'date','120px')}</td>
+    <td>${inp(i,'account',r.account,'text','80px')}</td>
+    <td><select onchange="editHolding(${i},'source',this.value)"
+          style="font-size:11px;padding:3px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
+        <option value="trades" ${r.source==='trades'?'selected':''}>trades</option>
+        <option value="manual" ${r.source==='manual'?'selected':''}>manual</option>
+      </select></td>
+    <td class="r"><input type="checkbox" ${r.is_open?'checked':''} onchange="editHolding(${i},'is_open',this.checked)" title="Open position"></td>
+    <td><a href="#" style="font-size:11px;color:var(--red)" onclick="deleteHolding(${i});return false">Delete</a></td>
+  </tr>`).join('') + (manageDeleted.length
+    ? `<tr><td colspan="10" style="font-size:11px;color:var(--red);background:var(--cream)">
+        ${manageDeleted.length} position(s) marked for deletion — press Save changes to commit, or reload to cancel.</td></tr>` : '');
+}
+
+function editHolding(i, field, value) {
+  const r = manageRows[i];
+  if (field === 'is_open') r.is_open = value;
+  else if (['units','cost_base','brokerage'].includes(field)) r[field] = value === '' ? null : parseFloat(value);
+  else if (field === 'ticker') r.ticker = (value||'').toUpperCase().trim();
+  else r[field] = value === '' ? null : value;
+  r._dirty = true;
+  if (field === 'is_open' || field === 'asset_class' || field === 'source') renderManage();
+}
+
+function addManualHolding() {
+  manageRows.unshift({ id:null, ticker:'', asset_class:null, units:null, cost_base:null,
+                       brokerage:0, entry_date:null, account:null, source:'manual',
+                       is_open:true, _dirty:true, _new:true });
+  renderManage();
+}
+
+function deleteHolding(i) {
+  const r = manageRows[i];
+  const label = r.ticker || 'this position';
+  if (!confirm(`Delete ${label} from the holdings register?\n\nThis does NOT touch real_trades — your trade ledger is untouched — but every income, tax and net-worth figure will change.`)) return;
+  if (r.id) manageDeleted.push(r.id);
+  manageRows.splice(i,1);
+  renderManage();
+}
+
+async function saveManageEdits() {
+  const st = document.getElementById('mg-status');
+  const dirty = manageRows.filter(r => r._dirty);
+  if (!dirty.length && !manageDeleted.length) { st.style.color='var(--muted)'; st.textContent='Nothing changed.'; return; }
+
+  const bad = dirty.filter(r => !r.ticker);
+  if (bad.length) { st.style.color='var(--red)'; st.textContent='Every position needs a ticker.'; return; }
+
+  st.style.color='var(--muted)';
+  st.textContent = `Saving ${dirty.length} change(s)${manageDeleted.length?` and ${manageDeleted.length} deletion(s)`:''}…`;
+  const problems = [];
+  try {
+    for (const id of manageDeleted) {
+      const { error } = await db.from('holdings').delete().eq('id', id);
+      if (error) problems.push(`delete ${id}: ${error.message}`);
+    }
+    for (const r of dirty) {
+      const payload = {
+        ticker: r.ticker, asset_class: r.asset_class || null,
+        units: r.units, cost_base: r.cost_base, brokerage: r.brokerage,
+        entry_date: r.entry_date || null, account: r.account || null,
+        source: r.source || 'manual', is_open: !!r.is_open,
+      };
+      const { error } = r.id
+        ? await db.from('holdings').update(payload).eq('id', r.id)
+        : await db.from('holdings').insert(payload);
+      if (error) problems.push(`${r.ticker}: ${error.message}`);
+      else r._dirty = false;
+    }
+    if (problems.length) { st.style.color='var(--red)'; st.textContent = 'Some changes failed:\n' + problems.join('\n'); }
+    else { st.style.color='var(--green)'; st.textContent = 'Saved. Income and tax figures will reflect this on next load.'; }
+    manageDeleted = [];
+    loadManage();
+  } catch (e) {
+    st.style.color='var(--red)';
+    st.textContent = 'Save failed: ' + e.message;
   }
 }
 
