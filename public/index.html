@@ -164,7 +164,12 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
 
     <div class="nav-sec">Value Layer</div>
     <a href="/value-layer.html">◉ Value Layer</a>
-    <a href="/reit-value.html">◎ REIT Value</a>
+    <!-- CULLED 2026-08-17: "REIT Value" (reit-value.html) was a discount table
+         built on v_discount_to_fair_value, which derives from the STALE Excel
+         reit_model_outputs.blended_value. The Value Engine page computes the same
+         discount live from valuation_runs and adds IRR and the hurdle test, so the
+         two showed DIFFERENT fair values for the same REIT off the same nav.
+         File retained and still reachable at /reit-value.html. -->
     <a href="/models.html">⬢ Models</a>
     <a href="/assumptions.html">✎ Assumptions</a>
     <a href="/evidence.html">▦ Market Evidence</a>
@@ -1389,33 +1394,50 @@ async function loadDashboard() {
   }
 }
 
-// REIT value layer — top discounts on the dashboard (links through to /reit-value.html).
-// Degrades quietly if the value-layer schema/grants aren't in place yet.
+/* Dashboard value card — reads `valuation_runs`, the LIVE engine.
+ *
+ * It used to read `v_discount_to_fair_value`, which derives from the Excel
+ * `reit_model_outputs.blended_value`. That meant the dashboard and the Value
+ * Engine page quoted DIFFERENT fair values for the same REIT, off the same nav,
+ * with no indication which was current — and the Excel figure is only refreshed
+ * when a workbook is re-exported. One engine, one number. */
 async function renderDashValue() {
   const el = document.getElementById('dash-value'); if (!el) return;
   try {
-    const { data, error } = await db.from('v_discount_to_fair_value').select('*');
+    const { data, error } = await db.from('valuation_runs').select('*').order('as_of',{ascending:false});
     if (error || !data || !data.length) {
-      el.innerHTML = `<div class="empty">No model values yet — set up the value layer, then see <a href="/reit-value.html" style="color:var(--teal);text-decoration:none">REIT Value →</a></div>`;
+      el.innerHTML = `<div class="empty">No valuation runs yet — open <a href="#" onclick="go('valuation',null);return false" style="color:var(--teal);text-decoration:none">Value Engine</a> and press Run engine.</div>`;
       return;
     }
-    const toPct = v => v==null?null:(Math.abs(v)<2?v*100:v);
-    const isBuy = r => { const v=r.buy_signal_value_layer;
-      if (v===true||v==='t'||v==='true'||v===1) return true;
-      if (v===false||v==='f'||v==='false'||v===0) return false;
-      return r.last_price!=null && r.buy_threshold!=null && parseFloat(r.last_price)<=parseFloat(r.buy_threshold); };
-    const rows = data.slice().sort((a,b)=>parseFloat(a.prem_disc_to_fair)-parseFloat(b.prem_disc_to_fair)).slice(0,5);
-    el.innerHTML = `<table><thead><tr><th>Ticker</th><th class="r">Last</th><th class="r">Fair value</th><th class="r">Disc/Prem</th><th class="r">Signal</th></tr></thead>
-      <tbody>${rows.map(r=>{ const pd=toPct(r.prem_disc_to_fair), buy=isBuy(r);
-        return `<tr class="clickable" title="Open the value dashboard" onclick="window.location.href='/reit-value.html'">
-        <td><span class="tkr">${r.ticker}</span></td>
-        <td class="r">${r.last_price!=null?'$'+parseFloat(r.last_price).toFixed(2):'--'}</td>
-        <td class="r">${r.blended_value!=null?'$'+parseFloat(r.blended_value).toFixed(2):'--'}</td>
-        <td class="r" style="color:${pd==null?'var(--muted)':pd<0?'var(--green)':'var(--red)'}">${pd==null?'--':(pd>=0?'+':'')+pd.toFixed(1)+'%'}</td>
-        <td class="r"><span style="display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:${buy?'#e7f4ec':'#f0ece2'};color:${buy?'var(--green)':'var(--muted)'}">${buy?'BUY':'WAIT'}</span></td></tr>`; }).join('')}</tbody></table>
-      <div style="margin-top:6px"><a href="/reit-value.html" style="color:var(--teal);text-decoration:none;font-size:12px">Open value dashboard →</a></div>`;
+    // Append-only table: collapse to the newest run per ticker.
+    const seen = new Set(), latest = [];
+    data.forEach(r => { if (!seen.has(r.ticker)) { seen.add(r.ticker); latest.push(r); } });
+
+    // Biggest discount first — most upside to our own fair value.
+    const rows = latest
+      .filter(r => r.discount_to_fair_value != null)
+      .sort((a,b) => b.discount_to_fair_value - a.discount_to_fair_value)
+      .slice(0,5);
+    if (!rows.length) { el.innerHTML = `<div class="empty">No priced valuations yet.</div>`; return; }
+
+    el.innerHTML = `<table><thead><tr><th>Ticker</th><th class="r">Last</th><th class="r">Fair value</th><th class="r">Disc/Prem</th><th class="r">Hurdle</th></tr></thead>
+      <tbody>${rows.map(r => {
+        const pd = r.discount_to_fair_value * 100;
+        // A one-method blend is book NTA, not a valuation — flag it here too, or
+        // the dashboard launders the weakest numbers into the most prominent slot.
+        const single = Object.keys(r.weights||{}).length === 1;
+        const hz = r.meets_hurdle == null ? '<span class="hz">—</span>'
+                 : r.meets_hurdle ? '<span class="hz pass">✓ both</span>'
+                 : '<span class="hz fail">below</span>';
+        return `<tr class="clickable" title="Open the Value Engine" onclick="go('valuation',null)">
+        <td><span class="tkr">${r.ticker}</span>${single?'<span class="est" title="NTA only — no assumptions row, so this is book NTA rather than a blended valuation">NTA</span>':''}</td>
+        <td class="r">${r.price!=null?'$'+parseFloat(r.price).toFixed(2):'--'}</td>
+        <td class="r"${single?' style="color:var(--muted)"':''}>${r.fair_value!=null?'$'+parseFloat(r.fair_value).toFixed(2):'--'}</td>
+        <td class="r" style="color:${single?'var(--muted)':pd>0?'var(--green)':'var(--red)'}">${(pd>=0?'+':'')+pd.toFixed(1)+'%'}</td>
+        <td class="r">${hz}</td></tr>`; }).join('')}</tbody></table>
+      <div style="margin-top:6px"><a href="#" onclick="go('valuation',null);return false" style="color:var(--teal);text-decoration:none;font-size:12px">Open Value Engine →</a></div>`;
   } catch (e) {
-    el.innerHTML = `<div class="empty">Value layer unavailable.</div>`;
+    el.innerHTML = `<div class="empty">Value engine unavailable.</div>`;
   }
 }
 
