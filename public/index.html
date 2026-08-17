@@ -741,17 +741,30 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
     <div id="val-run-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
     <table>
       <thead><tr>
-        <th>Ticker</th><th class="r">Price</th><th class="r">Fair value</th><th class="r">Disc/prem</th>
+        <th>Ticker</th><th class="r">Price</th><th class="r">Fair value</th><th>Basis</th><th class="r">Disc/prem</th>
         <th class="r">Yield</th><th class="r">IRR pre-tax</th><th class="r">IRR post-tax</th>
         <th>Hurdle</th><th>Engine</th><th>As of</th>
       </tr></thead>
-      <tbody id="val-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+      <tbody id="val-tbody"><tr><td colspan="11" class="empty">Loading…</td></tr></tbody>
     </table>
     <div class="caveat">
       <strong>The hurdle is a joint test.</strong> 12% IRR on a 3% yield is a growth stock, not
       passive income; 7% yield on a 4% IRR is capital erosion dressed as income. A row passes
       only when it clears <em>both</em>, measured post-tax. Where a valuation input is missing
       the cell reads <strong>—</strong> rather than a filled-in guess.
+      <br><br>
+      <strong>Check the Basis column before trusting a discount.</strong> Only REITs with a built
+      workbook have the cap-rate, discount-rate and multiple assumptions the other three methods
+      need. Without them the blend collapses to book NTA alone, which is the directors' cap rates
+      rather than the market's — those rows are greyed and produce the largest, least reliable
+      discounts on the page.
+      <br><br>
+      <strong>This engine does not agree with the workbooks, by design.</strong> Excel's
+      <em>blended value</em> is its equity DCF (they are identical in every stored row); this
+      engine blends four methods and weights NTA at 15%, which sits above DCF for every REIT
+      here. The engine therefore reads 5–17% higher on the five modelled names. That is a
+      methodology difference, not a reconciliation error — but it means the two numbers are not
+      interchangeable, and the workbook remains the more conservative of the pair.
     </div>
   </div>
 
@@ -2774,11 +2787,24 @@ async function loadValuation() {
                   r.yield_post_tax != null && r.yield_post_tax < INCOME_TARGET_YIELD ? ' + ' : '') +
                  (r.yield_post_tax != null && r.yield_post_tax < INCOME_TARGET_YIELD ? 'yield' : '')
                || 'below'}</span>`;
+    /* A blend of one method is not a blend. Four of these REITs have no
+     * assumptions row, so only NTA fires and the "fair value" is just book NTA —
+     * a much weaker claim than a blended valuation, and it produces the biggest
+     * discounts on the page. Say so in the row rather than letting the number
+     * borrow the credibility of a full valuation. */
+    const w = r.weights || {};
+    const used = Object.keys(w);
+    const single = used.length === 1;
+    const basis = used.length === 0 ? '—'
+      : single ? `<span class="hz fail" title="No assumptions row for this REIT, so cap-rate NAV, DDM and FFO multiple all skipped. This is book NTA, not a blended valuation.">${used[0].toUpperCase()} only</span>`
+      : `<span class="hz pass" title="${used.map(k=>`${k} ${(w[k]*100).toFixed(0)}%`).join(' · ')}">${used.length} methods</span>`;
+
     return `<tr class="clickable" onclick="openSignalDrawer('${r.ticker}')">
       <td style="font-weight:600"><span class="tkr">${r.ticker}</span></td>
       <td class="r">${price != null ? f.$(price) : '—'}</td>
-      <td class="r" style="font-weight:600">${r.fair_value != null ? f.$(r.fair_value) : '—'}</td>
-      <td class="r" style="color:${disc==null?'var(--muted)':disc>0?'var(--green)':'var(--red)'}">${disc != null ? f.pct(disc,1) : '—'}</td>
+      <td class="r" style="font-weight:600${single?';color:var(--muted)':''}">${r.fair_value != null ? f.$(r.fair_value) : '—'}</td>
+      <td>${basis}</td>
+      <td class="r" style="color:${disc==null||single?'var(--muted)':disc>0?'var(--green)':'var(--red)'}">${disc != null ? f.pct(disc,1) : '—'}</td>
       <td class="r">${r.yield_post_tax != null ? f.pct0(r.yield_post_tax) : '—'}</td>
       <td class="r">${r.irr_pre_tax  != null ? f.pct0(r.irr_pre_tax)  : '—'}</td>
       <td class="r" style="color:var(--teal);font-weight:600">${r.irr_post_tax != null ? f.pct0(r.irr_post_tax) : '—'}</td>
