@@ -2,6 +2,13 @@
 
 Context for Claude Code working in this repo. Read this first.
 
+> ## ⚠ READ `SPEC.md` BEFORE BUILDING
+> This file describes the platform **as it is**. `SPEC.md` is the **build contract**
+> — the objective (12% IRR / 7% yield, both **post-tax**), the canonical data model,
+> the units invariants, the three yield lenses, the tax overlay and the value engine.
+> **Where the two disagree, `SPEC.md` wins.** Any agent or session doing build work
+> reads `SPEC.md` in full first.
+
 ## What this is
 A personal ASX trading & research platform. Generates daily equity/REIT signals, tracks a model (paper) portfolio and a real portfolio, and emails a morning briefing. **This is a personal paper-trading tool — it is NOT a 360 Capital product. Do not put 360 Capital branding, logos, or the five-dot mark anywhere in it.** (The brand *colours* are reused, but unbranded.)
 
@@ -90,7 +97,20 @@ Two-level structure. Each asset class scored on **its own inputs** — no single
 - New tables needed: holdings, contract-note parses (built to the CommSec trade-confirmation layout), results-pack fundamentals (NTA/WACR/NPI/WALE/occupancy/hedging, point-in-time dated), `email_log` (exists).
 
 ## Design tokens
-Palette: sky `#00B0F0`, navy `#063D58`, ink `#00273E`, teal `#4B97B2`. Up `#1f8a4c`, down `#c0392b`. Font: Arial. Candles: brand-mono (sky up / ink down). No 360 Capital marks.
+Palette: sky `#00B0F0`, navy `#063D58`, ink `#00273E`, teal `#4B97B2`. Up `#1f8a4c`, down `#c0392b`. Candles: brand-mono (sky up / ink down). No 360 Capital marks.
+
+**Fonts — two different targets, do not mix them up:**
+- **The web app** (`public/*.html`) uses **`DM Sans`** for UI and **`DM Mono`** for
+  labels and numerics, with CSS variables `--teal --ink --paper --cream --rule --muted`.
+  Use the variables, never literal hex.
+- **The email template only** (`buildEmail` in `morning-scan.js`) uses **Arial**,
+  because it must stay Outlook-safe. Never put DM fonts in the email; never put
+  Arial in the app.
+
+Reusable component classes already in `public/index.html` — check before writing new CSS:
+`.ph` page header · `.kb/.kc/.kl/.kv/.kn` KPI tiles (`.dk` = dark) · `.sl` section label ·
+`.tab-row/.tab` · `.form-grid/.form-group` · `.btn.btn-primary/.btn-secondary` ·
+`.empty` · `.r` right-align.
 
 ## Outstanding bugs to watch
 - Watchlist 400 errors.

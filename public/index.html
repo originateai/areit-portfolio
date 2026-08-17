@@ -129,6 +129,19 @@ tfoot td.r{text-align:right}
 .tab-row{display:flex;gap:2px;margin-bottom:14px;border-bottom:1px solid var(--rule)}
 .tab{font-size:12px;padding:7px 14px;border:none;background:none;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab.active{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+
+/* ── Income & tax: hurdle badges, lens switch, caveats ──────────────────── */
+.hz{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.06em;padding:1px 5px;border-radius:2px;
+    background:var(--rule);color:var(--muted);margin-left:5px;vertical-align:middle;text-transform:none}
+.hz.pass{background:rgba(31,138,76,0.14);color:var(--green)}
+.hz.fail{background:rgba(192,57,43,0.12);color:var(--red)}
+.lens-note{font-size:11px;color:var(--muted);align-self:center;padding-right:2px;font-style:italic}
+.caveat{margin-top:10px;padding:10px 12px;border-left:2px solid var(--teal);background:var(--cream);
+        font-size:11px;line-height:1.55;color:var(--muted)}
+.caveat strong{color:var(--ink);font-weight:600}
+.est{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);opacity:0.75;margin-left:3px}
+tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)}
+.cls-tag{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -150,12 +163,15 @@ tfoot td.r{text-align:right}
     <a href="/models.html">⬢ Models</a>
     <a href="/assumptions.html">✎ Assumptions</a>
     <a href="/evidence.html">▦ Market Evidence</a>
+    <a data-page="fundamentals">▤ Fundamentals</a>
     <div class="nav-sec">My Portfolio</div>
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="reit">⬡ REIT Holdings</a>
     <a data-page="bond-holdings">~ Bond Holdings</a>
     <a data-page="credit-holdings">◈ Credit Holdings</a>
-    <a data-page="income">$ Income</a>
+    <a data-page="property">⌂ Direct Property</a>
+    <a data-page="income">$ Income &amp; Tax</a>
+    <a data-page="valuation">◈ Value Engine</a>
     <a data-page="performance">▲ Total Portfolio</a>
     <div class="nav-sec">Model Portfolio</div>
     <a data-page="model">◈ Model Portfolio</a>
@@ -496,17 +512,67 @@ tfoot td.r{text-align:right}
 
   <!-- INCOME TRACKER -->
   <div id="pg-income" class="page">
-    <div class="ph"><h1>Income Tracker</h1><p>Distributions received · Annualised yield · YTD income</p></div>
+    <div class="ph"><h1>Income &amp; Tax</h1><p>Total passive income across listed and direct property · cash / gross / post-tax lenses · progress against the 7% yield and 12% IRR hurdles</p></div>
+
+    <!-- HURDLE SCORECARD — the two targets that define the portfolio -->
     <div class="kb">
-      <div class="kc dk"><div class="kl">YTD Income</div><div class="kv" id="inc-ytd">$0</div></div>
-      <div class="kc"><div class="kl">Projected Annual</div><div class="kv teal" id="inc-proj">--</div></div>
-      <div class="kc"><div class="kl">Distributions</div><div class="kv" id="inc-cnt">0</div></div>
+      <div class="kc dk">
+        <div class="kl">Total passive income</div>
+        <div class="kv" id="inc-total">--</div>
+        <div class="kn" id="inc-total-note">forward 12m · cash</div>
+      </div>
+      <div class="kc">
+        <div class="kl">Post-tax income</div>
+        <div class="kv teal" id="inc-posttax">--</div>
+        <div class="kn" id="inc-posttax-note">after tax &amp; franking credits</div>
+      </div>
+      <div class="kc">
+        <div class="kl">Post-tax yield <span class="hz" id="inc-ytc-badge">7% target</span></div>
+        <div class="kv" id="inc-ytc">--</div>
+        <div class="kn" id="inc-ytc-note">on cost</div>
+      </div>
+      <div class="kc">
+        <div class="kl">Post-tax IRR <span class="hz" id="inc-irr-badge">12% target</span></div>
+        <div class="kv" id="inc-irr">--</div>
+        <div class="kn" id="inc-irr-note">portfolio weighted</div>
+      </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center">
+
+    <!-- THE THREE LENSES -->
+    <div class="tab-row" style="margin-top:14px">
+      <button class="tab active" onclick="setIncomeLens('cash',this)">Cash</button>
+      <button class="tab" onclick="setIncomeLens('gross',this)">Gross (incl. franking)</button>
+      <button class="tab" onclick="setIncomeLens('post_tax',this)">Post-tax</button>
+      <div style="flex:1"></div>
+      <div class="lens-note" id="inc-lens-note">What actually hits your bank account.</div>
+    </div>
+
+    <div class="sl">Holdings — every position, listed and direct property</div>
+    <table>
+      <thead><tr>
+        <th>Holding</th><th>Class</th><th class="r">Units</th><th class="r">Cost</th>
+        <th class="r">Value</th><th class="r">Income p.a.</th>
+        <th class="r">Yield on cost</th><th class="r">Yield on mkt</th>
+        <th class="r">Tax-def'd</th><th class="r">Franked</th><th>Source</th><th>Hurdle</th>
+      </tr></thead>
+      <tbody id="inc-holdings-tbody"><tr><td colspan="12" class="empty">Loading holdings…</td></tr></tbody>
+      <tfoot id="inc-holdings-tfoot"></tfoot>
+    </table>
+    <div id="inc-warn" style="display:none"></div>
+    <div class="caveat" id="inc-caveat">
+      <strong>Read this before comparing rows.</strong> Property yield is calculated on
+      <em>equity</em> and is therefore <strong>leveraged</strong> — it is comparable to a listed
+      yield as cash return, but <strong>not</strong> as risk. Tax figures are a modelling
+      estimate, not tax advice, and component splits are assumed from asset class until an
+      actual annual tax statement is loaded.
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px">
       <div class="sl" style="flex:1">Distributions received — cumulative per stock</div>
       <button class="btn btn-secondary" onclick="ingestDividends()" style="margin-left:12px;font-size:11px" id="inc-pull-btn">↻ Pull dividends (EODHD)</button>
       <button class="btn btn-secondary" onclick="showAddDist()" style="margin-left:8px;font-size:11px">+ Add distribution</button>
     </div>
+    <div id="inc-received-note" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
     <div id="inc-pull-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
     <table>
       <thead><tr>
@@ -525,6 +591,162 @@ tfoot td.r{text-align:right}
       </div>
       <button class="btn btn-primary" onclick="saveDist()">Save distribution</button>
       <button class="btn btn-secondary" onclick="document.getElementById('add-dist-form').style.display='none'" style="margin-left:8px">Cancel</button>
+    </div>
+  </div>
+
+  <!-- FUNDAMENTALS CAPTURE -->
+  <div id="pg-fundamentals" class="page">
+    <div class="ph"><h1>Fundamentals</h1><p>Point-in-time REIT fundamentals from results packs · dated to the announcement, never the balance date</p></div>
+    <div class="caveat" style="border-left-color:var(--red);margin-bottom:14px">
+      <strong>Release date is the whole point of this form.</strong> A fundamental dated to the
+      period end rather than the day the pack hit the market is look-ahead bias — it lets a
+      backtest trade on numbers nobody had yet, and every signal built on it becomes a
+      confident lie. The database rejects a release date on or before the balance date.
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1">Captured fundamentals</div>
+      <button class="btn btn-secondary" onclick="toggleFundForm()" style="font-size:11px">+ Capture results pack</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Period end</th><th>Released</th><th class="r">Months</th>
+        <th class="r">NTA</th><th class="r">WACR</th><th class="r">NPI</th><th class="r">Gearing</th>
+        <th class="r">ICR</th><th class="r">Occupancy</th><th class="r">WALE</th><th>Source</th>
+      </tr></thead>
+      <tbody id="fund-tbody"><tr><td colspan="12" class="empty">Loading…</td></tr></tbody>
+    </table>
+
+    <div id="fund-form" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--rule);background:var(--cream)">
+      <div class="sl">Capture results pack</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ticker</label><select id="fd-ticker"></select></div>
+        <div class="form-group"><label>Period end (balance date)</label><input id="fd-period" type="date"></div>
+        <div class="form-group"><label>Release date — ASX announcement</label><input id="fd-release" type="date" title="The day the pack was released to market. NOT the balance date."></div>
+        <div class="form-group"><label>Period length</label><select id="fd-months">
+          <option value="6">6 months (half-year)</option><option value="12">12 months (full year)</option>
+          <option value="3">3 months (quarter)</option></select></div>
+        <div class="form-group"><label>Source</label><select id="fd-source">
+          <option value="results_pack">Results pack</option><option value="annual_report">Annual report</option></select></div>
+      </div>
+      <div class="sl" style="margin-top:6px">Measures — leave blank if the pack doesn't state it</div>
+      <div class="form-grid">
+        <div class="form-group"><label>NTA $/unit</label><input id="fd-nta" type="number" step="0.01" placeholder="3.39"></div>
+        <div class="form-group"><label>WACR %</label><input id="fd-wacr" type="number" step="0.01" placeholder="6.25"></div>
+        <div class="form-group"><label>NPI $ (period)</label><input id="fd-npi" type="number" step="1000" placeholder="52400000" title="Net property income for THIS period. Unblocks the implied cap rate."></div>
+        <div class="form-group"><label>Gearing %</label><input id="fd-gearing" type="number" step="0.1" placeholder="33.5"></div>
+        <div class="form-group"><label>ICR ×</label><input id="fd-icr" type="number" step="0.1" placeholder="3.2"></div>
+        <div class="form-group"><label>Hedged %</label><input id="fd-hedge" type="number" step="0.1" placeholder="72"></div>
+        <div class="form-group"><label>Hedge maturity yrs</label><input id="fd-hedgemat" type="number" step="0.1" placeholder="2.4"></div>
+        <div class="form-group"><label>WALE yrs</label><input id="fd-wale" type="number" step="0.1" placeholder="6.1"></div>
+        <div class="form-group"><label>Occupancy %</label><input id="fd-occ" type="number" step="0.1" placeholder="97.4"></div>
+        <div class="form-group"><label>FFO $ (period)</label><input id="fd-ffo" type="number" step="1000"></div>
+        <div class="form-group"><label>AFFO $ (period)</label><input id="fd-affo" type="number" step="1000"></div>
+        <div class="form-group"><label>DPS $/unit (period)</label><input id="fd-dps" type="number" step="0.0001"></div>
+      </div>
+      <div id="fund-status" style="font-size:11px;margin-bottom:8px;white-space:pre-wrap"></div>
+      <button class="btn btn-secondary" onclick="saveFundamental(true)">Validate only</button>
+      <button class="btn btn-primary" onclick="saveFundamental(false)" style="margin-left:8px">Save</button>
+      <button class="btn btn-secondary" onclick="toggleFundForm()" style="margin-left:8px">Cancel</button>
+    </div>
+  </div>
+
+  <!-- DIRECT PROPERTY -->
+  <div id="pg-property" class="page">
+    <div class="ph"><h1>Direct Property</h1><p>Unlisted holdings · valuation, debt and net equity · rental income feeding the same passive-income total as listed positions</p></div>
+    <div class="kb">
+      <div class="kc dk"><div class="kl">Portfolio value</div><div class="kv" id="pr-value">--</div><div class="kn" id="pr-value-note">at latest valuation</div></div>
+      <div class="kc"><div class="kl">Debt</div><div class="kv" id="pr-debt">--</div><div class="kn">outstanding loans</div></div>
+      <div class="kc"><div class="kl">Net equity</div><div class="kv teal" id="pr-equity">--</div><div class="kn">value less debt</div></div>
+      <div class="kc"><div class="kl">Net income p.a.</div><div class="kv" id="pr-income">--</div><div class="kn">rent less costs less interest</div></div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1">Properties</div>
+      <button class="btn btn-secondary" onclick="togglePropForm()" style="font-size:11px">+ Add property</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Property</th><th>Type</th><th class="r">Own %</th><th class="r">Purchase</th>
+        <th class="r">Valuation</th><th class="r">Loan</th><th class="r">Net equity</th>
+        <th class="r">Net income</th><th class="r">Yield on equity</th><th>Valued</th>
+      </tr></thead>
+      <tbody id="prop-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <div class="caveat">
+      <strong>Valuations are stale by design.</strong> Direct property is marked once or twice a
+      year while listed positions mark continuously. The <em>Valued</em> column shows how old
+      the figure is — treat net equity as an estimate that ages, and the yield on equity as
+      <strong>leveraged</strong> and therefore not risk-comparable to a listed yield.
+    </div>
+
+    <div id="prop-form" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--rule);background:var(--cream)">
+      <div class="sl">Add property</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Name</label><input id="p-name" type="text" placeholder="12 Smith St"></div>
+        <div class="form-group"><label>Address</label><input id="p-address" type="text" placeholder="Suburb, State"></div>
+        <div class="form-group"><label>Type</label><select id="p-type">
+          <option value="residential">Residential</option><option value="commercial">Commercial</option>
+          <option value="industrial">Industrial</option><option value="retail">Retail</option>
+          <option value="land">Land</option><option value="other">Other</option></select></div>
+        <div class="form-group"><label>Ownership %</label><input id="p-own" type="number" step="0.1" value="100"></div>
+        <div class="form-group"><label>Purchase price</label><input id="p-price" type="number" step="1000" placeholder="750000"></div>
+        <div class="form-group"><label>Purchase date</label><input id="p-date" type="date"></div>
+        <div class="form-group"><label>Acquisition costs</label><input id="p-costs" type="number" step="100" placeholder="35000" title="Stamp duty, legals, inspection — part of your equity invested"></div>
+        <div class="form-group"><label>Capex to date</label><input id="p-capex" type="number" step="100" placeholder="0"></div>
+      </div>
+      <div class="sl" style="margin-top:6px">Current valuation</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Valuation</label><input id="p-val" type="number" step="1000" placeholder="820000"></div>
+        <div class="form-group"><label>Valuation date</label><input id="p-valdate" type="date"></div>
+        <div class="form-group"><label>Source</label><input id="p-valsrc" type="text" placeholder="bank val / agent appraisal"></div>
+      </div>
+      <div class="sl" style="margin-top:6px">Loan</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Lender</label><input id="p-lender" type="text" placeholder="CBA"></div>
+        <div class="form-group"><label>Balance</label><input id="p-loan" type="number" step="1000" placeholder="480000"></div>
+        <div class="form-group"><label>Interest rate %</label><input id="p-rate" type="number" step="0.01" placeholder="6.14"></div>
+        <div class="form-group"><label>Rate type</label><select id="p-ratetype">
+          <option value="variable">Variable</option><option value="fixed">Fixed</option></select></div>
+      </div>
+      <div class="sl" style="margin-top:6px">Annual cashflow</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Gross rent p.a.</label><input id="p-rent" type="number" step="100" placeholder="41600"></div>
+        <div class="form-group"><label>Agent fees</label><input id="p-fees" type="number" step="100" placeholder="2500"></div>
+        <div class="form-group"><label>Rates</label><input id="p-rates" type="number" step="100" placeholder="2200"></div>
+        <div class="form-group"><label>Insurance</label><input id="p-ins" type="number" step="100" placeholder="1400"></div>
+        <div class="form-group"><label>Strata</label><input id="p-strata" type="number" step="100" placeholder="0"></div>
+        <div class="form-group"><label>Maintenance</label><input id="p-maint" type="number" step="100" placeholder="1500"></div>
+        <div class="form-group"><label>Depreciation</label><input id="p-dep" type="number" step="100" placeholder="8000" title="Reduces taxable income without reducing cash — this is why post-tax property yield can exceed its cash yield"></div>
+        <div class="form-group"><label>Capital works</label><input id="p-cw" type="number" step="100" placeholder="2500" title="Div 43 deduction — same effect as depreciation"></div>
+      </div>
+      <div id="prop-save-status" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+      <button class="btn btn-primary" onclick="saveProperty()">Save property</button>
+      <button class="btn btn-secondary" onclick="togglePropForm()" style="margin-left:8px">Cancel</button>
+    </div>
+  </div>
+
+  <!-- VALUE ENGINE -->
+  <div id="pg-valuation" class="page">
+    <div class="ph"><h1>Value Engine</h1><p>In-platform fundamental valuation · blended fair value · IRR against the 12% hurdle, pre and post tax</p></div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1">Latest valuation run per REIT</div>
+      <button class="btn btn-secondary" onclick="runValuation()" style="font-size:11px" id="val-run-btn">▸ Run engine</button>
+    </div>
+    <div id="val-run-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th class="r">Price</th><th class="r">Fair value</th><th class="r">Disc/prem</th>
+        <th class="r">Yield</th><th class="r">IRR pre-tax</th><th class="r">IRR post-tax</th>
+        <th>Hurdle</th><th>Engine</th><th>As of</th>
+      </tr></thead>
+      <tbody id="val-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <div class="caveat">
+      <strong>The hurdle is a joint test.</strong> 12% IRR on a 3% yield is a growth stock, not
+      passive income; 7% yield on a 4% IRR is capital erosion dressed as income. A row passes
+      only when it clears <em>both</em>, measured post-tax. Where a valuation input is missing
+      the cell reads <strong>—</strong> rather than a filled-in guess.
     </div>
   </div>
 
@@ -1009,7 +1231,9 @@ function go(page, el) {
     model: loadModel, real: loadReal, strategies: loadStrategies,
     screener: () => { loadWatchlist(); loadSortedStocks(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
-    income: loadIncome, performance: loadPerformance, morning: loadMorning, bond: loadBond,
+    income: loadIncome, property: loadProperty, valuation: loadValuation,
+    fundamentals: loadFundamentals,
+    performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
   fns[page]?.();
@@ -2076,9 +2300,41 @@ async function loadREITSignals() {
   });
 }
 
-// ── INCOME TRACKER ────────────────────────────────────────────────────────────
+// ── INCOME & TAX ──────────────────────────────────────────────────────────────
+/* Three lenses on every yield (SPEC.md §4.5). They answer different questions and
+ * are always computed together, because showing one alone is exactly how an income
+ * investor talks himself into the wrong asset. At a 47% marginal rate a 7% unfranked
+ * interest distribution nets ~3.71% while a 7% fully-franked one nets ~5.30% — an
+ * identical headline and 159bp apart after tax.
+ *
+ * The 7% portfolio target is measured POST-TAX (SPEC.md §0), so the hurdle badges
+ * always read from the post-tax figure regardless of which lens is on screen. */
+const INCOME_TARGET_YIELD = 0.07;
+const INCOME_TARGET_IRR   = 0.12;
+
+let incomeLens = 'cash';
+let incomeRoll = null;          // cached rollup payload from income-rollup + tax-rollup
+
+const LENS = {
+  cash:     { note:'What actually hits your bank account.',
+              inc:'cash_income',     yc:'cash_yield_on_cost',     ym:'cash_yield_on_market' },
+  gross:    { note:'Cash plus franking credits — before your marginal rate is applied.',
+              inc:'gross_income',    yc:'gross_yield_on_cost',    ym:'gross_yield_on_market' },
+  post_tax: { note:'What you actually keep. This is the lens the 7% target is measured on.',
+              inc:'post_tax_income', yc:'post_tax_yield_on_cost', ym:'post_tax_yield_on_market' }
+};
+
+function setIncomeLens(lens, el) {
+  incomeLens = lens;
+  document.querySelectorAll('#pg-income > .tab-row .tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('inc-lens-note').textContent = LENS[lens].note;
+  renderIncomeHoldings();
+}
+
 async function loadIncome() {
   if (!db) return;
+  loadIncomeHoldings();
   const { data: dists } = await db.from('distributions').select('*');
   const tbody = document.getElementById('dist-tbody');
   tbody.innerHTML = '';
@@ -2137,10 +2393,447 @@ async function loadIncome() {
     });
   });
 
-  document.getElementById('inc-ytd').textContent = f.$k(ytd);
-  document.getElementById('inc-cnt').textContent = dists.length;
-  const projEl = document.getElementById('inc-proj');
-  if (projEl) projEl.textContent = f.$k(grandTotal);  // lifetime income received to date
+  // Received-to-date is history, not forward income — it belongs with the ledger,
+  // not in the hurdle scorecard, which is forward-looking by definition.
+  const st = document.getElementById('inc-received-note');
+  if (st) st.textContent = `${dists.length} distribution${dists.length!==1?'s':''} · ${f.$k(ytd)} received this calendar year · ${f.$k(grandTotal)} lifetime`;
+}
+
+/* Pull the forward-income rollup and lay it over the tax engine.
+ * Both endpoints are additive: if either is unavailable the page still renders what
+ * it has and says so, rather than showing a confident wrong number or a blank. */
+async function loadIncomeHoldings() {
+  const tbody = document.getElementById('inc-holdings-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="12" class="empty">Calculating forward income…</td></tr>';
+  try {
+    const res  = await fetch('/.netlify/functions/tax-rollup');
+    if (!res.ok) throw new Error('rollup unavailable (' + res.status + ')');
+    incomeRoll = await res.json();
+  } catch (e) {
+    incomeRoll = null;
+    tbody.innerHTML = `<tr><td colspan="12" class="empty">Income rollup unavailable — ${e.message}.<br>
+      <span style="font-size:10px">The distribution ledger below is unaffected.</span></td></tr>`;
+    ['inc-total','inc-posttax','inc-ytc','inc-irr'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.textContent = '--';
+    });
+    return;
+  }
+  renderIncomeHoldings();
+}
+
+function renderIncomeHoldings() {
+  const tbody = document.getElementById('inc-holdings-tbody');
+  const tfoot = document.getElementById('inc-holdings-tfoot');
+  if (!tbody || !incomeRoll) return;
+
+  // The pre-tax rollup returns `total`; the tax overlay may wrap it as `totals`.
+  // Accept either rather than silently rendering an empty scorecard.
+  const rows = incomeRoll.holdings || [];
+  const tot  = incomeRoll.total || incomeRoll.totals || {};
+  const L    = LENS[incomeLens];
+
+  // ── hurdle scorecard — always post-tax, whatever lens is on screen ──────────
+  const setTile = (id, txt) => { const el=document.getElementById(id); if (el) el.textContent = txt; };
+  setTile('inc-total',   tot.cash_income     != null ? f.$k(tot.cash_income)     : '--');
+  setTile('inc-posttax', tot.post_tax_income != null ? f.$k(tot.post_tax_income) : '--');
+  setTile('inc-ytc',     tot.post_tax_yield_on_cost != null ? f.pct0(tot.post_tax_yield_on_cost) : '--');
+  setTile('inc-irr',     tot.post_tax_irr    != null ? f.pct0(tot.post_tax_irr)  : '--');
+
+  // A missing figure is unknown, not a failure — badge stays neutral until we know.
+  const badge = (id, val, target) => {
+    const el = document.getElementById(id); if (!el) return;
+    if (val == null) { el.className = 'hz'; el.textContent = (target*100).toFixed(0)+'% target'; return; }
+    const pass = val >= target;
+    el.className = 'hz ' + (pass ? 'pass' : 'fail');
+    const gap = Math.abs(val - target) * 10000;
+    el.textContent = pass ? `✓ ${(target*100).toFixed(0)}% target`
+                          : `${Math.round(gap)}bps short`;
+  };
+  badge('inc-ytc-badge', tot.post_tax_yield_on_cost, INCOME_TARGET_YIELD);
+  badge('inc-irr-badge', tot.post_tax_irr,           INCOME_TARGET_IRR);
+
+  const gr = document.getElementById('inc-total-note');
+  if (gr) gr.textContent = `forward 12m · cash${tot.gross_income!=null?' · '+f.$k(tot.gross_income)+' grossed up':''}`;
+
+  /* An understated total is far more dangerous than a missing one, because it looks
+   * like an answer. If any open holding has no forward income the headline excludes
+   * it, and that has to be visible on the page — not buried in a JSON warning. */
+  const warn = document.getElementById('inc-warn');
+  if (warn) {
+    const missing = tot.holdings_missing_income || [];
+    const notes = [];
+    if (missing.length) {
+      notes.push(`<strong>Headline total is understated.</strong> ${missing.length} open holding${missing.length!==1?'s have':' has'} no forward distribution from any source (${missing.join(', ')}) and ${missing.length!==1?'are':'is'} excluded from the total — shown as <strong>—</strong> rather than counted as zero.`);
+    }
+    if (tot.listed_income != null && tot.property_income) {
+      notes.push(`Split: ${f.$k(tot.listed_income)} listed · ${f.$k(tot.property_income)} direct property.`);
+    }
+    const trailing = rows.filter(r => r.forward_source === 'trailing_12m').map(r => r.ticker);
+    if (trailing.length) {
+      notes.push(`${trailing.join(', ')} ${trailing.length!==1?'use':'uses'} a <em>trailing</em> 12-month actual as the forward estimate — no model and no published forecast.`);
+    }
+    warn.innerHTML = notes.length ? `<div class="caveat" style="border-left-color:var(--red)">${notes.join('<br>')}</div>` : '';
+    warn.style.display = notes.length ? 'block' : 'none';
+  }
+
+  // ── holdings ───────────────────────────────────────────────────────────────
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="12" class="empty">No open holdings yet. Record a trade or add a property to populate this.</td></tr>';
+    if (tfoot) tfoot.innerHTML = '';
+    return;
+  }
+
+  // Biggest income contributors first — that is the question this page answers.
+  const sorted = [...rows].sort((a,b) => (b[L.inc]||0) - (a[L.inc]||0));
+
+  tbody.innerHTML = sorted.map(r => {
+    const isProp = r.asset_class === 'property';
+    const yc = r[L.yc], ym = r[L.ym];
+    // Hurdle is judged post-tax on cost, per SPEC.md §0 — never on the displayed lens.
+    const ptyc = r.post_tax_yield_on_cost;
+    const hz = ptyc == null ? '<span class="hz">—</span>'
+             : ptyc >= INCOME_TARGET_YIELD ? '<span class="hz pass">✓ 7%</span>'
+             : `<span class="hz fail">${Math.round((INCOME_TARGET_YIELD-ptyc)*10000)}bps</span>`;
+    const est = r.is_estimate ? '<span class="est" title="Tax components assumed from asset class — no annual tax statement loaded">EST</span>' : '';
+    return `<tr class="${isProp?'':'clickable'}" ${isProp?'':`onclick="openSignalDrawer('${r.ticker}')"`}>
+      <td style="font-weight:600">${isProp ? (r.name||'Property') : `<span class="tkr">${r.ticker}</span>`}</td>
+      <td><span class="cls-tag">${r.asset_class||'—'}</span></td>
+      <td class="r">${r.units!=null?Math.round(r.units).toLocaleString():'—'}</td>
+      <td class="r">${r.equity_invested!=null?f.$k(r.equity_invested):'—'}</td>
+      <td class="r">${r.equity_value!=null?f.$k(r.equity_value):'—'}</td>
+      <td class="r" style="font-weight:600">${r[L.inc]!=null?f.$k(r[L.inc]):'—'}${est}</td>
+      <td class="r" style="color:var(--teal);font-weight:600">${yc!=null?f.pct0(yc):'—'}</td>
+      <td class="r">${ym!=null?f.pct0(ym):'—'}</td>
+      <td class="r">${r.tax_deferred_pct!=null?f.pct0(r.tax_deferred_pct,0):'—'}</td>
+      <td class="r">${r.franked_pct!=null?f.pct0(r.franked_pct,0):'—'}</td>
+      <td style="font-size:10px;color:var(--muted)" title="${(r.forward_source_detail||'').replace(/"/g,'&quot;')}">${r.forward_source||'—'}</td>
+      <td>${hz}</td>
+    </tr>`;
+  }).join('');
+
+  if (tfoot) {
+    tfoot.innerHTML = `<tr>
+      <td colspan="3">Portfolio</td>
+      <td class="r">${tot.equity_invested!=null?f.$k(tot.equity_invested):'—'}</td>
+      <td class="r">${tot.equity_value!=null?f.$k(tot.equity_value):'—'}</td>
+      <td class="r">${tot[L.inc]!=null?f.$k(tot[L.inc]):'—'}</td>
+      <td class="r" style="color:var(--teal)">${tot[L.yc]!=null?f.pct0(tot[L.yc]):'—'}</td>
+      <td class="r">${tot[L.ym]!=null?f.pct0(tot[L.ym]):'—'}</td>
+      <td colspan="4"></td>
+    </tr>`;
+  }
+}
+
+// ── DIRECT PROPERTY ───────────────────────────────────────────────────────────
+/* Property is deliberately NOT a row in `holdings` with a fake ticker (SPEC.md §2.3).
+ * It is levered, valued once or twice a year rather than continuously, and carries its
+ * own cashflows — so it gets its own tables and its equity is reconciled to listed
+ * positions only at the income layer, via cash-on-equity. */
+function togglePropForm() {
+  const el = document.getElementById('prop-form');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+const daysSince = d => d ? Math.round((Date.now() - new Date(d).getTime()) / 86400000) : null;
+
+async function loadProperty() {
+  if (!db) return;
+  const tbody = document.getElementById('prop-tbody');
+  const { data: props, error } = await db.from('property_holdings').select('*').eq('is_open', true);
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">Property tables not available yet — ${error.message}</td></tr>`;
+    return;
+  }
+  if (!props?.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">No properties recorded. Click “Add property” to include direct holdings in your passive-income total.</td></tr>';
+    ['pr-value','pr-debt','pr-equity','pr-income'].forEach(id => document.getElementById(id).textContent = '--');
+    return;
+  }
+
+  // ownership_pct is stored as a DECIMAL FRACTION (1 = 100%) per SPEC.md §1.3 and
+  // the migration's column comment. The form collects a human percentage and
+  // converts on save; everything below works in fractions.
+  const ids = props.map(p => p.id);
+  const [{ data: vals }, { data: loans }, { data: cfs }] = await Promise.all([
+    db.from('property_valuations').select('*').in('property_id', ids).order('valuation_date', { ascending:false }),
+    db.from('property_loans').select('*').in('property_id', ids).order('balance_date', { ascending:false }),
+    db.from('property_cashflows').select('*').in('property_id', ids).order('period_end', { ascending:false })
+  ]);
+
+  // Latest-per-property. Ordered desc above, so first seen wins.
+  const latest = (arr, key) => { const m={}; (arr||[]).forEach(r => { if (!(r.property_id in m)) m[r.property_id]=r; }); return m; };
+  const vMap = latest(vals), lMap = latest(loans), cMap = latest(cfs);
+
+  let tV=0, tD=0, tI=0, anyMissing=false;
+  tbody.innerHTML = props.map(p => {
+    const own = p.ownership_pct ?? 1;
+    const v = vMap[p.id], l = lMap[p.id], c = cMap[p.id];
+    const value = v?.valuation != null ? parseFloat(v.valuation) * own : null;
+    const debt  = l?.balance   != null ? parseFloat(l.balance) : null;
+    const equity = (value != null && debt != null) ? value - debt : null;
+
+    let income = null;
+    if (c) {
+      const costs = ['agent_fees','rates','insurance','strata','maintenance','other_costs']
+        .reduce((s,k) => s + parseFloat(c[k] || 0), 0);
+      income = (parseFloat(c.gross_rent || 0) - costs - parseFloat(c.interest_paid || 0)) * own;
+    }
+    const yoe = (income != null && equity) ? income / equity : null;
+
+    if (value != null) tV += value; else anyMissing = true;
+    if (debt  != null) tD += debt;
+    if (income!= null) tI += income;
+
+    const age = daysSince(v?.valuation_date);
+    const ageTxt = age == null ? '—'
+      : age > 365 ? `<span style="color:var(--red)">${Math.round(age/30)}mo ago</span>`
+      : age > 180 ? `<span style="color:var(--muted)">${Math.round(age/30)}mo ago</span>`
+      : `${age}d ago`;
+
+    return `<tr>
+      <td style="font-weight:600">${p.name || '—'}<div style="font-size:10px;color:var(--muted)">${p.address||''}</div></td>
+      <td><span class="cls-tag">${p.property_type||'—'}</span></td>
+      <td class="r">${p.ownership_pct != null ? (p.ownership_pct*100).toFixed(p.ownership_pct*100 % 1 ? 1 : 0) + '%' : '—'}</td>
+      <td class="r">${p.purchase_price != null ? f.$k(p.purchase_price) : '—'}</td>
+      <td class="r">${value != null ? f.$k(value) : '—'}</td>
+      <td class="r">${debt  != null ? f.$k(debt)  : '—'}</td>
+      <td class="r" style="font-weight:600">${equity != null ? f.$k(equity) : '—'}</td>
+      <td class="r">${income != null ? f.$k(income) : '—'}</td>
+      <td class="r" style="color:var(--teal);font-weight:600">${yoe != null ? f.pct0(yoe) : '—'}</td>
+      <td style="font-size:11px">${ageTxt}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('pr-value').textContent  = tV ? f.$k(tV) : '--';
+  document.getElementById('pr-debt').textContent   = tD ? f.$k(tD) : '--';
+  document.getElementById('pr-equity').textContent = (tV||tD) ? f.$k(tV - tD) : '--';
+  document.getElementById('pr-income').textContent = tI ? f.$k(tI) : '--';
+  document.getElementById('pr-value-note').textContent =
+    anyMissing ? 'at latest valuation · some unvalued' : 'at latest valuation';
+}
+
+/* Writes across four tables. Deliberately sequential and fail-loud: a property that
+ * saved but whose loan silently didn't would overstate net equity by the loan balance,
+ * which is exactly the class of quiet wrongness this platform must not have. */
+async function saveProperty() {
+  if (!db) return;
+  const st = document.getElementById('prop-save-status');
+  const num = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  const txt = id => document.getElementById(id).value || null;
+
+  if (!txt('p-name')) { st.textContent = 'Name is required.'; return; }
+  st.textContent = 'Saving…';
+
+  try {
+    const { data: prop, error: e1 } = await db.from('property_holdings').insert({
+      name: txt('p-name'), address: txt('p-address'), property_type: txt('p-type'),
+      // form collects a human percentage; column is a decimal fraction (SPEC.md §1.3)
+      ownership_pct: num('p-own') != null ? num('p-own')/100 : 1,
+      purchase_price: num('p-price'), purchase_date: txt('p-date'),
+      acquisition_costs: num('p-costs'), capex_to_date: num('p-capex'), is_open: true
+    }).select().single();
+    if (e1) throw new Error('property: ' + e1.message);
+
+    const pid = prop.id;
+    if (num('p-val') != null) {
+      const { error } = await db.from('property_valuations').insert({
+        property_id: pid, valuation: num('p-val'),
+        valuation_date: txt('p-valdate') || new Date().toISOString().slice(0,10),
+        source: txt('p-valsrc'), is_estimate: !txt('p-valsrc')
+      });
+      if (error) throw new Error('valuation: ' + error.message);
+    }
+    if (num('p-loan') != null) {
+      const { error } = await db.from('property_loans').insert({
+        property_id: pid, lender: txt('p-lender'), balance: num('p-loan'),
+        interest_rate: num('p-rate') != null ? num('p-rate')/100 : null,   // stored as a decimal, SPEC.md §1.3
+        rate_type: txt('p-ratetype'), balance_date: new Date().toISOString().slice(0,10)
+      });
+      if (error) throw new Error('loan: ' + error.message);
+    }
+    if (num('p-rent') != null) {
+      const today = new Date();
+      const rate = num('p-rate') != null ? num('p-rate')/100 : 0;
+      const { error } = await db.from('property_cashflows').insert({
+        property_id: pid,
+        period_start: new Date(today.getFullYear(), 0, 1).toISOString().slice(0,10),
+        period_end:   new Date(today.getFullYear(), 11, 31).toISOString().slice(0,10),
+        gross_rent: num('p-rent'), agent_fees: num('p-fees'), rates: num('p-rates'),
+        insurance: num('p-ins'), strata: num('p-strata'), maintenance: num('p-maint'),
+        depreciation: num('p-dep'), capital_works: num('p-cw'),
+        interest_paid: num('p-loan') != null ? num('p-loan') * rate : null
+      });
+      if (error) throw new Error('cashflow: ' + error.message);
+    }
+
+    st.textContent = 'Saved.';
+    togglePropForm();
+    loadProperty();
+  } catch (e) {
+    st.textContent = 'Save failed — ' + e.message + '. Nothing further was written.';
+  }
+}
+
+// ── VALUE ENGINE ──────────────────────────────────────────────────────────────
+async function loadValuation() {
+  if (!db) return;
+  const tbody = document.getElementById('val-tbody');
+  const { data, error } = await db.from('valuation_runs').select('*').order('as_of', { ascending:false });
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">Valuation runs not available yet — ${error.message}</td></tr>`;
+    return;
+  }
+  // Append-only table (SPEC.md §5.5) — collapse to the newest run per ticker.
+  const seen = new Set(), rows = [];
+  (data||[]).forEach(r => { if (!seen.has(r.ticker)) { seen.add(r.ticker); rows.push(r); } });
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">No valuation runs yet. Click “Run engine”.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const price = r.inputs?.price ?? null;
+    const disc = (price && r.fair_value) ? (r.fair_value - price) / price : null;
+    const hz = r.meets_hurdle == null ? '<span class="hz">—</span>'
+             : r.meets_hurdle ? '<span class="hz pass">✓ both</span>'
+             : `<span class="hz fail">${
+                 (r.irr_post_tax != null && r.irr_post_tax < INCOME_TARGET_IRR ? 'IRR' : '') +
+                 (r.irr_post_tax != null && r.irr_post_tax < INCOME_TARGET_IRR &&
+                  r.yield_post_tax != null && r.yield_post_tax < INCOME_TARGET_YIELD ? ' + ' : '') +
+                 (r.yield_post_tax != null && r.yield_post_tax < INCOME_TARGET_YIELD ? 'yield' : '')
+               || 'below'}</span>`;
+    return `<tr class="clickable" onclick="openSignalDrawer('${r.ticker}')">
+      <td style="font-weight:600"><span class="tkr">${r.ticker}</span></td>
+      <td class="r">${price != null ? f.$(price) : '—'}</td>
+      <td class="r" style="font-weight:600">${r.fair_value != null ? f.$(r.fair_value) : '—'}</td>
+      <td class="r" style="color:${disc==null?'var(--muted)':disc>0?'var(--green)':'var(--red)'}">${disc != null ? f.pct(disc,1) : '—'}</td>
+      <td class="r">${r.yield_post_tax != null ? f.pct0(r.yield_post_tax) : '—'}</td>
+      <td class="r">${r.irr_pre_tax  != null ? f.pct0(r.irr_pre_tax)  : '—'}</td>
+      <td class="r" style="color:var(--teal);font-weight:600">${r.irr_post_tax != null ? f.pct0(r.irr_post_tax) : '—'}</td>
+      <td>${hz}</td>
+      <td style="font-size:10px;color:var(--muted)">${r.engine_version||'—'}</td>
+      <td style="font-size:11px">${r.as_of||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function runValuation() {
+  const btn = document.getElementById('val-run-btn');
+  const st  = document.getElementById('val-run-status');
+  if (btn) { btn.disabled = true; btn.textContent = '▸ Running…'; }
+  st.textContent = 'Running the valuation engine across modelled REITs…';
+  try {
+    const res = await fetch('/.netlify/functions/run-valuation', { method:'POST' });
+    const out = await res.json().catch(() => ({}));
+    st.textContent = out.message || `Done — ${out.runs||0} valuation run(s) written.`;
+    loadValuation();
+  } catch (e) {
+    st.textContent = 'Run failed: ' + e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▸ Run engine'; }
+  }
+}
+
+// ── FUNDAMENTALS CAPTURE ──────────────────────────────────────────────────────
+/* Writes go through ingest-fundamentals.js on the service role, never straight to
+ * the table: the anon key's write grants on reit_fundamentals were deliberately
+ * revoked so the release-date and range validation cannot be bypassed from a
+ * browser console. The form collects human percentages and divides by 100 before
+ * POST, because every rate in the database is a decimal fraction (SPEC.md §1.3). */
+function toggleFundForm() {
+  const el = document.getElementById('fund-form');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadFundamentals() {
+  if (!db) return;
+  const tbody = document.getElementById('fund-tbody');
+
+  // REIT picker, driven by data rather than a hardcoded ticker list (SPEC.md §2.2).
+  const sel = document.getElementById('fd-ticker');
+  if (sel && !sel.options.length) {
+    const { data: reits } = await db.from('stocks').select('ticker,name')
+      .eq('asset_class','reit').order('ticker');
+    sel.innerHTML = (reits||[]).map(r => `<option value="${r.ticker}">${r.ticker} — ${r.name||''}</option>`).join('');
+  }
+
+  const { data, error } = await db.from('reit_fundamentals').select('*')
+    .order('release_date', { ascending:false }).limit(200);
+  if (error) { tbody.innerHTML = `<tr><td colspan="12" class="empty">${error.message}</td></tr>`; return; }
+  if (!data?.length) {
+    tbody.innerHTML = `<tr><td colspan="12" class="empty">Nothing captured yet.<br>
+      <span style="font-size:10px">NPI and WACR for the five modelled REITs are the highest-value fields —
+      they unblock the implied cap rate, which renders as — until then.</span></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(r => `<tr>
+    <td style="font-weight:600"><span class="tkr">${r.ticker}</span></td>
+    <td style="font-size:11px">${r.period_end||'—'}</td>
+    <td style="font-size:11px">${r.release_date||'—'}</td>
+    <td class="r">${r.period_months||'—'}</td>
+    <td class="r">${r.nta!=null?f.$(r.nta):'—'}</td>
+    <td class="r">${r.wacr!=null?f.pct0(r.wacr):'—'}</td>
+    <td class="r">${r.npi!=null?f.$k(r.npi):'—'}</td>
+    <td class="r">${r.gearing!=null?f.pct0(r.gearing,1):'—'}</td>
+    <td class="r">${r.icr!=null?parseFloat(r.icr).toFixed(1)+'x':'—'}</td>
+    <td class="r">${r.occupancy!=null?f.pct0(r.occupancy,1):'—'}</td>
+    <td class="r">${r.wale!=null?parseFloat(r.wale).toFixed(1):'—'}</td>
+    <td style="font-size:10px;color:var(--muted)">${r.source||'—'}${r.is_estimate?'<span class="est">EST</span>':''}</td>
+  </tr>`).join('');
+}
+
+async function saveFundamental(dryRun) {
+  const st = document.getElementById('fund-status');
+  const num = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  const txt = id => document.getElementById(id).value || null;
+  const pct = id => { const v = num(id); return v == null ? null : v / 100; };   // % in, decimal out
+
+  const row = {
+    ticker: txt('fd-ticker'), period_end: txt('fd-period'), release_date: txt('fd-release'),
+    period_months: parseInt(txt('fd-months'), 10), source: txt('fd-source'),
+    nta: num('fd-nta'), wacr: pct('fd-wacr'), npi: num('fd-npi'), gearing: pct('fd-gearing'),
+    icr: num('fd-icr'), hedge_pct: pct('fd-hedge'), hedge_maturity: num('fd-hedgemat'),
+    wale: num('fd-wale'), occupancy: pct('fd-occ'),
+    ffo: num('fd-ffo'), affo: num('fd-affo'), dps: num('fd-dps'),
+    is_estimate: false
+  };
+
+  // Fail here rather than round-tripping, so the message is immediate and specific.
+  if (!row.ticker || !row.period_end || !row.release_date) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Ticker, period end and release date are all required.';
+    return;
+  }
+  if (row.release_date <= row.period_end) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Release date must be AFTER the period end — results cannot be known before the period closes. ' +
+                     'Use the ASX announcement date, not the balance date.';
+    return;
+  }
+
+  st.style.color = 'var(--muted)';
+  st.textContent = dryRun ? 'Validating…' : 'Saving…';
+  try {
+    const res = await fetch('/.netlify/functions/ingest-fundamentals', {
+      method: 'POST', headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ mode: 'manual', dry_run: !!dryRun, rows: [row] })
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || out.errors?.length) {
+      st.style.color = 'var(--red)';
+      st.textContent = (out.errors || [out.error || 'Rejected.']).join('\n');
+      return;
+    }
+    st.style.color = 'var(--green)';
+    st.textContent = dryRun ? 'Validation passed — nothing written. Click Save to commit.'
+                            : `Saved. ${out.written ?? 1} row(s) written.`;
+    if (!dryRun) loadFundamentals();
+  } catch (e) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Failed: ' + e.message;
+  }
 }
 
 // Trigger the EODHD dividend ingestion, then reload.
