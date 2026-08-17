@@ -527,12 +527,12 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
         <div class="kn" id="inc-posttax-note">after tax &amp; franking credits</div>
       </div>
       <div class="kc">
-        <div class="kl">Post-tax yield <span class="hz" id="inc-ytc-badge">7% target</span></div>
+        <div class="kl">Gross yield <span class="hz" id="inc-ytc-badge">7% target</span></div>
         <div class="kv" id="inc-ytc">--</div>
         <div class="kn" id="inc-ytc-note">on cost</div>
       </div>
       <div class="kc">
-        <div class="kl">Post-tax IRR <span class="hz" id="inc-irr-badge">12% target</span></div>
+        <div class="kl">Gross IRR <span class="hz" id="inc-irr-badge">12% target</span></div>
         <div class="kv" id="inc-irr">--</div>
         <div class="kn" id="inc-irr-note">portfolio weighted</div>
       </div>
@@ -748,10 +748,12 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <tbody id="val-tbody"><tr><td colspan="11" class="empty">Loading…</td></tr></tbody>
     </table>
     <div class="caveat">
-      <strong>The hurdle is a joint test.</strong> 12% IRR on a 3% yield is a growth stock, not
-      passive income; 7% yield on a 4% IRR is capital erosion dressed as income. A row passes
-      only when it clears <em>both</em>, measured post-tax. Where a valuation input is missing
-      the cell reads <strong>—</strong> rather than a filled-in guess.
+      <strong>The hurdle is a joint test, measured gross.</strong> 12% IRR on a 3% yield is a
+      growth stock, not passive income; 7% yield on a 4% IRR is capital erosion dressed as
+      income. A row passes only when it clears <em>both</em>. Both are judged <em>pre-tax</em>,
+      because an asset's return does not change with who owns it — the post-tax column beside
+      them is the overlay, and it is what separates two names that clear the hurdle equally.
+      Where a valuation input is missing the cell reads <strong>—</strong> rather than a guess.
       <br><br>
       <strong>Check the Basis column before trusting a discount.</strong> Only REITs with a built
       workbook have the cap-rate, discount-rate and multiple assumptions the other three methods
@@ -930,11 +932,46 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
         <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('tax_statement')">Upload &amp; store</button>
       </div>
     </div>
+    <!-- RESEARCH LIBRARY — filed against a ticker, surfaced on that stock's detail page -->
+    <div class="sl" style="margin-top:6px">Research &amp; results — filed against a ticker</div>
+    <div style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Analyst reports, results presentations, annual reports and your own notes. Anything filed here
+        appears on that stock's detail page, so the research travels with the name.
+        <strong>A broker price target is the analyst's number, not this platform's fair value</strong> —
+        it is stored for reference and never feeds the value engine.
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ticker</label><input id="rs-ticker" type="text" placeholder="DXI" style="text-transform:uppercase"></div>
+        <div class="form-group"><label>Type</label><select id="rs-type">
+          <option value="analyst_report">Analyst report</option>
+          <option value="results_presentation">Results presentation</option>
+          <option value="annual_report">Annual report</option>
+          <option value="research_note">My research note</option>
+          <option value="other">Other</option></select></div>
+        <div class="form-group"><label>Title</label><input id="rs-title" type="text" placeholder="1H26 results presentation"></div>
+        <div class="form-group"><label>Published</label><input id="rs-date" type="date"></div>
+        <div class="form-group"><label>Period</label><input id="rs-period" type="text" placeholder="1H26"></div>
+        <div class="form-group"><label>Author / broker</label><input id="rs-author" type="text" placeholder="Macquarie"></div>
+        <div class="form-group"><label>Rating</label><input id="rs-rating" type="text" placeholder="BUY"></div>
+        <div class="form-group"><label>Price target $</label><input id="rs-pt" type="number" step="0.01" placeholder="3.20"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px"><label>Key takeaways</label>
+        <input id="rs-summary" type="text" placeholder="What this changes in your view — searchable, shown on the stock page"></div>
+      <input type="file" id="up-research" accept=".pdf,.txt,.csv,.xlsx,.pptx,.docx" style="font-size:11px">
+      <button class="btn btn-primary" style="margin-left:8px" onclick="uploadResearch()">Upload to library</button>
+      <div id="rs-status" style="font-size:11px;margin-top:8px"></div>
+    </div>
+
     <div id="doc-status" style="font-size:12px;margin-bottom:10px"></div>
-    <div class="sl">Uploaded documents</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1">All documents</div>
+      <input id="doc-filter" type="text" placeholder="Filter by ticker…" oninput="loadDocuments()"
+             style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);border-radius:3px;background:var(--paper);color:var(--ink);text-transform:uppercase">
+    </div>
     <table>
-      <thead><tr><th>Date</th><th>Type</th><th>Ticker</th><th>File</th><th>Parsed</th><th>Status</th><th></th></tr></thead>
-      <tbody id="doc-tbody"><tr><td colspan="7" class="empty">No documents uploaded yet.</td></tr></tbody>
+      <thead><tr><th>Date</th><th>Ticker</th><th>Type</th><th>Title / file</th><th>Author</th><th class="r">Target</th><th>Status</th><th></th></tr></thead>
+      <tbody id="doc-tbody"><tr><td colspan="8" class="empty">No documents uploaded yet.</td></tr></tbody>
     </table>
   </div>
 
@@ -988,6 +1025,12 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <div id="sd-chart-perf" style="font-size:12px;font-family:'DM Mono',monospace;color:var(--muted)"></div>
     </div>
     <div id="sd-chart" style="background:var(--cream);border-radius:4px;padding:8px;margin-bottom:18px;overflow:hidden"></div>
+
+    <!-- Research library for this ticker — everything filed against the name -->
+    <div style="margin-bottom:18px">
+      <div class="sl">Research &amp; Documents</div>
+      <div id="sd-research"><div class="empty" style="font-size:11px">Loading…</div></div>
+    </div>
 
     <!-- REIT fundamentals (full field set; every field always shown, blank = awaiting data) -->
     <div id="sd-reit-wrap" style="display:none;margin-bottom:18px">
@@ -2336,9 +2379,9 @@ let incomeRoll = null;          // cached rollup payload from income-rollup + ta
 const LENS = {
   cash:     { note:'What actually hits your bank account.',
               inc:'cash_income',     yc:'cash_yield_on_cost',     ym:'cash_yield_on_market' },
-  gross:    { note:'Cash plus franking credits — before your marginal rate is applied.',
+  gross:    { note:'Cash plus franking credits. This is the lens the 7% and 12% targets are measured on.',
               inc:'gross_income',    yc:'gross_yield_on_cost',    ym:'gross_yield_on_market' },
-  post_tax: { note:'What you actually keep. This is the lens the 7% target is measured on.',
+  post_tax: { note:'What you actually keep — the overlay. It decides between assets that clear the hurdle equally.',
               inc:'post_tax_income', yc:'post_tax_yield_on_cost', ym:'post_tax_yield_on_market' }
 };
 
@@ -2486,28 +2529,33 @@ function renderIncomeHoldings() {
   const tot  = incomeRoll.total || incomeRoll.totals || {};
   const L    = LENS[incomeLens];
 
-  /* The hurdle verdict comes from the engine, not from re-deriving it here — it
-   * lives in a top-level `hurdle` object and is measured on MARKET value (the
-   * capital that could be redeployed today), with the on-cost view alongside.
-   * post_tax_irr lives there too, NOT in totals. */
+  /* THE HURDLES ARE MEASURED GROSS (SPEC.md §0). The 12% IRR and 7% yield are
+   * statements about the ASSET, and an asset's return does not change with who
+   * owns it — screening post-tax would bake the current marginal rate into what
+   * is meant to be a valuation judgement.
+   *
+   * Post-tax is the overlay, shown directly beneath each gross figure. It never
+   * decides the verdict; it decides between two assets that clear equally. */
   const hz = incomeRoll.hurdle || {};
-  const ptIrr   = hz.post_tax_irr ?? tot.post_tax_irr ?? null;
-  const ptYield = hz.post_tax_yield ?? tot.post_tax_yield_on_market ?? tot.post_tax_yield_on_cost ?? null;
+  const grossYield = tot.gross_yield_on_cost ?? tot.cash_yield_on_cost ?? null;
+  const grossIrr   = hz.irr_pre_tax ?? tot.irr_pre_tax ?? tot.gross_irr ?? null;
+  const ptYield    = tot.post_tax_yield_on_cost ?? null;
+  const ptIrr      = hz.post_tax_irr ?? tot.post_tax_irr ?? null;
 
   const setTile = (id, txt) => { const el=document.getElementById(id); if (el) el.textContent = txt; };
   setTile('inc-total',   tot.cash_income     != null ? f.$k(tot.cash_income)     : '--');
   setTile('inc-posttax', tot.post_tax_income != null ? f.$k(tot.post_tax_income) : '--');
-  setTile('inc-ytc',     ptYield != null ? f.pct0(ptYield) : '--');
-  setTile('inc-irr',     ptIrr   != null ? f.pct0(ptIrr)   : '--');
+  setTile('inc-ytc',     grossYield != null ? f.pct0(grossYield) : '--');
+  setTile('inc-irr',     grossIrr   != null ? f.pct0(grossIrr)   : '--');
 
-  // Show BOTH denominators — on cost is what he paid, on market is what the
-  // capital is worth now, and they differ by 219bps here.
+  // The overlay: what the gross figure becomes after tax, and the drag between.
   const yn = document.getElementById('inc-ytc-note');
-  if (yn) yn.textContent = tot.post_tax_yield_on_cost != null
-    ? `on market · ${f.pct0(tot.post_tax_yield_on_cost)} on cost`
-    : 'on market';
+  if (yn) yn.textContent = ptYield != null
+    ? `on cost · ${f.pct0(ptYield)} post-tax (${Math.round((grossYield-ptYield)*10000)}bps drag)`
+    : 'on cost';
   const irn = document.getElementById('inc-irr-note');
-  if (irn && ptIrr == null) irn.textContent = 'needs the value engine';
+  if (irn) irn.textContent = grossIrr == null ? 'portfolio IRR needs a valuation per holding'
+    : ptIrr != null ? `portfolio weighted · ${f.pct0(ptIrr)} post-tax` : 'portfolio weighted';
 
   // A missing figure is unknown, not a failure — badge stays neutral until we know.
   const badge = (id, val, target) => {
@@ -2519,8 +2567,8 @@ function renderIncomeHoldings() {
     el.textContent = pass ? `✓ ${(target*100).toFixed(0)}% target`
                           : `${Math.round(gap)}bps short`;
   };
-  badge('inc-ytc-badge', ptYield, INCOME_TARGET_YIELD);
-  badge('inc-irr-badge', ptIrr,   INCOME_TARGET_IRR);
+  badge('inc-ytc-badge', grossYield, INCOME_TARGET_YIELD);
+  badge('inc-irr-badge', grossIrr,   INCOME_TARGET_IRR);
 
   const pt = document.getElementById('inc-posttax-note');
   if (pt && tot.cash_income && tot.post_tax_income != null) {
@@ -2573,11 +2621,12 @@ function renderIncomeHoldings() {
   tbody.innerHTML = sorted.map(r => {
     const isProp = r.asset_class === 'property';
     const yc = r[L.yc], ym = r[L.ym];
-    // Hurdle is judged post-tax on cost, per SPEC.md §0 — never on the displayed lens.
-    const ptyc = r.post_tax_yield_on_cost;
-    const hz = ptyc == null ? '<span class="hz">—</span>'
-             : ptyc >= INCOME_TARGET_YIELD ? '<span class="hz pass">✓ 7%</span>'
-             : `<span class="hz fail">${Math.round((INCOME_TARGET_YIELD-ptyc)*10000)}bps</span>`;
+    // Hurdle judged GROSS on cost (SPEC.md §0) — never on the displayed lens, and
+    // never post-tax: the screen is about the asset, not the holder.
+    const gyc = r.gross_yield_on_cost ?? r.cash_yield_on_cost ?? null;
+    const hz = gyc == null ? '<span class="hz">—</span>'
+             : gyc >= INCOME_TARGET_YIELD ? '<span class="hz pass">✓ 7%</span>'
+             : `<span class="hz fail">${Math.round((INCOME_TARGET_YIELD-gyc)*10000)}bps</span>`;
     const est = r.is_estimate ? '<span class="est" title="Tax components assumed from asset class — no annual tax statement loaded">EST</span>' : '';
     return `<tr class="${isProp?'':'clickable'}" ${isProp?'':`onclick="openSignalDrawer('${r.ticker}')"`}>
       <td style="font-weight:600">${isProp ? (r.name||'Property') : `<span class="tkr">${r.ticker}</span>`}</td>
@@ -3392,6 +3441,10 @@ async function openSignalDrawer(ticker) {
   const navItem = document.getElementById('nav-stock-detail');
   if (navItem) { navItem.style.display = 'block'; navItem.classList.add('active'); navItem.textContent = `◉ ${ticker}`; }
 
+  // Research travels with the name — fire and forget, it must never block the
+  // price/signal render if the documents query is slow or fails.
+  loadTickerResearch(ticker);
+
   // Set loading state
   document.getElementById('sd-title').textContent = ticker;
   document.getElementById('sd-subtitle').textContent = 'Loading...';
@@ -3920,26 +3973,117 @@ function prefillDistFromParse(p) {
   set('d-ticker', p.ticker); set('d-amount', p.amount); set('d-units', p.units); set('d-exdate', p.date);
 }
 
+const DOC_TYPE_LABEL = {
+  contract_note:'Contract note', distribution_statement:'Distribution',
+  tax_statement:'Tax statement', analyst_report:'Analyst report',
+  results_presentation:'Results pack', annual_report:'Annual report',
+  research_note:'Research note', other:'Other'
+};
+
+/* Research library upload. Ticker is REQUIRED here (unlike a contract note, which
+ * can be parsed for one) — a research document with no ticker cannot surface on
+ * the stock page, which is the entire point of filing it. */
+async function uploadResearch() {
+  const st = document.getElementById('rs-status');
+  const fileEl = document.getElementById('up-research');
+  const file = fileEl?.files?.[0];
+  const v = id => (document.getElementById(id)?.value || '').trim() || null;
+  const ticker = (v('rs-ticker') || '').toUpperCase() || null;
+
+  if (!ticker) { st.innerHTML = '<span style="color:var(--red)">Ticker is required — it is how the document reaches the stock page.</span>'; return; }
+  if (!file)   { st.innerHTML = '<span style="color:var(--red)">Choose a file first.</span>'; return; }
+
+  const docType = v('rs-type') || 'other';
+  st.style.color = 'var(--muted)';
+  st.textContent = `Uploading ${file.name}…`;
+  try {
+    const path = `${docType}/${ticker}/${Date.now()}_${file.name.replace(/[^A-Za-z0-9._-]/g,'_')}`;
+    const { error: upErr } = await db.storage.from('documents').upload(path, file, { upsert:false });
+    if (upErr) throw upErr;
+
+    const pt = v('rs-pt');
+    const { error } = await db.from('document_uploads').insert({
+      doc_type: docType, ticker,
+      title: v('rs-title') || file.name,
+      doc_date: v('rs-date'),
+      period_label: v('rs-period'),
+      author: v('rs-author'),
+      rating: v('rs-rating') ? v('rs-rating').toUpperCase() : null,
+      price_target: pt ? parseFloat(pt) : null,
+      summary: v('rs-summary'),
+      file_path: path, file_name: file.name, file_size: file.size,
+      status: 'stored'
+    });
+    if (error) throw error;
+
+    st.style.color = 'var(--green)';
+    st.textContent = `Filed against ${ticker}. It now appears on that stock's detail page.`;
+    fileEl.value = '';
+    ['rs-title','rs-summary','rs-pt','rs-rating','rs-period'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+    loadDocuments();
+  } catch (e) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Upload failed: ' + e.message;
+  }
+}
+
 async function loadDocuments() {
   if (!db) return;
   const tbody = document.getElementById('doc-tbody');
-  const { data: docs } = await db.from('document_uploads').select('*').order('created_at',{ascending:false});
-  if (!docs?.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty">No documents uploaded yet.</td></tr>'; return; }
-  const typeLabel = { contract_note:'Contract note', distribution_statement:'Distribution', tax_statement:'Tax statement' };
-  tbody.innerHTML = '';
-  for (const d of docs) {
-    const tr = document.createElement('tr');
-    const parsedTxt = d.parsed ? Object.entries(d.parsed).map(([k,v])=>`${k}:${v}`).join(' · ') : '—';
-    tr.innerHTML = `
-      <td style="font-size:11px;color:var(--muted)">${(d.created_at||'').slice(0,10)}</td>
-      <td style="font-size:11px">${typeLabel[d.doc_type]||d.doc_type}</td>
-      <td>${d.ticker?`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${d.ticker}')">${d.ticker}</span>`:'—'}</td>
-      <td style="font-size:11px">${d.file_name||''}</td>
-      <td style="font-size:10px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${parsedTxt}">${parsedTxt}</td>
-      <td><span class="badge ${d.status==='parsed'?'b-buy':'b-hold'}">${d.status}</span></td>
-      <td><a href="#" style="font-size:11px;color:var(--teal)" onclick="downloadDoc('${d.file_path}');return false">Download</a></td>`;
-    tbody.appendChild(tr);
+  const filter = (document.getElementById('doc-filter')?.value || '').toUpperCase().trim();
+
+  let q = db.from('document_uploads').select('*')
+            .order('doc_date', { ascending:false, nullsFirst:false })
+            .order('created_at', { ascending:false });
+  if (filter) q = q.eq('ticker', filter);
+  const { data: docs, error } = await q;
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="8" class="empty">${error.message}</td></tr>`; return; }
+  if (!docs?.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">${filter ? `Nothing filed against ${filter}.` : 'No documents uploaded yet.'}</td></tr>`;
+    return;
   }
+  tbody.innerHTML = docs.map(d => {
+    const parsedTxt = d.parsed ? Object.entries(d.parsed).map(([k,val])=>`${k}:${val}`).join(' · ') : '';
+    const title = d.title || d.file_name || '';
+    return `<tr>
+      <td style="font-size:11px;color:var(--muted)">${(d.doc_date || d.created_at || '').slice(0,10)}</td>
+      <td>${d.ticker?`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${d.ticker}')">${d.ticker}</span>`:'—'}</td>
+      <td style="font-size:11px">${DOC_TYPE_LABEL[d.doc_type]||d.doc_type}${d.period_label?` <span class="est">${d.period_label}</span>`:''}</td>
+      <td style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(d.summary||parsedTxt||title).replace(/"/g,'&quot;')}">${title}</td>
+      <td style="font-size:11px;color:var(--muted)">${d.author||'—'}${d.rating?` <span class="hz">${d.rating}</span>`:''}</td>
+      <td class="r" style="font-size:11px">${d.price_target!=null?f.$(d.price_target):'—'}</td>
+      <td><span class="badge ${d.status==='parsed'?'b-buy':'b-hold'}">${d.status}</span></td>
+      <td><a href="#" style="font-size:11px;color:var(--teal)" onclick="downloadDoc('${d.file_path}');return false">Download</a></td>
+    </tr>`;
+  }).join('');
+}
+
+/* Per-ticker research, rendered into the stock detail drawer so the reading
+ * material sits next to the numbers rather than in a separate filing cabinet. */
+async function loadTickerResearch(ticker) {
+  const el = document.getElementById('sd-research');
+  if (!el || !db) return;
+  const { data, error } = await db.from('document_uploads').select('*')
+    .eq('ticker', ticker)
+    .order('doc_date', { ascending:false, nullsFirst:false })
+    .order('created_at', { ascending:false });
+
+  if (error) { el.innerHTML = `<div class="empty">${error.message}</div>`; return; }
+  if (!data?.length) {
+    el.innerHTML = `<div class="empty" style="font-size:11px">No research filed against ${ticker} yet — upload it under Documents and it will appear here.</div>`;
+    return;
+  }
+  el.innerHTML = `<table><thead><tr>
+      <th>Date</th><th>Type</th><th>Title</th><th>Author</th><th class="r">Target</th><th></th>
+    </tr></thead><tbody>${data.map(d => `<tr>
+      <td style="font-size:11px;color:var(--muted)">${(d.doc_date||d.created_at||'').slice(0,10)}</td>
+      <td style="font-size:11px">${DOC_TYPE_LABEL[d.doc_type]||d.doc_type}${d.period_label?` <span class="est">${d.period_label}</span>`:''}</td>
+      <td style="font-size:11px">${d.title||d.file_name||''}${d.summary?`<div style="font-size:10px;color:var(--muted)">${d.summary}</div>`:''}</td>
+      <td style="font-size:11px;color:var(--muted)">${d.author||'—'}${d.rating?` <span class="hz">${d.rating}</span>`:''}</td>
+      <td class="r" style="font-size:11px">${d.price_target!=null?f.$(d.price_target):'—'}</td>
+      <td><a href="#" style="font-size:11px;color:var(--teal)" onclick="downloadDoc('${d.file_path}');return false">Open</a></td>
+    </tr>`).join('')}</tbody></table>`;
 }
 
 async function downloadDoc(path) {

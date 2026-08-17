@@ -14,12 +14,25 @@ disagree, **this file wins** and the agent must say so in its report.
 ## 0. The objective
 
 Build a portfolio that generates **significant passive income**, judged against
-two explicit hurdles, **after tax**:
+two explicit hurdles measured **GROSS**, with tax applied afterwards as an
+overlay:
 
-| Hurdle | Target |
-|---|---|
-| **IRR** (total return: income + capital) | **≥ 12%** |
-| **Cash yield** (forward 12m distribution) | **≥ 7%** |
+| Hurdle | Target | Measured on |
+|---|---|---|
+| **IRR** (total return: income + capital) | **≥ 12%** | **gross / pre-tax** |
+| **Cash yield** (forward 12m distribution) | **≥ 7%** | **gross / pre-tax** |
+
+**Assets are valued and screened gross. Tax is the overlay, not the screen.**
+That ordering is deliberate: the 12% IRR is a statement about the *asset*, which
+does not change with the holder's circumstances, while tax depends on entity,
+marginal rate and franking and would make the same security pass for one holder
+and fail for another. Screen on the asset; then apply the overlay to see what
+you actually keep.
+
+The post-tax figure is never optional, though — it is displayed beside every
+gross figure, because a 7% gross yield that nets 3.7% is a different investment
+from one that nets 5.3% (§4.5), and the overlay is how you choose between two
+assets that clear the gross hurdle equally.
 
 And a **fundamental value engine** that computes the valuation methodology
 in-platform, so the models are the product rather than a scrape of a spreadsheet.
@@ -320,11 +333,14 @@ cash_yield_on_cost,     gross_yield_on_cost,     post_tax_yield_on_cost,
 cash_yield_on_market,   gross_yield_on_market,   post_tax_yield_on_market,
 tax_deferred_pct, franked_pct
 ```
-Plus, against the §0 hurdles: **post-tax yield vs the 7% target** and
-**post-tax IRR vs the 12% target**, each as a pass/fail with the gap shown.
+Plus, against the §0 hurdles: **gross yield vs the 7% target** and **gross IRR vs
+the 12% target**, each as a pass/fail with the gap shown.
 
-**The 7% hurdle is measured post-tax.** A 7% cash yield that nets 3.7% has not met
-it. State the lens next to the target everywhere it appears.
+**Both hurdles are measured GROSS** (§0) — the screen is a statement about the
+asset, not about the holder. The post-tax equivalent sits immediately beside it
+and is never hidden: it is what decides between two assets that clear the gross
+hurdle equally. State the lens next to the target everywhere it appears, so it is
+never ambiguous which one a number is.
 
 Everything here is an estimate. Label it in the UI: *modelling tool, not tax
 advice.*

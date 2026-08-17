@@ -368,14 +368,23 @@ function valuate(raw, taxFns) {
   };
 }
 
-/* Hurdle test (SPEC §5.4). Sits BESIDE the 0-7 conviction score, never inside
- * it — the score's >=5 BUY / >=6 STRONG_BUY thresholds depend on that range.
- * A high score that misses both hurdles is the exact thing this platform exists
- * to catch, so the two must stay visibly separate. */
+/* Hurdle test (SPEC §5.4).
+ *
+ * Measured GROSS (SPEC §0). The 12% IRR is a statement about the ASSET, and an
+ * asset's return does not change with who owns it — screening post-tax would make
+ * the same security pass for one holder and fail for another, and would bake the
+ * current marginal rate into what is meant to be a valuation judgement.
+ *
+ * The post-tax equivalent is computed and returned alongside, never instead: it
+ * is what separates two assets that clear the gross hurdle equally, and a 7%
+ * gross yield netting 3.71% is a different investment from one netting 5.30%.
+ *
+ * Sits BESIDE the 0-7 conviction score, never inside it — the score's >=5 BUY /
+ * >=6 STRONG_BUY thresholds depend on that range staying 0-7. */
 function hurdleTest(v, targets = { irr: 0.12, yield: 0.07 }) {
-  const irr = v.irr_post_tax, y = v.yield_post_tax;
+  const irr = v.irr_pre_tax, y = v.yield_pre_tax;
   if (irr === null && y === null) {
-    return { status: 'UNKNOWN', meets_hurdle: null, failed: [], missing: ['irr', 'yield'] };
+    return { status: 'UNKNOWN', meets_hurdle: null, failed: [], missing: ['irr', 'yield'], lens: 'gross' };
   }
   const failed = [], missing = [];
   if (irr === null) missing.push('irr'); else if (irr < targets.irr) failed.push('irr');
@@ -388,7 +397,14 @@ function hurdleTest(v, targets = { irr: 0.12, yield: 0.07 }) {
     failed, missing, targets,
     irr_gap:   irr === null ? null : irr - targets.irr,
     yield_gap: y   === null ? null : y   - targets.yield,
-    lens: 'post-tax',
+    lens: 'gross',
+    // The overlay — displayed beside the verdict, never used to decide it.
+    post_tax: {
+      irr: v.irr_post_tax,
+      yield: v.yield_post_tax,
+      irr_drag_bps:   (irr !== null && v.irr_post_tax   !== null) ? Math.round((irr - v.irr_post_tax) * 10000) : null,
+      yield_drag_bps: (y   !== null && v.yield_post_tax !== null) ? Math.round((y   - v.yield_post_tax) * 10000) : null,
+    },
   };
 }
 
