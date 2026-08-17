@@ -165,6 +165,7 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
     <a href="/evidence.html">▦ Market Evidence</a>
     <a data-page="fundamentals">▤ Fundamentals</a>
     <a data-page="assets">⌗ Asset Models</a>
+    <a data-page="analysts">◇ Analyst Coverage</a>
     <div class="nav-sec">My Portfolio</div>
     <a data-page="real">$ Real Portfolio</a>
     <a data-page="reit">⬡ REIT Holdings</a>
@@ -597,6 +598,74 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       </div>
       <button class="btn btn-primary" onclick="saveDist()">Save distribution</button>
       <button class="btn btn-secondary" onclick="document.getElementById('add-dist-form').style.display='none'" style="margin-left:8px">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ANALYST COVERAGE -->
+  <div id="pg-analysts" class="page">
+    <div class="ph"><h1>Analyst Coverage</h1><p>Broker forecasts and price targets against our own engine · where we disagree with the street, and by how much</p></div>
+
+    <div class="kb">
+      <div class="kc dk"><div class="kl">Bond anchor</div><div class="kv" id="an-bond">--</div><div class="kn" id="an-bond-note">AUS 10yr</div></div>
+      <div class="kc"><div class="kl">REIT spread</div><div class="kv teal" id="an-spread">--</div><div class="kn">portfolio yield over the long bond</div></div>
+      <div class="kc"><div class="kl">Names covered</div><div class="kv" id="an-covered">--</div><div class="kn">with at least one broker note</div></div>
+      <div class="kc"><div class="kl">Avg gap to consensus</div><div class="kv" id="an-gap">--</div><div class="kn">our fair value vs street target</div></div>
+    </div>
+    <div id="an-bond-warn"></div>
+
+    <div class="sl">Our model vs the street</div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th class="r">Price</th><th class="r">Our fair value</th>
+        <th class="r">Consensus</th><th class="r">Range</th><th class="r">Brokers</th>
+        <th class="r">Gap</th><th>Read</th><th>Latest note</th>
+      </tr></thead>
+      <tbody id="an-vs-tbody"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+    </table>
+    <div class="caveat">
+      <strong>A broker target is evidence, not an input.</strong> It records what the market is
+      being told, and it never feeds the value engine — if it did, our fair value would just be a
+      lagging average of other people's models. A large gap is a prompt to check whose assumptions
+      are wrong, not a signal on its own.
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px">
+      <div class="sl" style="flex:1">Broker forecasts</div>
+      <button class="btn btn-secondary" onclick="toggleAnalystForm()" style="font-size:11px">+ Add forecast</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Broker</th><th>Note date</th><th>Rating</th><th class="r">Target</th>
+        <th class="r">EPS FY26</th><th class="r">FY27</th><th class="r">FY28</th>
+        <th class="r">DPU FY27</th><th class="r">vs our FV</th>
+      </tr></thead>
+      <tbody id="an-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+    </table>
+
+    <div id="analyst-form" style="display:none;margin-top:16px;padding:16px;border:1px solid var(--rule);background:var(--cream)">
+      <div class="sl">Add broker forecast</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Per-security figures are entered in <strong>cents</strong>, matching the workbooks and the
+        existing rows (a 20.9c EPS is entered as <code>20.9</code>). The price target is in
+        <strong>dollars</strong>. That split is the platform's convention, not an oversight.
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Ticker</label><input id="an-ticker" type="text" placeholder="DXC" style="text-transform:uppercase"></div>
+        <div class="form-group"><label>Broker</label><input id="an-broker" type="text" placeholder="Macquarie"></div>
+        <div class="form-group"><label>Note date</label><input id="an-date" type="date"></div>
+        <div class="form-group"><label>Rating</label><input id="an-rating" type="text" placeholder="BUY"></div>
+        <div class="form-group"><label>Price target $</label><input id="an-target" type="number" step="0.01" placeholder="3.60"></div>
+        <div class="form-group"><label>Price at note $</label><input id="an-price" type="number" step="0.01"></div>
+        <div class="form-group"><label>EPS FY26 (c)</label><input id="an-eps26" type="number" step="0.1"></div>
+        <div class="form-group"><label>EPS FY27 (c)</label><input id="an-eps27" type="number" step="0.1"></div>
+        <div class="form-group"><label>EPS FY28 (c)</label><input id="an-eps28" type="number" step="0.1"></div>
+        <div class="form-group"><label>DPU FY26 (c)</label><input id="an-dpu26" type="number" step="0.1"></div>
+        <div class="form-group"><label>DPU FY27 (c)</label><input id="an-dpu27" type="number" step="0.1"></div>
+        <div class="form-group"><label>DPU FY28 (c)</label><input id="an-dpu28" type="number" step="0.1"></div>
+      </div>
+      <div id="an-save-status" style="font-size:11px;margin-bottom:8px"></div>
+      <button class="btn btn-primary" onclick="saveAnalystForecast()">Save forecast</button>
+      <button class="btn btn-secondary" onclick="toggleAnalystForm()" style="margin-left:8px">Cancel</button>
     </div>
   </div>
 
@@ -1338,7 +1407,7 @@ function go(page, el) {
     screener: () => { loadWatchlist(); loadSortedStocks(); }, reit: loadREIT, 'reit-trading': loadREITSignals, 'credit-signals': ()=>{}, 'bond-signals': ()=>{},
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
     income: loadIncome, property: loadProperty, valuation: loadValuation,
-    fundamentals: loadFundamentals, assets: loadAssets,
+    fundamentals: loadFundamentals, assets: loadAssets, analysts: loadAnalysts,
     performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
@@ -2923,6 +2992,121 @@ async function runValuation() {
     st.textContent = 'Run failed: ' + e.message;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '▸ Run engine'; }
+  }
+}
+
+// ── ANALYST COVERAGE ──────────────────────────────────────────────────────────
+/* Broker forecasts are EVIDENCE about what the market is being told, never an
+ * input to our own valuation. Blending consensus into fair value would make our
+ * number a lagging average of other people's models — the gap is the useful
+ * output, not something to close.
+ *
+ * UNITS: eps_fy* and dpu_fy* are CENTS (SPEC.md §1.1, and the existing DXC row
+ * reads 20.9). `valuation` is DOLLARS. Do not normalise one without the other. */
+function toggleAnalystForm() {
+  const el = document.getElementById('analyst-form');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function loadAnalysts() {
+  if (!db) return;
+
+  // Bond anchor — A-REITs are priced off the spread to the long bond.
+  const { data: bd } = await db.from('bond_data').select('*').order('data_date',{ascending:false}).limit(1);
+  const b = bd?.[0];
+  const warn = document.getElementById('an-bond-warn');
+  document.getElementById('an-bond').textContent   = b?.aus_10yr != null ? f.pct0(b.aus_10yr) : '--';
+  document.getElementById('an-bond-note').textContent = b?.aus_10yr != null
+    ? `AUS 10yr · ${b.aus_10yr_source||'?'} · ${b.data_date}` : 'AUS 10yr — not resolved';
+  document.getElementById('an-spread').textContent = b?.reit_spread != null
+    ? Math.round(b.reit_spread*10000)+'bps' : '--';
+  warn.innerHTML = (!b || b.aus_10yr == null)
+    ? `<div class="caveat" style="border-left-color:var(--red)"><strong>No live Australian 10-year yield.</strong>
+       Until <code>fetch-bond-yields</code> resolves one, the REIT macro layer is scoring against a
+       hardcoded 5.07% left in <code>morning-scan.js</code>. A-REITs are priced off their spread to
+       the long bond more than off anything else, so a frozen yield freezes the signal.</div>`
+    : '';
+
+  const { data: rows, error } = await db.from('v_analyst_vs_model').select('*');
+  const tb = document.getElementById('an-vs-tbody');
+  if (error) { tb.innerHTML = `<tr><td colspan="9" class="empty">${error.message}</td></tr>`; }
+  else if (!rows?.length) { tb.innerHTML = '<tr><td colspan="9" class="empty">No coverage yet.</td></tr>'; }
+  else {
+    const covered = rows.filter(r => r.brokers > 0);
+    const gaps = covered.filter(r => r.gap_pct != null).map(r => r.gap_pct);
+    document.getElementById('an-covered').textContent = covered.length || '--';
+    document.getElementById('an-gap').textContent = gaps.length
+      ? f.pct(gaps.reduce((a,c)=>a+c,0)/gaps.length, 1) : '--';
+
+    tb.innerHTML = rows.sort((a,b2)=>(b2.gap_pct??-9)-(a.gap_pct??-9)).map(r => {
+      const read = r.gap_pct == null ? '—'
+        : r.gap_pct > 0.10 ? '<span class="hz pass">we are above the street</span>'
+        : r.gap_pct < -0.10 ? '<span class="hz fail">we are below the street</span>'
+        : '<span class="hz">broadly aligned</span>';
+      return `<tr class="clickable" onclick="openSignalDrawer('${r.ticker}')">
+        <td style="font-weight:600"><span class="tkr">${r.ticker}</span></td>
+        <td class="r">${r.price!=null?f.$(r.price):'—'}</td>
+        <td class="r" style="font-weight:600">${r.our_fair_value!=null?f.$(r.our_fair_value):'—'}</td>
+        <td class="r">${r.consensus_target!=null?f.$(r.consensus_target):'—'}</td>
+        <td class="r" style="font-size:10px;color:var(--muted)">${r.target_low!=null?f.$(r.target_low)+'–'+f.$(r.target_high):'—'}</td>
+        <td class="r">${r.brokers||'—'}</td>
+        <td class="r" style="color:${r.gap_pct==null?'var(--muted)':r.gap_pct>0?'var(--green)':'var(--red)'}">${r.gap_pct!=null?f.pct(r.gap_pct,1):'—'}</td>
+        <td>${read}</td>
+        <td style="font-size:11px;color:var(--muted)">${r.latest_note||'—'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Individual forecasts, each measured against our current fair value.
+  const [{ data: fc }, { data: vr }] = await Promise.all([
+    db.from('reit_broker_forecasts').select('*').order('note_date',{ascending:false}),
+    db.from('valuation_runs').select('ticker, fair_value, as_of').order('as_of',{ascending:false}),
+  ]);
+  const fvByTicker = {};
+  (vr||[]).forEach(v => { if (!(v.ticker in fvByTicker)) fvByTicker[v.ticker] = v.fair_value; });
+
+  const tb2 = document.getElementById('an-tbody');
+  if (!fc?.length) { tb2.innerHTML = '<tr><td colspan="10" class="empty">No broker forecasts recorded. Add one, or upload the note under Documents.</td></tr>'; return; }
+  tb2.innerHTML = fc.map(r => {
+    const ourFv = fvByTicker[r.ticker];
+    const diff = (ourFv != null && r.valuation) ? (ourFv - r.valuation)/r.valuation : null;
+    return `<tr>
+      <td style="font-weight:600"><span class="tkr" style="cursor:pointer" onclick="openSignalDrawer('${r.ticker}')">${r.ticker}</span></td>
+      <td style="font-size:11px">${r.broker_name||'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${r.note_date||'—'}</td>
+      <td>${r.rating?`<span class="hz">${r.rating}</span>`:'—'}</td>
+      <td class="r" style="font-weight:600">${r.valuation!=null?f.$(r.valuation):'—'}</td>
+      <td class="r">${r.eps_fy26!=null?r.eps_fy26+'c':'—'}</td>
+      <td class="r">${r.eps_fy27!=null?r.eps_fy27+'c':'—'}</td>
+      <td class="r">${r.eps_fy28!=null?r.eps_fy28+'c':'—'}</td>
+      <td class="r">${r.dpu_fy27!=null?r.dpu_fy27+'c':'—'}</td>
+      <td class="r" style="color:${diff==null?'var(--muted)':diff>0?'var(--green)':'var(--red)'}">${diff!=null?f.pct(diff,1):'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function saveAnalystForecast() {
+  const st = document.getElementById('an-save-status');
+  const v = id => { const x=document.getElementById(id).value; return x===''?null:x; };
+  const n = id => { const x=v(id); return x==null?null:parseFloat(x); };
+  const ticker = (v('an-ticker')||'').toUpperCase();
+  if (!ticker || !v('an-broker') || !v('an-date')) {
+    st.style.color='var(--red)'; st.textContent='Ticker, broker and note date are required — they are the upsert key.'; return;
+  }
+  st.style.color='var(--muted)'; st.textContent='Saving…';
+  try {
+    const { error } = await db.from('reit_broker_forecasts').upsert({
+      ticker, broker_name: v('an-broker'), note_date: v('an-date'),
+      rating: v('an-rating') ? v('an-rating').toUpperCase() : null,
+      valuation: n('an-target'), price_at_note: n('an-price'),
+      eps_fy26: n('an-eps26'), eps_fy27: n('an-eps27'), eps_fy28: n('an-eps28'),
+      dpu_fy26: n('an-dpu26'), dpu_fy27: n('an-dpu27'), dpu_fy28: n('an-dpu28'),
+    }, { onConflict: 'ticker,broker_name,note_date' });
+    if (error) throw error;
+    st.style.color='var(--green)'; st.textContent='Saved.';
+    toggleAnalystForm(); loadAnalysts();
+  } catch (e) {
+    st.style.color='var(--red)'; st.textContent='Save failed: '+e.message;
   }
 }
 
