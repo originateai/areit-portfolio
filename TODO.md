@@ -1,109 +1,114 @@
-# TODO — needs James (after this session)
+# TODO — AREIT income platform
 
-This session implemented tasks 1–8 in code. The items below need **you** because
-they touch the live database, real money, or things I can't run/test from here
-(no Supabase/EODHD credentials or network access in this environment, and the app
-is deployed via GitHub Desktop, not CLI).
+Rewritten 2026-08-17. Everything in the previous version (SQL migrations, RLS
+grants, storage bucket, model export) is **done and verified against the live
+database** — that list is gone rather than left to rot.
 
-## 1. Run the SQL migrations — IN ORDER, BEFORE the code goes live
-Supabase → SQL Editor → run each, top to bottom:
-1. `supabase/migrations/20260605_01_rls_grants_audit.sql` — read access for the
-   anon front-end on every table (this is the fix for tables that silently return
-   nothing / 400s). Re-run any time you add a table.
-2. `supabase/migrations/20260605_02_stock_reit_fields.sql` — REIT columns on
-   `stocks` (icr, hedged_pct, npi, shares_on_issue, net_debt, landlord_sector,
-   reit_subclass, fundamentals_asof, etc.).
-3. `supabase/migrations/20260605_03_distributions.sql` — `source`/`currency`
-   columns + `unique(ticker, ex_date)`. **If it errors on the unique index you
-   have duplicate distribution rows** — run the de-dupe snippet in the file first.
-4. `supabase/migrations/20260605_04_documents.sql` — `document_uploads` table +
-   the `documents` Storage bucket + storage policies.
+Read `SPEC.md` first. It is the build contract: the 12% IRR / 7% yield hurdles
+measured post-tax, the units invariants, and the canonical data model.
 
-After #1, run the verify query at the bottom of that file — it should return zero
-rows. Deploy the code only after the migrations are in.
+---
 
-## 2. Candles (task 2)
-- The chart now self-corrects so no candle renders inside-out, and the bootstrap
-  stores fully-adjusted OHLC going forward.
-- **Legacy rows are still mixed (adjusted close + raw OHLC).** To clean history,
-  re-run the bootstrap once it's deployed:
-  `POST /.netlify/functions/bootstrap-history-background` (optionally `?ticker=XXX`).
-- Spot-check a dividend-heavy name (e.g. a bank or a REIT) on the detail chart.
+## 1. SECURITY — do this first
 
-## 3. Income / dividends (task 5)
-- Click **Pull dividends (EODHD)** on the Income page (calls
-  `fetch-dividends-background`) to backfill `distributions` for held tickers.
-  Units-held per ex-date are reconstructed from `real_trades`; manual rows are
-  never overwritten.
-- Verify a couple of distributions against your statements before trusting totals.
+**The site is public and unauthenticated, and the browser's anon key can write.**
+`areit.netlify.app` has no login. The anon key ships in the page, and RLS policies
+grant `insert, update, delete` on `holdings`, `real_trades`, `distributions`,
+`property_holdings`, `property_valuations`, `property_loans`,
+`property_cashflows`, `tax_settings` and `distribution_components`.
 
-## 4. Performance (task 7)
-- A daily snapshot (real + model) now writes from the 4pm `fetch-prices` job.
-- **Decision for you:** click **Reconstruct from trade history** to backfill
-  history from your trade dates + stored prices (overwrites past snapshot rows).
-  The MODEL reconstruction is approximate (realised P&L + open-position MTM) —
-  fine for a trend line, not an audited figure.
+That means anyone who finds the URL can read your entire net worth, and can
+modify or delete it. This pattern predates this build, but the surface is now
+materially worse: **property records carry a street address and a loan balance.**
 
-## 5. Uploads / parsers (task 8) — REAL MONEY, read this
-- File upload + Storage + metadata is fully wired.
-- **Contract-note and distribution parsing only runs on TEXT/CSV**, and it does
-  **not** silently write to holdings/income — it prefills the Record Trade /
-  Income form for you to confirm. This is deliberate: I won't auto-insert
-  real-money records from a best-effort parse.
-- **PDF auto-parsing is NOT built.** CommSec confirmations are usually PDFs;
-  they're stored for reference and you enter details manually. To enable PDF
-  parsing properly, add a server-side function using a `pdf-parse` (or similar)
-  dependency in `netlify/functions` and point the CommSec layout parser at the
-  extracted text. I didn't add an untested dependency.
-- The CommSec/registry regexes in `parseContractNote` / `parseDistStatement` are
-  best-effort — validate against your real documents and tighten as needed.
+Two fixes, either is enough:
+- **Netlify password protection** (you are on Pro — Site settings → Access
+  control → Password protection). One toggle, no code.
+- Move writes behind service-role functions and revoke anon write, as
+  `reit_fundamentals` and `valuation_runs` already do.
 
-## 6. Mirror files — RESOLVED 2026-08-13
-- Deployed front-end is `public/index.html` (`netlify.toml` → `publish = public`).
-- The root mirror copies were deleted (they had drifted). There is now **one** copy of each
-  file. Do not re-create root duplicates.
+Until one is in place, do not enter a real property address.
 
-## 8. A-REIT VALUE LAYER (Phase 1 built — needs your Supabase steps)
-Full runbook in `SUMMARY.md` (Part 2). The must-dos, in order:
-1. **SQL:** run **`areit_value_layer_schema_v2.sql` ONLY** (it supersedes the old
-   schema.sql + patch_01; idempotent, single transaction). Verified against my code.
-2. **Storage:** create a **Private** bucket named `reit-models`.
-3. **RLS/grants (critical):** for every new table the frontend reads —
-   `reit_model_files`, `reit_prices`, `reit_models`, and the views (esp.
-   `v_discount_to_fair_value`) — add a `for select using (true)` policy AND
-   `grant select to anon, authenticated`. Without this, `models.html` and
-   `reit-value.html` show nothing (same class as the old "silent empty / 400" bug).
-4. **Env:** no new Netlify var needed — functions accept the existing
-   `SUPABASE_SERVICE_KEY`. Set `SUPABASE_SERVICE_ROLE` (or `_KEY`) locally for the script.
-5. **Load models:** `cd scripts && npm install`, then
-   `node export-model.js DXI "../areit models/DXI_…xlsx" 1 --dry-run` to validate the
-   parse, then re-run without `--dry-run`. Repeat for DXC, CIP. The `.xlsx` must have
-   cached values (open+save in Excel first) or it exports nulls.
-6. **Snapshot:** trigger `price-snapshot` once (Netlify → Functions) to fill `reit_prices`.
+---
 
-**Task D (market evidence) — BUILT:** `evidence.html` (add-form + CSV import + recent
-rows + the three benchmark views) and `ingest-evidence.js` (service-role writer).
-Linked under "Value Layer". Also built: **assumptions editor** (`assumptions.html` +
-`save-assumptions.js`) — edit headline assumptions per REIT with cap-rate/leasing
-benchmarks shown alongside; workbook stays source of truth (re-export overwrites). And a
-**REIT Value card** on the main dashboard (top discounts → `reit-value.html`).
-**AI doc-reader — BUILT:** `read-evidence-doc.js` + the "AI document reader" card on
-`evidence.html` (pdf.js extracts text → Claude forced-tool extraction → propose rows →
-you review + Import). Needs `ANTHROPIC_API_KEY` in Netlify env (optional `ANTHROPIC_MODEL`,
-defaults to `claude-opus-4-8`; use `claude-haiku-4-5` for cheaper bulk parsing). No OCR —
-scanned image PDFs won't extract. The `cre_*` tables, `reit_model_assumptions`, and the
-views still need anon SELECT grants (step 3 above) for the pages to display data.
+## 2. Fill the gaps that make numbers real
 
-That closes out the entire value-layer brief (Tasks A–D). Remaining open items are all
-yours: run the SQL, grants, bucket, env vars, and the model export/snapshot.
+**NPI and WACR for the five modelled REITs** — the highest-value data you can
+enter. NPI exists only in results packs; no vendor feed has it, because statutory
+A-REIT revenue includes fair-value revaluations. Until it is captured the implied
+cap rate renders `—` and the cap-rate layer cannot score.
+Use **Value Layer → Fundamentals**, and validate before saving.
 
-**Could not verify from here:** no Node/EODHD/Supabase in my environment, so the export
-was never run and nothing was written to the DB — validate with `--dry-run` before trusting.
+**Assumptions for ARF, ASK, CQR, HDN.** They have models and forecasts but no
+`reit_model_assumptions` row, so three of the four valuation methods skip and
+their "fair value" is book NTA alone. They are flagged `NTA only` and greyed on
+the Value Engine page. Either build workbooks or enter cap rate, required return
+and base multiple directly.
 
-## 7. Not in scope this session (from BUILD-PLAN, still open)
-- macro → EODHD migration in `morning-scan.js` (still calls Yahoo).
-- Morning-scan determinism (read committed snapshot vs re-fetch live).
-- Honest backtester (walk-forward, brokerage/slippage, purge/embargo). Until it
-  exists, treat all strategy performance numbers as illustrative.
-- Credit Holdings / Bond Holdings pages under Portfolio.
-- Manual tagging of `landlord_sector` for landlord REITs (one-off).
+**Your actual distribution components.** The tax overlay currently assumes 30%
+tax-deferred / 70% unfranked for every REIT (a class-level default, flagged EST,
+never a figure for a named security). Your annual tax statements have the real
+split. Load them into `distribution_components` and every post-tax figure stops
+being an estimate.
+
+**Your other positions.** Only 5 holdings are registered, all from
+`real_trades`. Listed credit, bonds and hybrids are missing entirely.
+
+---
+
+## 3. Known issues, in priority order
+
+**`stocks.dps_fy26` is a completed financial year.** Today is FY27. The income
+rollup resolves model forecasts to FY27E but falls back to a hardcoded `dps_fy26`
+column, so DXS is currently valued on a finished year while the modelled REITs
+use the current one. This drifts further every July and needs a real fix —
+either a `dps_current_fy` view or a year-keyed table.
+
+**`adjusted_cost_base` never updates.** It is seeded to `cost_base` on first
+write. Tax-deferred distributions are supposed to reduce it (SPEC §4.2), and a
+new BUY will not refresh it. Until this is wired, CGT on sale will be
+understated.
+
+**`property_loans.original_drawn` is unpopulated.** The column exists; the engine
+falls back to the oldest recorded balance and flags the proxy. Fill it when you
+add a property or equity invested will be wrong.
+
+**TCF is not in `stocks`.** Its `asset_class` is set on the holding directly, so
+income and tax work, but it has no price row — it is excluded from every
+yield-on-market denominator, and the Income page says so.
+
+**Excel and the engine disagree by 5–17%.** By design, not by error: Excel's
+`blended_value` is exactly its equity DCF in every stored row, while the engine
+blends four methods with NTA at 15%. The workbook is the more conservative. Pick
+one as authoritative before acting on either.
+
+---
+
+## 4. Still not built
+
+- **Honest backtester** — walk-forward, real brokerage and slippage, survivorship
+  handling, purge/embargo. Until it exists, every strategy performance number on
+  the platform is illustrative and is labelled so.
+- **macro → EODHD migration.** `morning-scan.js` still calls Yahoo 13× per run.
+- **Morning-scan determinism.** It re-fetches live data each invocation, so
+  retries produce different signals. It should read the committed snapshot.
+- **Contract-note PDF parsing.** Text/CSV only today; PDFs are stored for
+  reference and entered by hand. Parsing prefills a form and never writes a
+  real-money record directly — keep it that way.
+- **Credit and bond holdings pages** exist in the nav but are thin.
+- **`landlord_sector` tagging** — one-off manual pass; cap rates are only
+  comparable within a sector.
+
+---
+
+## 5. Housekeeping
+
+- `C:\Users\james\Downloads\CLAUDE.md` is a **drifted copy** of the repo's
+  `CLAUDE.md` sitting outside the repo. It still claims root `index.html` mirrors
+  `public/` and still lists Breakout as a strategy — both untrue since
+  2026-08-13. It gets auto-loaded as context and actively misleads. Delete it.
+- `reit_income_holdings` is retired but not dropped. Drop it once nothing
+  references it.
+- There is no test suite. `node --check` is the floor, and the pure engines carry
+  hand-checkable worked examples in comments. Real tests would be worth having
+  for `tax-engine.js` and `model-engine.js` specifically.
