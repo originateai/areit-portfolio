@@ -142,6 +142,19 @@ tfoot td.r{text-align:right}
 .est{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);opacity:0.75;margin-left:3px}
 tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)}
 .cls-tag{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.05em;color:var(--muted);text-transform:uppercase}
+
+/* Research drop zone */
+#drop-zone{border:2px dashed var(--rule);border-radius:6px;padding:34px 20px;text-align:center;
+           cursor:pointer;background:var(--cream);transition:border-color .15s,background .15s}
+#drop-zone:hover,#drop-zone.drag{border-color:var(--teal);background:rgba(75,151,178,0.07)}
+.cm{padding:16px;border:1px solid var(--rule);background:var(--paper);line-height:1.65;font-size:13px}
+.cm h4{font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);
+       margin:14px 0 6px;font-family:'DM Mono',monospace}
+.cm h4:first-child{margin-top:0}
+.cm p{margin-bottom:10px}
+.cm ul{margin:0 0 10px 18px}
+.cm li{margin-bottom:4px}
+.cm-src{font-size:10px;color:var(--muted);border-top:1px solid var(--rule);margin-top:12px;padding-top:8px}
 </style>
 </head>
 <body>
@@ -151,10 +164,30 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
   <nav class="nav">
     <div class="nav-sec">Overview</div>
     <a class="active" data-page="dashboard">▣ Dashboard</a>
+    <div class="nav-sec">Portfolio</div>
+    <a data-page="income">$ Income &amp; Tax</a>
+    <a data-page="real">▤ Positions</a>
+    <a data-page="property">⌂ Direct Property</a>
+    <a data-page="performance">▲ Net Worth</a>
+    <a data-page="manage">✎ Manage Holdings</a>
+
+    <div class="nav-sec">Research &amp; Models</div>
+    <a data-page="reitmodel">▦ REIT Model</a>
+    <a data-page="assets">⌗ Asset Models</a>
+    <a data-page="valuation">◈ Value Engine</a>
+    <a data-page="analysts">◇ Analyst Coverage</a>
+    <a data-page="research">⬆ Research Library</a>
+    <a data-page="fundamentals">▤ Fundamentals</a>
+    <a data-page="evidence">▦ Market Evidence</a>
+
     <div class="nav-sec">Signals</div>
     <a data-page="reit-trading">~ REIT Signals</a>
     <a data-page="credit-signals">◈ Credit Signals</a>
     <a data-page="bond-signals">⬡ Bond Signals</a>
+    <!-- CULLED 2026-08-18: separate REIT / Credit / Bond *holdings* pages were
+         four asset-class-filtered views of the same register. Income & Tax shows
+         every position in one list with its class, and Manage Holdings edits
+         them. Pages and loaders retained, nav entries removed. -->
     <!-- CULLED 2026-08-17: Strategy Engine (momentum / mean reversion) and Stock
          Screener (ASX500 equities) are momentum-trading surfaces, not income or
          REIT tools. Their pages and loaders remain in this file and are still
@@ -162,7 +195,6 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
          are gone, so nothing is lost and the 0-7 scoring stack is untouched.
          Delete the pages outright once you're sure you don't want them back. -->
 
-    <div class="nav-sec">Value Layer</div>
     <!-- LAYOUT UNIFICATION 2026-08-18: the standalone pages are out of the nav.
          Each had its own markup and style block, which is why they read as a
          different application. What was unique to them now lives in the SPA:
@@ -181,21 +213,6 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
          discount live from valuation_runs and adds IRR and the hurdle test, so the
          two showed DIFFERENT fair values for the same REIT off the same nav.
          File retained and still reachable at /reit-value.html. -->
-    <a data-page="evidence">▦ Market Evidence</a>
-    <a data-page="fundamentals">▤ Fundamentals</a>
-    <a data-page="reitmodel">▦ REIT Model</a>
-    <a data-page="assets">⌗ Asset Models</a>
-    <a data-page="analysts">◇ Analyst Coverage</a>
-    <div class="nav-sec">My Portfolio</div>
-    <a data-page="real">$ Real Portfolio</a>
-    <a data-page="reit">⬡ REIT Holdings</a>
-    <a data-page="bond-holdings">~ Bond Holdings</a>
-    <a data-page="credit-holdings">◈ Credit Holdings</a>
-    <a data-page="manage">✎ Manage Holdings</a>
-    <a data-page="property">⌂ Direct Property</a>
-    <a data-page="income">$ Income &amp; Tax</a>
-    <a data-page="valuation">◈ Value Engine</a>
-    <a data-page="performance">▲ Total Portfolio</a>
     <!-- CULLED 2026-08-17: Model Portfolio tracked paper trades off the equity
          technical signals. Page and loader retained; nav entry removed. -->
     <div class="nav-sec">Market Data</div>
@@ -652,6 +669,44 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <tbody id="mg-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
     </table>
     <div id="mg-status" style="font-size:11px;margin-top:8px;white-space:pre-wrap"></div>
+  </div>
+
+  <!-- RESEARCH LIBRARY — drop anything, it gets filed and read -->
+  <div id="pg-research" class="page">
+    <div class="ph"><h1>Research Library</h1><p>Drop results packs, broker notes, annual reports · they get filed against the right ticker and read for commentary</p></div>
+
+    <div id="drop-zone"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)"
+         onclick="document.getElementById('bulk-files').click()">
+      <div style="font-size:28px;line-height:1">⬆</div>
+      <div style="font-weight:600;margin-top:6px">Drop documents here</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        or click to browse · PDF, TXT, CSV · up to 25 at a time<br>
+        Ticker, type, period, rating and price target are worked out for you — nothing saves until you confirm
+      </div>
+      <input type="file" id="bulk-files" multiple accept=".pdf,.txt,.csv" style="display:none" onchange="bulkClassify()">
+    </div>
+    <div id="bulk-status" style="font-size:11px;margin-top:10px;white-space:pre-wrap"></div>
+    <div id="bulk-results" style="margin-top:12px"></div>
+
+    <!-- COMMENTARY -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:26px">
+      <div class="sl" style="flex:1">Commentary — written from everything filed against a ticker</div>
+      <select id="cm-ticker" style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
+      <button class="btn btn-primary" style="font-size:11px;margin-left:8px" onclick="generateCommentary()" id="cm-btn">Write commentary</button>
+    </div>
+    <div id="cm-status" style="font-size:11px;color:var(--muted);margin:4px 0"></div>
+    <div id="cm-output"></div>
+
+    <div class="sl" style="margin-top:26px">Everything filed</div>
+    <input id="doc-filter" type="text" placeholder="Filter by ticker…" oninput="loadDocuments()"
+           style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);border-radius:3px;background:var(--paper);color:var(--ink);text-transform:uppercase;margin-bottom:8px">
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Date</th><th>Ticker</th><th>Type</th><th>Title / file</th><th>Author</th><th class="r">Target</th><th>Status</th><th></th></tr></thead>
+      <tbody id="doc-tbody"><tr><td colspan="8" class="empty">Nothing filed yet.</td></tr></tbody>
+    </table></div>
   </div>
 
   <!-- MARKET EVIDENCE — ported into the SPA from the old standalone page -->
@@ -1241,24 +1296,15 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
         <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('tax_statement')">Upload &amp; store</button>
       </div>
     </div>
-    <!-- BULK UPLOAD — drop everything, the model works out where it goes -->
-    <div class="sl">Bulk upload — drop a pile, the model files it</div>
-    <div style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
-        Results packs, analyst notes, annual reports — select as many as you like. Text is extracted
-        in your browser and classified by ticker, document type, period and (for broker notes)
-        rating and price target. <strong>Nothing is saved until you review it</strong>: everything
-        comes back as a proposal you can correct, because a misclassified results pack silently
-        dates a fundamental to the wrong REIT. Scanned image PDFs have no extractable text and will
-        come back flagged for manual entry.
-      </div>
-      <input type="file" id="bulk-files" multiple accept=".pdf,.txt,.csv" style="font-size:11px">
-      <button class="btn btn-primary" style="margin-left:8px" onclick="bulkClassify()">Read &amp; classify</button>
-      <div id="bulk-status" style="font-size:11px;margin-top:8px;white-space:pre-wrap"></div>
-      <div id="bulk-results" style="margin-top:12px"></div>
+    <div class="caveat" style="margin-bottom:16px">
+      <strong>Bulk upload and the research library moved</strong> to
+      <a href="#" onclick="go('research',null);return false" style="color:var(--teal)">Research Library</a>,
+      where you can drag a pile of documents straight in. This page keeps the three
+      transaction document types below, because they prefill a trade or income entry
+      rather than simply being filed.
     </div>
 
-    <!-- RESEARCH LIBRARY — filed against a ticker, surfaced on that stock's detail page -->
+    <!-- RESEARCH ENTRY — filed against a ticker, surfaced on that stock's detail page -->
     <div class="sl" style="margin-top:6px">Research &amp; results — filed against a ticker</div>
     <div style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px">
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
@@ -1290,15 +1336,11 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
     </div>
 
     <div id="doc-status" style="font-size:12px;margin-bottom:10px"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div class="sl" style="flex:1">All documents</div>
-      <input id="doc-filter" type="text" placeholder="Filter by ticker…" oninput="loadDocuments()"
-             style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);border-radius:3px;background:var(--paper);color:var(--ink);text-transform:uppercase">
+    <div class="caveat">
+      The full document list lives on
+      <a href="#" onclick="go('research',null);return false" style="color:var(--teal)">Research Library</a>
+      — one table, filterable by ticker, rather than two copies that can disagree.
     </div>
-    <table>
-      <thead><tr><th>Date</th><th>Ticker</th><th>Type</th><th>Title / file</th><th>Author</th><th class="r">Target</th><th>Status</th><th></th></tr></thead>
-      <tbody id="doc-tbody"><tr><td colspan="8" class="empty">No documents uploaded yet.</td></tr></tbody>
-    </table>
   </div>
 
   <!-- SETTINGS -->
@@ -1643,7 +1685,7 @@ function go(page, el) {
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
     income: loadIncome, property: loadProperty, valuation: loadValuation, manage: loadManage,
     fundamentals: loadFundamentals, assets: loadAssets, analysts: loadAnalysts,
-    reitmodel: loadReitModel, evidence: loadEvidence,
+    reitmodel: loadReitModel, evidence: loadEvidence, research: loadResearch,
     performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
@@ -5277,6 +5319,105 @@ function prefillDistFromParse(p) {
  * uploaded as part of the confirm step. Everything comes back as a proposal;
  * nothing is written until you press Save. */
 let bulkProposals = [], bulkFiles = [];
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const files = Array.from(e.dataTransfer?.files || []);
+  if (!files.length) return;
+  // Hand the dropped files to the same input the browse path uses, so there is
+  // one code path from here on.
+  const dt = new DataTransfer();
+  files.forEach(f => dt.items.add(f));
+  document.getElementById('bulk-files').files = dt.files;
+  bulkClassify();
+}
+
+async function loadResearch() {
+  if (!db) return;
+  // Ticker picker for commentary: anything we hold, model, or have filed research on.
+  const sel = document.getElementById('cm-ticker');
+  const [{ data: h }, { data: d }, { data: v }] = await Promise.all([
+    db.from('holdings').select('ticker').eq('is_open', true),
+    db.from('document_uploads').select('ticker'),
+    db.from('valuation_runs').select('ticker'),
+  ]);
+  const tickers = [...new Set([...(h||[]), ...(d||[]), ...(v||[])].map(r => r.ticker).filter(Boolean))].sort();
+  sel.innerHTML = tickers.length
+    ? tickers.map(t => `<option value="${t}">${t}</option>`).join('')
+    : '<option value="">— nothing to write about yet —</option>';
+  loadDocuments();
+  if (tickers.length) loadLatestCommentary();
+}
+
+/* Minimal markdown -> HTML for the commentary block. Deliberately small: headings,
+ * bold, bullets and paragraphs are all the prompt asks the model to produce. */
+function mdToHtml(md) {
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const lines = esc(md).split('\n');
+  let html = '', inList = false;
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (/^##+\s/.test(l)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<h4>${l.replace(/^##+\s*/,'')}</h4>`;
+    } else if (/^[-*]\s/.test(l)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${l.replace(/^[-*]\s*/,'')}</li>`;
+    } else if (!l) {
+      if (inList) { html += '</ul>'; inList = false; }
+    } else {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<p>${l}</p>`;
+    }
+  }
+  if (inList) html += '</ul>';
+  return html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+async function loadLatestCommentary() {
+  const t = document.getElementById('cm-ticker').value;
+  const out = document.getElementById('cm-output');
+  if (!t) { out.innerHTML = ''; return; }
+  const { data } = await db.from('stock_commentary').select('*')
+    .eq('ticker', t).order('generated_at', { ascending:false }).limit(1);
+  const c = data?.[0];
+  out.innerHTML = c
+    ? `<div class="cm">${mdToHtml(c.commentary)}
+        <div class="cm-src">Written ${new Date(c.generated_at).toLocaleString()} · ${c.model} ·
+        from ${c.sources?.documents ?? 0} document(s), ${c.sources?.brokers ?? 0} broker note(s),
+        ${c.sources?.distributions ?? 0} distribution(s)${c.sources?.has_valuation?', our valuation run':''}.
+        Written only from what this platform holds — no outside recall.</div></div>`
+    : `<div class="empty" style="font-size:11px">No commentary written for ${t} yet.</div>`;
+}
+
+async function generateCommentary() {
+  const t = document.getElementById('cm-ticker').value;
+  const st = document.getElementById('cm-status');
+  const btn = document.getElementById('cm-btn');
+  if (!t) { st.style.color='var(--red)'; st.textContent='Pick a ticker.'; return; }
+  btn.disabled = true; btn.textContent = 'Writing…';
+  st.style.color='var(--muted)';
+  st.textContent = `Reading everything filed against ${t}…`;
+  try {
+    const res = await fetch('/.netlify/functions/generate-commentary', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ticker: t })
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || res.status);
+    document.getElementById('cm-output').innerHTML =
+      `<div class="cm">${mdToHtml(out.commentary)}
+        <div class="cm-src">Written just now · ${out.model} ·
+        from ${out.sources.documents} document(s), ${out.sources.brokers} broker note(s),
+        ${out.sources.distributions} distribution(s)${out.sources.has_valuation?', our valuation run':''}.
+        Written only from what this platform holds — no outside recall.
+        ${out.persisted===false?'<br><strong>Not saved:</strong> '+(out.persist_error||''):''}</div></div>`;
+    st.textContent = '';
+  } catch (e) {
+    st.style.color='var(--red)';
+    st.textContent = 'Failed: ' + e.message;
+  } finally { btn.disabled = false; btn.textContent = 'Write commentary'; }
+}
 
 async function extractText(file) {
   if (/\.(txt|csv)$/i.test(file.name)) return await file.text();
