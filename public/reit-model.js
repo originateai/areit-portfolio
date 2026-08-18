@@ -69,6 +69,23 @@ const DEFAULTS = {
    * rate over `lfl_fade_years`. Set the fade to 1 to hold LFL flat if you
    * genuinely believe it persists. */
   lfl_fade_years:        3,
+  /* REVALUATION FLOW-THROUGH. Capitalising NPI at a held cap rate implies the
+   * book revalues by the full income growth. Valuers do not work that way.
+   * CIP FY26: NOI grew 5.2% but the portfolio was revalued up only $116m on a
+   * ~$3.8bn book — 3.0%, a flow-through of about 0.58. The balance shows up as
+   * the implied cap rate drifting wider, which is exactly what happened.
+   * Assuming 1.0 compounds the book faster than any valuer will mark it and
+   * manufactures NAV. */
+  revaluation_flowthrough: 0.60,
+  /* CAPITAL RECYCLING. REITs sell and buy constantly, and ignoring it breaks the
+   * forecast. CIP divested $200m in FY26 at a 17% premium — at a 5.8% cap that
+   * removes ~$11.6m of NPI, almost exactly offsetting $11.8m of like-for-like
+   * growth. Which is precisely why CIP guides FFO up 3-5% while a model that
+   * only ever grows the book produces 9.3%.
+   * Arrays are per forecast year; a scalar applies to year 1 only. $m. */
+  divestments_m:         null,   // assets SOLD — removes book and its NPI
+  acquisitions_m:        null,   // assets BOUGHT — adds book and NPI at acq_cap_rate
+  acquisition_cap_rate:  null,   // defaults to the portfolio cap rate
   straight_line_m:       0.0,    // $m non-cash straight-lining in reported NPI
   jv_equity_income_m:    0.0,    // $m equity-accounted JV income
 
@@ -86,6 +103,11 @@ const DEFAULTS = {
   // — Costs —
   mgmt_fee_pct_gav:      0.0055,
   admin_cost_m:          3.0,
+  /* Costs inflate. Holding the corporate cost base flat while NPI grows makes
+   * FFO grow FASTER than income — CIP's model grew FFO 9.3% on 5.2% NPI growth
+   * against guidance of 3.3–5.5%, and a frozen cost base was the whole reason.
+   * Operating leverage is real but it is not infinite. */
+  cost_inflation:        0.030,
   maintenance_capex_pct_noi: 0.05,
   leasing_incentive_pct_noi: 0.03,
   incentive_amortisation_m:  0.0,  // $m non-cash amortisation of incentives
@@ -478,7 +500,7 @@ function buildModel(input = {}, opts = {}) {
       { prior_npi: r2(noi), lfl: r2(lfl) });
 
     const occRatio = n0(a.occupancy, DEFAULTS.occupancy) / n0(a.base_occupancy, DEFAULTS.base_occupancy);
-    const npi = noiGrown * occRatio + n0(a.jv_equity_income_m, 0);
+    let npi = noiGrown * occRatio + n0(a.jv_equity_income_m, 0);   // `let`: capital recycling adjusts it below
     w('npi', npi, 'grown NPI × (occupancy ÷ base occupancy) + JV equity income',
       { grown_npi: r2(noiGrown), occupancy: a.occupancy, base_occupancy: a.base_occupancy,
         occupancy_ratio: r2(occRatio), jv_equity_income_m: n0(a.jv_equity_income_m, 0),
@@ -491,10 +513,41 @@ function buildModel(input = {}, opts = {}) {
       { npi: r2(npi), straight_line_m: n0(a.straight_line_m, 0) });
 
     /* ── 2. PROPERTY VALUE ───────────────────────────────────────────────── */
-    const closeGav = npi / a.cap_rate;
+    /* The book moves by income growth × flow-through, NOT by the full income
+     * growth. The residual widens the implied cap rate, which is reported so the
+     * drift is visible rather than hidden. */
+    /* Capital recycling BEFORE revaluation: an asset sold part-way through the
+     * year takes its income with it. Sales are struck at book (the premium is a
+     * realised gain, not recurring income); purchases come in at the acquisition
+     * cap rate. */
+    const perYear = (v) => Array.isArray(v) ? n0(v[y - 1], 0) : (y === 1 ? n0(v, 0) : 0);
+    const sold = perYear(a.divestments_m);
+    const bought = perYear(a.acquisitions_m);
+    const acqCap = num(a.acquisition_cap_rate) ?? a.cap_rate;
+    if (sold || bought) {
+      const npiLost = sold * a.cap_rate;
+      const npiGained = bought * acqCap;
+      npi = npi - npiLost + npiGained;
+      w('capital_recycling', npiGained - npiLost,
+        'acquisitions × acquisition cap − divestments × portfolio cap',
+        { divested_m: sold, npi_removed: r2(npiLost), acquired_m: bought,
+          npi_added: r2(npiGained), acquisition_cap_rate: acqCap,
+          note: 'an asset sold takes its income with it — a model that only grows the book overstates forward earnings' });
+    }
+
+    const ft = Math.max(0, Math.min(1, n0(a.revaluation_flowthrough, 1)));
+    const closeGav = (openGav - sold + bought) * (1 + lfl * ft);
     const revaluation = closeGav - openGav;
-    w('investment_properties', closeGav, 'NPI ÷ cap_rate',
-      { npi: r2(npi), cap_rate: a.cap_rate });
+    const impliedCap = closeGav > 0 ? npi / closeGav : null;
+    w('investment_properties', closeGav,
+      'opening book × (1 + like-for-like growth × revaluation flow-through)',
+      { opening_book: r2(openGav), lfl: r2(lfl), flow_through: ft,
+        book_growth: r2(lfl * ft), entry_cap_rate: a.cap_rate,
+        implied_cap_rate_after: r2(impliedCap),
+        cap_drift_bps: Math.round((impliedCap - a.cap_rate) * 10000),
+        note: 'valuers do not pass through the whole of income growth; the residual shows up as the implied cap rate drifting wider' });
+    w('implied_cap_rate', impliedCap, 'NPI ÷ closing book value',
+      { npi: r2(npi), book: r2(closeGav), entry_cap_rate: a.cap_rate });
     w('revaluation', revaluation, 'closing properties − opening properties',
       { closing: r2(closeGav), opening: r2(openGav), note: 'NON-CASH: hits equity, never operating cash flow' });
 
@@ -553,7 +606,10 @@ function buildModel(input = {}, opts = {}) {
     w('mgmt_fee', mgmtFee, 'closing properties × mgmt_fee_pct_gav',
       { properties: r2(closeGav), fee_pct: n0(a.mgmt_fee_pct_gav, 0) });
 
-    const admin = n0(a.admin_cost_m, 0);
+    const admin = n0(a.admin_cost_m, 0) * Math.pow(1 + n0(a.cost_inflation, 0), y - 1);
+    w('admin', admin, 'base admin × (1 + cost inflation)^(year − 1)',
+      { base_admin: n0(a.admin_cost_m, 0), cost_inflation: n0(a.cost_inflation, 0), year: y,
+        note: 'a frozen cost base makes FFO grow faster than income — operating leverage is real but not infinite' });
     const ebit = npi - mgmtFee - admin;
     w('ebit', ebit, 'NPI − management fee − admin',
       { npi: r2(npi), mgmt_fee: r2(mgmtFee), admin: r2(admin) });
@@ -681,6 +737,7 @@ function buildModel(input = {}, opts = {}) {
       affo_cover: distributions > 0 ? r2(affo / distributions) : null,
       icr: interest > 0 ? r2(ebit / interest) : null,
       lfl_growth: r2(lfl), expiring_share: r2(expShare),
+      implied_cap_rate: r2(impliedCap),
       blended_debt_rate: r2(blendedRate),
       debt_tranches: trancheDetail,
       ffo_bridge: ffoBridge,
