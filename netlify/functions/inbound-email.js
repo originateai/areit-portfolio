@@ -87,23 +87,53 @@ exports.handler = async (event) => {
     // Build the classification payload. Server-side we have no PDF extractor, so
     // a PDF contributes its filename and the email subject — enough for a
     // well-named file, and explicitly not enough for "document(3).pdf".
-    const docs = attachments.length
-      ? attachments.map(a => {
-          const isText = /\.(txt|csv)$/i.test(a.filename) || /text|csv/.test(a.type || '');
-          let text = '';
-          if (isText && a.content) {
-            try { text = a.encoding === 'base64' ? Buffer.from(a.content, 'base64').toString('utf8') : String(a.content); }
-            catch { text = ''; }
-          }
-          if (!text) {
-            text = `Filename: ${a.filename}\nEmail subject: ${subject}\nFrom: ${from}\n\n` +
-                   `(Binary attachment — no text extracted server-side. Classify from the filename and subject, ` +
-                   `and set a low confidence if they are not informative.)\n\n${bodyText.slice(0, 2000)}`;
-            warnings.push(`${a.filename}: binary attachment, classified from filename and subject only.`);
-          }
-          return { filename: a.filename, text };
-        })
-      : [{ filename: `${subject}.txt`, text: `Subject: ${subject}\nFrom: ${from}\n\n${bodyText}` }];
+    /* PDF text is extracted HERE, server-side, so an emailed results pack
+     * classifies as well as one dragged into the browser. Without it the model
+     * only ever sees the filename and subject — fine for
+     * "DXI 1H26 results presentation.pdf", useless for "document(3).pdf".
+     * pdf-parse is pinned to 1.1.1; see the note in package.json. */
+    let pdfParse = null;
+    try { pdfParse = require('pdf-parse'); }
+    catch { warnings.push('pdf-parse unavailable — PDFs classified from filename and subject only.'); }
+
+    const docs = [];
+    if (attachments.length) {
+      for (const a of attachments) {
+        const isText = /\.(txt|csv)$/i.test(a.filename) || /text|csv/.test(a.type || '');
+        const isPdf  = /\.pdf$/i.test(a.filename) || /pdf/.test(a.type || '');
+        let text = '';
+
+        if (a.content) {
+          try {
+            const buf = Buffer.from(a.content, a.encoding === 'base64' ? 'base64' : 'utf8');
+            if (isText) text = buf.toString('utf8');
+            else if (isPdf && pdfParse) {
+              const parsed = await pdfParse(buf);
+              text = parsed.text || '';
+              // A scanned pack has a page count but almost no text — say so
+              // rather than letting it fail silently into low confidence.
+              if (text.trim().length < 200) {
+                warnings.push(`${a.filename}: ${parsed.numpages} page(s) but no extractable text — almost certainly a scanned image PDF. Filed for review; it needs manual entry or OCR.`);
+                text = '';
+              }
+            }
+          } catch (e) { warnings.push(`${a.filename}: extraction failed (${e.message.slice(0, 60)})`); }
+        }
+
+        if (!text) {
+          text = `Filename: ${a.filename}\nEmail subject: ${subject}\nFrom: ${from}\n\n` +
+                 `(No text could be extracted. Classify from the filename and subject alone, ` +
+                 `and set a LOW confidence unless they are genuinely informative.)\n\n${bodyText.slice(0, 2000)}`;
+        } else {
+          // Prepend the envelope: the subject line often carries the ticker and
+          // period when the document itself buries them.
+          text = `Email subject: ${subject}\nFrom: ${from}\nFilename: ${a.filename}\n\n${text}`;
+        }
+        docs.push({ filename: a.filename, text });
+      }
+    } else {
+      docs.push({ filename: `${subject}.txt`, text: `Subject: ${subject}\nFrom: ${from}\n\n${bodyText}` });
+    }
 
     // Reuse the same classifier the drag-and-drop uses — one code path.
     const base = process.env.URL || process.env.DEPLOY_PRIME_URL || 'https://areit.netlify.app';

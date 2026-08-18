@@ -5,6 +5,10 @@
   "dependencies": {
     "@netlify/functions": "^2.4.0",
     "@supabase/supabase-js": "^2.39.0",
-    "resend": "^3.2.0"
+    "resend": "^3.2.0",
+    "pdf-parse": "1.1.1"
+  },
+  "comments": {
+    "pdf-parse": "PINNED to 1.1.1 deliberately. v2.x wraps pdf.js and pulls in @napi-rs/canvas, which fails to build in the Netlify bundler. 1.1.1 is pure JS and extracts text fine, which is all inbound-email needs."
   }
 }
