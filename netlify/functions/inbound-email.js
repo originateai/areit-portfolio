@@ -59,14 +59,25 @@ exports.handler = async (event) => {
       payload = Object.fromEntries(new URLSearchParams(event.body || ''));
     }
 
+    // Field names differ by provider. Postmark capitalises and nests the sender.
     const subject = payload.subject || payload.Subject || '(no subject)';
-    const from    = payload.from || payload.sender || payload.From || 'unknown';
-    const bodyText = payload['body-plain'] || payload.plain || payload.text || payload.TextBody || '';
+    const from    = payload.from || payload.sender || payload.From
+                  || payload.FromFull?.Email || 'unknown';
+    const bodyText = payload['body-plain'] || payload.plain || payload.text
+                  || payload.TextBody || payload.StrippedTextReply || '';
 
     // Attachments: CloudMailin sends `attachments[]`, Mailgun sends
     // attachment-1..N with a JSON manifest, SendGrid sends a count + fields.
     let attachments = [];
-    if (Array.isArray(payload.attachments)) {
+    // Postmark: `Attachments[]` with Name / Content (base64) / ContentType.
+    if (Array.isArray(payload.Attachments)) {
+      attachments = payload.Attachments.map(a => ({
+        filename: a.Name || 'attachment',
+        content: a.Content || null,
+        encoding: 'base64',
+        type: a.ContentType || null,
+      }));
+    } else if (Array.isArray(payload.attachments)) {
       attachments = payload.attachments.map(a => ({
         filename: a.file_name || a.filename || a.name || 'attachment',
         content: a.content || a.data || null,
