@@ -3369,9 +3369,9 @@ function renderReitModel() {
 
 /* Our modelled DPU/FFO against every broker on the name, plus a consensus.
  *
- * UNITS: broker eps_fy*/dpu_fy* are CENTS (SPEC §1.1 — the stored DXC row reads
- * 20.9). The model emits DOLLARS. Everything is converted to cents here so one
- * table is internally consistent, and the header says so.
+ * UNITS: the broker eps_fyNN and dpu_fyNN columns are CENTS (SPEC §1.1 — the
+ * stored DXC row reads 20.9). The model emits DOLLARS. Everything is converted to
+ * cents here so one table is internally consistent, and the header says so.
  *
  * YEAR ALIGNMENT is an assumption, not a fact: broker columns are labelled by
  * financial year while the model counts forecast years from its base. They are
