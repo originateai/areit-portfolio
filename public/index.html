@@ -155,6 +155,23 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
 .cm ul{margin:0 0 10px 18px}
 .cm li{margin-bottom:4px}
 .cm-src{font-size:10px;color:var(--muted);border-top:1px solid var(--rule);margin-top:12px;padding-top:8px}
+
+/* Accordion — the assumption editor was a wall of 30 inputs */
+.acc{border:1px solid var(--rule);margin-bottom:6px;background:var(--paper)}
+.acc-head{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+          background:var(--cream);user-select:none}
+.acc-head:hover{background:rgba(75,151,178,0.08)}
+.acc-head .chev{font-size:10px;color:var(--muted);transition:transform .15s;width:10px}
+.acc.open .acc-head .chev{transform:rotate(90deg)}
+.acc-title{font-weight:600;font-size:12px;flex:1}
+.acc-sum{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)}
+.acc-body{display:none;padding:14px}
+.acc.open .acc-body{display:block}
+.calib{font-family:'DM Mono',monospace;font-size:8px;padding:1px 4px;border-radius:2px;
+       background:rgba(31,138,76,0.14);color:var(--green);margin-left:5px}
+.calib.def{background:var(--rule);color:var(--muted)}
+th.act{background:rgba(0,0,0,0.04)}
+td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
 </style>
 </head>
 <body>
@@ -3556,7 +3573,15 @@ async function loadEvidence() {
  * server-side. Everything here runs client-side so a keystroke rebuilds the model
  * and the sensitivity grid immediately — a server round-trip per edit would make
  * sensitising unusable. */
-let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl', rmScenarios = [], rmRollup = null;
+let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl',
+    rmScenarios = [], rmRollup = null, rmCalibration = null, rmFundamentals = null,
+    rmActuals = [], rmOpenSections = new Set();
+
+function rmToggleAcc(i, group) {
+  const el = document.getElementById('acc-' + i);
+  const open = el.classList.toggle('open');
+  if (open) rmOpenSections.add(group); else rmOpenSections.delete(group);
+}
 
 /* Field groups drive the editor layout. `pct` fields are stored as decimals and
  * shown as percentages — the form converts on the way in and out, because typing
@@ -3646,14 +3671,30 @@ async function seedAssumptions() {
    * than taken as three blended numbers on faith. A saved scenario still wins —
    * a deliberate house view beats the roll-up — and the page says which is in
    * force. */
-  const { data: assetRows } = await db.from('reit_assets').select('*').eq('ticker', rmTicker);
+  const { data: assetRows } = await db.from('reit_assets').select('*')
+    .eq('ticker', rmTicker).eq('is_excluded', false);
   rmRollup = null;
   if (assetRows?.length && window.ReitModel.rollUpAssets) {
     const roll = window.ReitModel.rollUpAssets(assetRows);
     if (roll.ok) rmRollup = roll;
   }
 
-  if (sc?.[0]) { rmAssumptions = { ...D, ...(rmRollup?.assumptions || {}), ...sc[0].assumptions }; }
+  /* CALIBRATION. Seed from what the REIT actually reported before anything else.
+   * A model on generic defaults is a template, not a model — and guidance gives
+   * a hard test of whether the calibration holds. */
+  const { data: funds } = await db.from('reit_fundamentals').select('*')
+    .eq('ticker', rmTicker).order('release_date', { ascending: false }).limit(6);
+  rmFundamentals = funds?.[0] || null;
+  rmActuals = funds || [];
+  rmCalibration = rmFundamentals && window.ReitModel.calibrateFromActuals
+    ? window.ReitModel.calibrateFromActuals(rmFundamentals, { securities_m: mdl?.[0]?.securities_m })
+    : null;
+
+  // Precedence: defaults < asset roll-up < reported actuals < your saved scenario.
+  // Each layer is closer to the truth than the one before, and your own view wins.
+  if (sc?.[0]) {
+    rmAssumptions = { ...D, ...(rmRollup?.assumptions || {}), ...(rmCalibration?.assumptions || {}), ...sc[0].assumptions };
+  }
   else {
     const a = asm?.[0] || {}, m = mdl?.[0] || {};
     rmAssumptions = {
@@ -3666,9 +3707,12 @@ async function seedAssumptions() {
       reversion:       a.reversion ?? D.reversion,
       occupancy:       a.occupancy ?? D.occupancy,
       base_occupancy:  a.occupancy ?? D.base_occupancy,
-      gearing_target:  a.gearing_current ?? D.gearing_target,
-      cost_of_debt:    a.cost_of_debt ?? D.cost_of_debt,
-      hedge_ratio:     a.hedge_ratio ?? D.hedge_ratio,
+      gearing_target:  rmCalibration?.assumptions.gearing_target ?? a.gearing_current ?? D.gearing_target,
+      cost_of_debt:    rmCalibration?.assumptions.cost_of_debt ?? a.cost_of_debt ?? D.cost_of_debt,
+      hedge_ratio:     rmCalibration?.assumptions.hedge_ratio ?? a.hedge_ratio ?? D.hedge_ratio,
+      occupancy:       rmCalibration?.assumptions.occupancy ?? a.occupancy ?? D.occupancy,
+      base_occupancy:  rmCalibration?.assumptions.base_occupancy ?? a.occupancy ?? D.base_occupancy,
+      like_for_like_growth: rmCalibration?.assumptions.like_for_like_growth ?? null,
       mgmt_fee_pct_gav: a.fee_rate_gav ?? D.mgmt_fee_pct_gav,
       payout_ratio:    a.payout_ratio ?? D.payout_ratio,
       required_return: a.req_return ?? D.required_return,
@@ -3743,23 +3787,55 @@ function renderReitModel() {
   const M = window.ReitModel;
   if (!M || !rmTicker) return;
 
-  // Assumption editor
+  /* Accordion, not a wall of thirty inputs. Collapsed by default except the
+   * first, with a one-line summary of the key figures so you can see what a
+   * section holds without opening it. Fields sourced from the results pack are
+   * badged CAL; the rest are defaults and say so — the distinction between a
+   * reported number and something I made up is the most important thing on this
+   * screen. */
   const box = document.getElementById('rm-assumptions');
-  box.innerHTML = RM_FIELDS.map(([group, fields]) => `
-    <div style="margin-bottom:12px">
-      <div class="sl" style="margin-bottom:6px">${group}</div>
-      <div class="form-grid">${fields.map(([key,label,type]) => {
+  const calSrc = rmCalibration?.sourced || {};
+  const summary = {
+    'Reported opening balance sheet — from the last results pack':
+      [rmAssumptions.opening_investment_properties_m ? '$'+Number(rmAssumptions.opening_investment_properties_m).toFixed(0)+'m book' : null,
+       rmAssumptions.securities_m ? Number(rmAssumptions.securities_m).toFixed(0)+'m units' : null].filter(Boolean).join(' · '),
+    'Portfolio income':
+      [rmAssumptions.base_noi_m ? '$'+Number(rmAssumptions.base_noi_m).toFixed(1)+'m NPI' : null,
+       rmAssumptions.cap_rate ? f.pct0(rmAssumptions.cap_rate)+' cap' : null,
+       rmAssumptions.like_for_like_growth != null ? f.pct0(rmAssumptions.like_for_like_growth)+' LFL' : null].filter(Boolean).join(' · '),
+    'Debt':
+      [rmAssumptions.gearing_target != null ? f.pct0(rmAssumptions.gearing_target)+' gearing' : null,
+       rmAssumptions.cost_of_debt != null ? f.pct0(rmAssumptions.cost_of_debt)+' cost' : null,
+       rmAssumptions.hedging_enabled === false ? 'UNHEDGED' : (rmAssumptions.hedge_ratio != null ? f.pct0(rmAssumptions.hedge_ratio)+' hedged' : null)].filter(Boolean).join(' · '),
+    'Costs': rmAssumptions.mgmt_fee_pct_gav != null ? f.pct0(rmAssumptions.mgmt_fee_pct_gav)+' mgmt fee' : '',
+    'Distribution': rmAssumptions.payout_ratio != null ? f.pct0(rmAssumptions.payout_ratio)+' payout of '+String(rmAssumptions.payout_basis||'affo').toUpperCase() : '',
+    'Valuation': [rmAssumptions.required_return != null ? f.pct0(rmAssumptions.required_return)+' required' : null,
+                  rmAssumptions.terminal_growth != null ? f.pct0(rmAssumptions.terminal_growth)+' terminal g' : null].filter(Boolean).join(' · '),
+  };
+
+  box.innerHTML = RM_FIELDS.map(([group, fields], gi) => {
+    const nCal = fields.filter(([k]) => calSrc[k]).length;
+    return `<div class="acc ${gi === 0 || rmOpenSections.has(group) ? 'open' : ''}" id="acc-${gi}">
+      <div class="acc-head" onclick="rmToggleAcc(${gi},'${group.replace(/'/g,"")}')">
+        <span class="chev">▶</span>
+        <span class="acc-title">${group}</span>
+        ${nCal ? `<span class="calib">${nCal} from results pack</span>` : ''}
+        <span class="acc-sum">${summary[group] || ''}</span>
+      </div>
+      <div class="acc-body"><div class="form-grid">${fields.map(([key,label,type]) => {
         const v = rmAssumptions[key];
+        const badge = calSrc[key] ? `<span class="calib" title="${calSrc[key]}">CAL</span>` : '';
         if (type.startsWith('sel:')) {
           const opts = type.slice(4).split('|');
-          return `<div class="form-group"><label>${label}</label>
+          return `<div class="form-group"><label>${label}${badge}</label>
             <select onchange="rmEdit('${key}',this.value)">${opts.map(o=>`<option value="${o}" ${v===o?'selected':''}>${o.toUpperCase()}</option>`).join('')}</select></div>`;
         }
         const shown = v == null ? '' : (type==='pct' ? (v*100).toFixed(3).replace(/\.?0+$/,'') : v);
-        return `<div class="form-group"><label>${label}${type==='pct'?' %':''}</label>
+        return `<div class="form-group"><label>${label}${type==='pct'?' %':''}${badge}</label>
           <input type="number" step="any" value="${shown}" onchange="rmEdit('${key}',this.value)"></div>`;
-      }).join('')}</div>
-    </div>`).join('');
+      }).join('')}</div></div>
+    </div>`;
+  }).join('');
 
   document.getElementById('rm-hedging').checked = rmAssumptions.hedging_enabled !== false;
 
@@ -3783,6 +3859,32 @@ function renderReitModel() {
   let banner = '';
   if (rmContext.seeded_from === 'defaults') {
     banner = `<div class="caveat"><strong>Seeded from engine defaults</strong> — ${rmTicker} has no asset register and no workbook assumptions. The numbers below are only as good as what you enter above.</div>`;
+  } else if (rmCalibration?.ok) {
+    /* Guidance is the only out-of-sample test available on a forward model.
+     * If the model can't reproduce what the company published about its own next
+     * year, the fair value below is not trustworthy — and it says so plainly
+     * rather than letting a wrong number look finished. */
+    const gv = window.ReitModel.validateAgainstGuidance(m, rmFundamentals);
+    const badge = !gv || gv.verdict === 'NO_GUIDANCE' ? ''
+      : gv.verdict === 'CALIBRATED'   ? '<span class="hz pass">✓ matches guidance</span>'
+      : gv.verdict === 'LOOSE'        ? '<span class="hz">loose vs guidance</span>'
+      : '<span class="hz fail">✗ misses guidance</span>';
+    const rows = gv?.checks?.length
+      ? `<table style="margin-top:8px"><thead><tr><th>Test</th><th class="r">Company guides</th><th class="r">Our model</th><th class="r">Gap</th></tr></thead>
+         <tbody>${gv.checks.map(c=>`<tr>
+           <td style="font-size:11px">${c.metric}</td>
+           <td class="r">${c.guidance}</td>
+           <td class="r" style="font-weight:600">${c.modelled ?? '—'}</td>
+           <td class="r" style="color:${c.within_guidance?'var(--green)':'var(--red)'}">${c.error_pct!=null?f.pct(c.error_pct,1):'—'}</td>
+         </tr>`).join('')}</tbody></table>` : '';
+    banner = `<div class="caveat" style="border-left-color:${gv?.verdict==='MISCALIBRATED'?'var(--red)':'var(--teal)'}">
+      <strong>Calibrated from the ${rmFundamentals.period_end} results pack</strong>
+      (released ${rmFundamentals.release_date}) ${badge}
+      <br>${rmCalibration.note}
+      ${gv?.message ? `<br><br><strong>${gv.message}</strong>` : ''}
+      ${rows}
+      ${rmRollup ? `<br>Portfolio built bottom-up from ${rmRollup.working.inputs.assets_priced} assets · value-weighted cap ${f.pct0(rmRollup.working.inputs.blended_cap_rate)} · ${rmRollup.working.inputs.cap_spread_bps}bps spread.` : ''}
+    </div>`;
   } else if (rmRollup) {
     const i = rmRollup.working.inputs, con = rmRollup.working.concentration;
     const naive = rmRollup.working.breakdown.reduce((s,a)=>s+a.cap_rate,0) / rmRollup.working.breakdown.length;
@@ -4029,15 +4131,33 @@ function renderRmStatement(m) {
     return;
   }
 
+  /* ACTUALS FIRST. A forecast with no history beside it can't be sanity-checked —
+   * you can't tell whether year 1 continues the trend or breaks it. Reported
+   * periods are shaded and labelled A; forecasts are E. */
+  const acts = [...(rmActuals || [])].reverse();   // oldest first
+  const ACT_MAP = { npi:'npi', investment_properties_m:'portfolio_value', net_debt_m:null,
+                    gearing:'gearing', nta:'nta', dpu:'dps', ffo_m:'ffo', occupancy:'occupancy',
+                    lfl_growth:'lfl_noi_growth' };
+  const actVal = (row, key) => {
+    const src = ACT_MAP[key]; if (!src) return null;
+    let v = row[src]; if (v == null) return null; v = Number(v);
+    // reported NPI / FFO / portfolio value are DOLLARS; statements are $m
+    if (['npi','ffo','portfolio_value'].includes(src)) v = v / 1e6;
+    return v;
+  };
+
   const rows = RM_ROWS[rmStatementTab];
   el.innerHTML = `
-    <thead><tr><th>${rmStatementTab==='ps'?'Per security':'$m'}</th>${m.years.map(y=>`<th class="r">Year ${y.year}</th>`).join('')}</tr></thead>
+    <thead><tr><th>${rmStatementTab==='ps'?'Per security':'$m'}</th>
+      ${acts.map(a=>`<th class="r act" title="Reported, released ${a.release_date}">${String(a.period_end).slice(0,4)}A</th>`).join('')}
+      ${m.years.map(y=>`<th class="r">Yr ${y.year}E</th>`).join('')}</tr></thead>
     <tbody>${rows.map(([key,label,type,wkey]) => {
       const bold = ['ffo_m','affo_m','ebit_m','total_assets_m','equity_m','net_cash_movement_m','dpu','nta'].includes(key);
       const has = wkey && m.years[0].workings?.[wkey];
       return `<tr${bold?' style="font-weight:600;background:var(--cream)"':''}
                 ${has?`class="clickable" onclick="rmShowWorking('${wkey}','${label.trim().replace(/'/g,"")}')"`:''}>
         <td>${label}${has?'<span class="est" title="Click to see the formula and inputs">ƒ</span>':''}</td>
+        ${acts.map(a=>{ const v = actVal(a, key); return `<td class="r act">${v!=null?rmFmt(v,type):'—'}</td>`; }).join('')}
         ${m.years.map(y=>`<td class="r">${rmFmt(y[key], type)}</td>`).join('')}</tr>`;
     }).join('')}</tbody>`;
 }

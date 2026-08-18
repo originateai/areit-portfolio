@@ -185,6 +185,117 @@ function rollUpAssets(assets, opts = {}) {
   };
 }
 
+/* ── CALIBRATION ──────────────────────────────────────────────────────────────
+ * Seed the model from what the REIT actually REPORTED, not from generic defaults.
+ *
+ * A model running on escalation 3% / payout 95% / required return 8.5% is not a
+ * model of anything — it is a template. When the results pack states LFL NOI of
+ * +5.2%, a WACR of 5.8%, gearing of 34.9% and hedging of 54%, using 3% and
+ * 33% instead is simply choosing to be wrong.
+ *
+ * And guidance gives a HARD TEST that a template can never pass: the company
+ * publishes its own next-year FFO. If the model cannot reproduce that, the model
+ * is miscalibrated and should say so rather than quietly emitting a fair value.
+ * `validateAgainstGuidance` below is that test.
+ */
+function calibrateFromActuals(f, opts = {}) {
+  if (!f) return { ok: false, reason: 'no reported fundamentals', assumptions: {} };
+  const a = {}, sourced = {}, missing = [];
+
+  const take = (key, val, label) => {
+    if (val === null || val === undefined || !Number.isFinite(Number(val))) { missing.push(label || key); return; }
+    a[key] = Number(val); sourced[key] = label || key;
+  };
+
+  // Portfolio. NPI is a period flow in dollars; the model wants annual $m.
+  if (f.npi != null && f.period_months) {
+    take('base_noi_m', (Number(f.npi) * (12 / f.period_months)) / 1e6, 'reported NPI, annualised');
+  } else if (f.portfolio_value != null && f.wacr != null) {
+    // NPI is often not disclosed, but value x WACR recovers it as an identity.
+    take('base_noi_m', (Number(f.portfolio_value) * Number(f.wacr)) / 1e6, 'portfolio value x WACR');
+  } else missing.push('base_noi_m');
+
+  take('cap_rate', f.wacr, 'reported WACR');
+  take('occupancy', f.occupancy, 'reported occupancy');
+  take('base_occupancy', f.occupancy, 'reported occupancy');
+  take('gearing_target', f.gearing, 'reported gearing');
+  take('hedge_ratio', f.hedge_pct, 'reported hedging');
+  take('cost_of_debt', f.cost_of_debt, 'reported cost of debt');
+
+  // LFL growth is an OBSERVATION of what the portfolio actually did. It beats a
+  // build-up from assumed escalation and reversion, so it overrides them.
+  take('like_for_like_growth', f.lfl_noi_growth, 'reported like-for-like NOI growth');
+
+  // Payout implied by what was actually distributed against what was earned.
+  if (f.dps != null && f.ffo != null && f.period_months) {
+    // ffo is a dollar total; dps is per security. Need securities to compare, so
+    // this is only computed where the caller supplies them.
+    if (opts.securities_m) {
+      const ffoPerUnit = Number(f.ffo) / (opts.securities_m * 1e6);
+      if (ffoPerUnit > 0) take('payout_ratio', Number(f.dps) / ffoPerUnit, 'reported DPS / FFO per security');
+    }
+  }
+
+  if (f.wale != null) a._reported_wale = Number(f.wale);
+
+  return {
+    ok: Object.keys(a).length > 0,
+    assumptions: a, sourced, missing,
+    as_at: f.release_date || null, period_end: f.period_end || null,
+    note: `Calibrated from the ${f.period_end} results pack released ${f.release_date}. ` +
+          `${Object.keys(sourced).length} assumption(s) come from reported figures; ` +
+          `${missing.length} fall back to defaults.`,
+  };
+}
+
+/* Does the model reproduce the company's own guidance? This is the only
+ * out-of-sample test available on a forward model, and a model that fails it
+ * should not be trusted to value anything. */
+function validateAgainstGuidance(model, f) {
+  if (!model?.ok || !f) return null;
+  const y1 = model.years[0];
+  if (!y1) return null;
+
+  const out = { checks: [], verdict: null };
+
+  const lo = f.guidance_ffo_low != null ? Number(f.guidance_ffo_low) : null;
+  const hi = f.guidance_ffo_high != null ? Number(f.guidance_ffo_high) : lo;
+  if (lo != null) {
+    const modelled = y1.ffo_per_unit;
+    const mid = (lo + hi) / 2;
+    const errPct = mid ? (modelled - mid) / mid : null;
+    out.checks.push({
+      metric: 'FFO per security', guidance: hi > lo ? `${(lo*100).toFixed(1)}–${(hi*100).toFixed(1)}c` : `${(lo*100).toFixed(1)}c`,
+      modelled: modelled != null ? `${(modelled*100).toFixed(1)}c` : null,
+      error_pct: r2(errPct),
+      within_guidance: modelled != null && modelled >= lo * 0.98 && modelled <= hi * 1.02,
+    });
+  }
+
+  const gd = f.guidance_dps != null ? Number(f.guidance_dps) : null;
+  if (gd != null) {
+    const modelled = y1.dpu;
+    const errPct = gd ? (modelled - gd) / gd : null;
+    out.checks.push({
+      metric: 'Distribution per security', guidance: `${(gd*100).toFixed(1)}c`,
+      modelled: modelled != null ? `${(modelled*100).toFixed(1)}c` : null,
+      error_pct: r2(errPct),
+      within_guidance: modelled != null && Math.abs(errPct) <= 0.05,
+    });
+  }
+
+  if (!out.checks.length) { out.verdict = 'NO_GUIDANCE'; out.message = 'No published guidance to test against.'; return out; }
+
+  const worst = Math.max(...out.checks.map(c => Math.abs(c.error_pct ?? 0)));
+  out.max_error_pct = r2(worst);
+  out.verdict = worst <= 0.05 ? 'CALIBRATED' : worst <= 0.15 ? 'LOOSE' : 'MISCALIBRATED';
+  out.message =
+    out.verdict === 'CALIBRATED'   ? `Model reproduces published guidance within ${(worst*100).toFixed(1)}%. The assumptions hold together.`
+  : out.verdict === 'LOOSE'        ? `Model is ${(worst*100).toFixed(1)}% away from published guidance. Directionally right, but do not lean on the precise fair value.`
+  : `Model misses published guidance by ${(worst*100).toFixed(1)}%. Something is wrong with the assumptions — the fair value below is NOT trustworthy until this is reconciled.`;
+  return out;
+}
+
 /* ── WORKINGS RECORDER ────────────────────────────────────────────────────────
  * w(key, value, formula, inputs) stores the number AND how it was reached.
  * The UI renders these verbatim, so a reader can check any line without reading
@@ -564,11 +675,43 @@ function valueModel(rows, a, exitCap) {
   workings.ffo_multiple = { value: r2(ffoMult), formula: 'terminal FFO per security × multiple',
     inputs: { ffo_per_unit: last.ffo_per_unit, multiple: n0(a.ffo_multiple, 0) } };
 
+  /* ── LEVERED DCF (free cash flow to equity) ─────────────────────────────────
+   * Distinct from the DDM, and the distinction matters. The DDM discounts only
+   * what is PAID OUT; this discounts all cash available to equity, including
+   * what is retained and the debt drawn as the book revalues. For a REIT that
+   * retains earnings or gears into a rising valuation, the two diverge — and the
+   * gap between them is exactly the value of what management keeps back.
+   *
+   *   FCFE_t = AFFO_t + net debt drawn_t
+   *   V = Σ FCFE_t/(1+r)^t  +  terminal equity value/(1+r)^N
+   *
+   * Terminal is the exit-cap equity value, so the DCF is anchored to a property
+   * valuation at exit rather than to a perpetuity of its own cash flows. */
+  let dcf = null;
+  if (rows.length && a.securities_m) {
+    let pv = 0; const terms = [];
+    rows.forEach((row, i) => {
+      const fcfe = (row.affo_m ?? 0) + (row.debt_drawn_m ?? 0);
+      const disc = fcfe / Math.pow(1 + r, i + 1);
+      pv += disc;
+      terms.push(`yr${i+1} AFFO ${(row.affo_m??0).toFixed(1)} + debt drawn ${(row.debt_drawn_m??0).toFixed(1)} = ${fcfe.toFixed(1)} → PV ${disc.toFixed(1)}`);
+    });
+    const terminalEquity = exitGav + last.cash_m - last.net_debt_m;
+    const pvTerminal = terminalEquity / Math.pow(1 + r, rows.length);
+    dcf = (pv + pvTerminal) / a.securities_m;
+    workings.dcf = { value: r2(dcf),
+      formula: 'Σ (AFFO + net debt drawn) ÷ (1+r)^t  +  terminal equity ÷ (1+r)^N,  all ÷ securities',
+      inputs: { discount_rate: r, pv_explicit_m: r2(pv), terminal_equity_m: r2(terminalEquity),
+                pv_of_terminal_m: r2(pvTerminal), securities_m: a.securities_m, cashflows: terms,
+                note: 'FCFE, not distributions — the gap to the DDM is the value of retained earnings and of gearing into a revaluing book' } };
+  }
+
   const parts = [
-    { method: 'cap_rate_nav', value: capNav,  weight: 0.35 },
-    { method: 'ddm',          value: ddm,     weight: 0.30 },
-    { method: 'exit_cap_nav', value: exitNav, weight: 0.20 },
-    { method: 'ffo_multiple', value: ffoMult, weight: 0.15 },
+    { method: 'cap_rate_nav', value: capNav,  weight: 0.30 },
+    { method: 'dcf',          value: dcf,     weight: 0.25 },
+    { method: 'ddm',          value: ddm,     weight: 0.20 },
+    { method: 'exit_cap_nav', value: exitNav, weight: 0.15 },
+    { method: 'ffo_multiple', value: ffoMult, weight: 0.10 },
   ].filter(p => p.value !== null && Number.isFinite(p.value));
 
   const totalW = parts.reduce((s, p) => s + p.weight, 0);
@@ -577,7 +720,7 @@ function valueModel(rows, a, exitCap) {
     inputs: Object.fromEntries(parts.map(p => [p.method, `${p.value.toFixed(3)} × ${(p.weight/totalW*100).toFixed(0)}%`])) };
 
   return {
-    cap_rate_nav: r2(capNav), ddm: r2(ddm), exit_cap_nav: r2(exitNav),
+    cap_rate_nav: r2(capNav), ddm: r2(ddm), dcf: r2(dcf), exit_cap_nav: r2(exitNav),
     ffo_multiple_value: r2(ffoMult), exit_cap_rate: exitCap,
     blended_value: r2(blended),
     weights: Object.fromEntries(parts.map(p => [p.method, r2(p.weight / totalW)])),
@@ -645,6 +788,7 @@ function buildFromAssets(assets, overrides = {}, opts = {}) {
            overridden_fields: Object.keys(overrides).filter(k => k in roll.assumptions) };
 }
 
-const API = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity, rollUpAssets, buildFromAssets };
+const API = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity,
+              rollUpAssets, buildFromAssets, calibrateFromActuals, validateAgainstGuidance };
 if (typeof module !== 'undefined' && module.exports) module.exports = API;
 if (typeof window !== 'undefined') window.ReitModel = API;

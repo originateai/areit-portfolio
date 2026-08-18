@@ -181,7 +181,33 @@ exports.handler = async (event) => {
         nta: num(fund.nta), wacr: num(fund.wacr), gearing: num(fund.gearing),
         icr: num(fund.icr), hedge_pct: num(fund.hedge_pct),
         wale: num(fund.wale), occupancy: num(fund.occupancy), dps: num(fund.dps),
+        ffo: num(fund.ffo), npi: num(fund.npi),
+        portfolio_value: num(fund.portfolio_value),
+        lfl_noi_growth: num(fund.lfl_noi_growth),
+        wade_years: num(fund.wade_years),
       } : null,
+
+      /* The company's OWN forward view. Without this the narrative can only
+       * describe the past — and guidance is the one forward number that is
+       * published rather than modelled, so it anchors everything. */
+      guidance: fund?.guidance_fy ? {
+        fy: fund.guidance_fy,
+        ffo_per_security_low: num(fund.guidance_ffo_low),
+        ffo_per_security_high: num(fund.guidance_ffo_high),
+        dps_per_security: num(fund.guidance_dps),
+        implied_dps_growth: (num(fund.guidance_dps) != null && num(fund.dps))
+          ? r3((num(fund.guidance_dps) - num(fund.dps)) / num(fund.dps)) : null,
+      } : null,
+
+      /* Several periods of reported history, so the reader can see whether the
+       * trajectory is improving or deteriorating rather than judging one point
+       * in isolation. */
+      history: (fundR.data || []).map(h => ({
+        period_end: h.period_end, release_date: h.release_date,
+        nta: num(h.nta), wacr: num(h.wacr), gearing: num(h.gearing),
+        occupancy: num(h.occupancy), wale: num(h.wale), dps: num(h.dps),
+        lfl_noi_growth: num(h.lfl_noi_growth),
+      })),
       valuation: val ? {
         price: num(val.price), fair_value: num(val.fair_value),
         discount: num(val.discount_to_fair_value), irr_pre_tax: num(val.irr_pre_tax),
@@ -228,10 +254,19 @@ Is it a bond proxy or an inflation beneficiary, and WHY, from its WALE and cap
 rate — not from a generic view on REITs. Say what rate path helps and what hurts.
 Where the balance sheet transmits macro before the portfolio does, say so.
 
+## Track record and outlook
+What the reported history shows about the trajectory — is NTA, occupancy, gearing
+and LFL growth improving or deteriorating? Then what the company GUIDES for next
+year, and whether that guidance looks conservative or brave against what they have
+actually delivered. Guidance is the only published forward number; treat it as a
+claim to be tested, not a fact.
+
 ## What would change the view
 The two or three observable things that would move this from hold to buy or sell.
 
-Be concrete. One sharp sentence with a number beats three general ones.`;
+Be concrete. One sharp sentence with a number beats three general ones. Always cite
+guidance and reported history where the context carries them — a view that ignores
+what the company has said about its own next year is not a view.`;
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
