@@ -60,7 +60,15 @@ const DEFAULTS = {
   base_occupancy:        0.980,  // occupancy already inside base_noi_m
   expiry_profile:        null,   // [0.12,0.15,...] share of income expiring per year
   default_expiry_rate:   0.150,  // used when no profile supplied
-  like_for_like_growth:  null,   // decimal; overrides the build-up entirely
+  like_for_like_growth:  null,   // decimal; overrides the build-up in year 1
+  /* A single year's LFL growth is an OUTCOME, not a run rate. CIP printed 5.2%
+   * in FY26 on 30% re-leasing spreads and near-record leasing volume — a very
+   * good year. Extrapolating it for five years at a held cap rate compounds the
+   * book up ~29% and manufactures a discount that does not exist.
+   * So LFL applies in year 1 and fades linearly to the contracted escalation
+   * rate over `lfl_fade_years`. Set the fade to 1 to hold LFL flat if you
+   * genuinely believe it persists. */
+  lfl_fade_years:        3,
   straight_line_m:       0.0,    // $m non-cash straight-lining in reported NPI
   jv_equity_income_m:    0.0,    // $m equity-accounted JV income
 
@@ -215,12 +223,52 @@ function calibrateFromActuals(f, opts = {}) {
     take('base_noi_m', (Number(f.portfolio_value) * Number(f.wacr)) / 1e6, 'portfolio value x WACR');
   } else missing.push('base_noi_m');
 
+  // Start the balance sheet from the REPORTED book, not from NPI ÷ cap. They
+  // should agree, and where they don't the reported figure is the one that was
+  // audited.
+  if (f.portfolio_value != null) take('opening_investment_properties_m', Number(f.portfolio_value) / 1e6, 'reported portfolio value');
+
   take('cap_rate', f.wacr, 'reported WACR');
   take('occupancy', f.occupancy, 'reported occupancy');
   take('base_occupancy', f.occupancy, 'reported occupancy');
   take('gearing_target', f.gearing, 'reported gearing');
   take('hedge_ratio', f.hedge_pct, 'reported hedging');
-  take('cost_of_debt', f.cost_of_debt, 'reported cost of debt');
+  /* COST OF DEBT. Rarely stated outright, but recoverable as an identity from
+   * figures that always are:
+   *      ICR  = EBIT / interest        FFO = EBIT − interest
+   *   => interest = FFO / (ICR − 1)
+   *   => cost of debt = interest / net debt
+   * CIP FY26: 114.1 / (2.4 − 1) = $81.5m on ~$1,384m of debt = 5.89%, against a
+   * 5.5% default. On that debt stack the difference is ~$5m of FFO, and it was a
+   * meaningful part of why the model missed guidance. Derived beats defaulted. */
+  if (f.cost_of_debt != null) {
+    take('cost_of_debt', f.cost_of_debt, 'reported cost of debt');
+  } else if (f.ffo != null && f.icr != null && Number(f.icr) > 1 &&
+             f.gearing != null && f.portfolio_value != null) {
+    const interest = Number(f.ffo) / (Number(f.icr) - 1);
+    const netDebt = Number(f.portfolio_value) * Number(f.gearing);
+    if (netDebt > 0) {
+      const cod = interest / netDebt;
+      if (cod > 0.01 && cod < 0.15) {
+        take('cost_of_debt', cod, `derived: FFO ÷ (ICR−1) ÷ net debt = ${(cod*100).toFixed(2)}%`);
+        a._derived_interest_m = Math.round(interest / 1e4) / 100;
+      } else missing.push(`cost_of_debt (derived ${(cod*100).toFixed(1)}% is implausible)`);
+    }
+  } else missing.push('cost_of_debt');
+
+  /* CORPORATE COSTS. The residual that makes the reported FFO tie:
+   *      NPI − mgmt fee − admin − interest = FFO
+   *   => mgmt + admin = NPI − interest − FFO
+   * Solving for it beats assuming a fee rate, because it absorbs whatever the
+   * REIT actually charges — base fee, performance fee, corporate overhead — and
+   * forces year 0 of the model to reproduce the reported year. */
+  if (a.base_noi_m != null && f.ffo != null && a._derived_interest_m != null) {
+    const corporate = a.base_noi_m - a._derived_interest_m - (Number(f.ffo) / 1e6);
+    if (corporate > 0 && corporate < a.base_noi_m * 0.4) {
+      a.mgmt_fee_pct_gav = 0;          // folded into admin so nothing is double counted
+      take('admin_cost_m', corporate, 'solved so NPI − costs − interest ties to reported FFO');
+    }
+  }
 
   // LFL growth is an OBSERVATION of what the portfolio actually did. It beats a
   // build-up from assumed escalation and reversion, so it overrides them.
@@ -232,7 +280,15 @@ function calibrateFromActuals(f, opts = {}) {
     // this is only computed where the caller supplies them.
     if (opts.securities_m) {
       const ffoPerUnit = Number(f.ffo) / (opts.securities_m * 1e6);
-      if (ffoPerUnit > 0) take('payout_ratio', Number(f.dps) / ffoPerUnit, 'reported DPS / FFO per security');
+      if (ffoPerUnit > 0) {
+        take('payout_ratio', Number(f.dps) / ffoPerUnit, 'reported DPS / FFO per security');
+        // The ratio is measured against FFO, so it must be APPLIED to FFO.
+        // Deriving it off FFO and then paying it out of AFFO understates the
+        // distribution by exactly the maintenance capex and incentive load —
+        // which is what made the modelled DPU miss guidance by 11%.
+        a.payout_basis = 'ffo';
+        sourced.payout_basis = 'set to FFO to match the basis the ratio was derived on';
+      }
     }
   }
 
@@ -399,8 +455,16 @@ function buildModel(input = {}, opts = {}) {
 
     let lfl;
     if (num(a.like_for_like_growth) !== null) {
-      lfl = a.like_for_like_growth;
-      w('lfl_growth', lfl, 'like_for_like_growth (supplied, overrides build-up)', { supplied: lfl });
+      // Fade from the observed LFL toward contracted escalation. A strong year
+      // is not a run rate, and assuming it is inflates every downstream number.
+      const fade = Math.max(1, n0(a.lfl_fade_years, 3));
+      const t = Math.min(1, (y - 1) / fade);
+      lfl = a.like_for_like_growth * (1 - t) + n0(a.escalation, 0) * t;
+      w('lfl_growth', lfl,
+        'observed LFL faded linearly to contracted escalation over lfl_fade_years',
+        { observed_lfl: a.like_for_like_growth, escalation: a.escalation,
+          fade_years: fade, year: y, fade_progress: r2(t),
+          note: 'a single year of LFL is an outcome, not a run rate — holding it flat compounds the book and manufactures a discount' });
     } else {
       lfl = a.escalation * (1 - expShare) + (a.escalation + a.reversion) * expShare;
       w('lfl_growth', lfl,
@@ -644,9 +708,17 @@ function valueModel(rows, a, exitCap) {
   const r = a.required_return, g = Math.min(n0(a.terminal_growth, 0), r - 0.005);
   const workings = {};
 
-  const capNav = last.nta;
-  workings.cap_rate_nav = { value: capNav, formula: 'closing NTA per security (book at the held cap rate)',
-    inputs: { total_assets: last.total_assets_m, net_debt: last.net_debt_m, securities_m: a.securities_m } };
+  /* CURRENT NAV, not terminal. Using the year-5 NTA as a valuation presents a
+   * future value as though it were a present one — it embeds five years of
+   * compounding revaluation with no discounting, and on a geared vehicle that
+   * inflates the answer badly. The current book is what you can buy today. */
+  const first = rows[0];
+  const capNav = first.nta;
+  workings.cap_rate_nav = { value: capNav,
+    formula: 'CURRENT NAV per security: (properties + cash − net debt) ÷ securities, year 1',
+    inputs: { total_assets: first.total_assets_m, net_debt: first.net_debt_m,
+              securities_m: a.securities_m, terminal_nta_for_reference: last.nta,
+              note: 'year 1, NOT year 5 — the terminal NTA is a future value and discounting it is what the DCF is for' } };
 
   let ddm = null;
   if (r > g) {
@@ -663,13 +735,17 @@ function valueModel(rows, a, exitCap) {
     workings.ddm = { value: null, formula: 'refused', inputs: { reason: `terminal growth ${g} ≥ discount rate ${r} — Gordon model undefined` } };
   }
 
+  /* Terminal book revalued at the exit cap, then DISCOUNTED BACK. Without the
+   * discount this is a year-5 number masquerading as a year-0 one. */
   const exitGav = last.npi / exitCap;
-  const exitNav = (exitGav + last.cash_m - last.net_debt_m) / a.securities_m;
+  const exitNavFuture = (exitGav + last.cash_m - last.net_debt_m) / a.securities_m;
+  const exitNav = exitNavFuture / Math.pow(1 + r, rows.length);
   workings.exit_cap_nav = { value: r2(exitNav),
-    formula: '(terminal NPI ÷ exit cap + cash − net debt) ÷ securities',
+    formula: '[(terminal NPI ÷ exit cap + cash − net debt) ÷ securities] ÷ (1+r)^N',
     inputs: { terminal_npi: last.npi, exit_cap_rate: exitCap, entry_cap_rate: a.cap_rate,
-              revalued_book: r2(exitGav), cash: last.cash_m, net_debt: last.net_debt_m,
-              note: 'the gap to cap-rate NAV IS the cap-rate risk in the position' } };
+              revalued_book: r2(exitGav), undiscounted_value: r2(exitNavFuture),
+              discount_rate: r, periods: rows.length,
+              note: 'discounted back to today — the gap to current NAV is the cap-rate risk in the position' } };
 
   const ffoMult = last.ffo_per_unit != null ? last.ffo_per_unit * n0(a.ffo_multiple, 0) : null;
   workings.ffo_multiple = { value: r2(ffoMult), formula: 'terminal FFO per security × multiple',
