@@ -1169,6 +1169,23 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
         <button class="btn btn-primary" style="margin-top:8px;width:100%" onclick="uploadDocument('tax_statement')">Upload &amp; store</button>
       </div>
     </div>
+    <!-- BULK UPLOAD — drop everything, the model works out where it goes -->
+    <div class="sl">Bulk upload — drop a pile, the model files it</div>
+    <div style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Results packs, analyst notes, annual reports — select as many as you like. Text is extracted
+        in your browser and classified by ticker, document type, period and (for broker notes)
+        rating and price target. <strong>Nothing is saved until you review it</strong>: everything
+        comes back as a proposal you can correct, because a misclassified results pack silently
+        dates a fundamental to the wrong REIT. Scanned image PDFs have no extractable text and will
+        come back flagged for manual entry.
+      </div>
+      <input type="file" id="bulk-files" multiple accept=".pdf,.txt,.csv" style="font-size:11px">
+      <button class="btn btn-primary" style="margin-left:8px" onclick="bulkClassify()">Read &amp; classify</button>
+      <div id="bulk-status" style="font-size:11px;margin-top:8px;white-space:pre-wrap"></div>
+      <div id="bulk-results" style="margin-top:12px"></div>
+    </div>
+
     <!-- RESEARCH LIBRARY — filed against a ticker, surfaced on that stock's detail page -->
     <div class="sl" style="margin-top:6px">Research &amp; results — filed against a ticker</div>
     <div style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px">
@@ -1315,6 +1332,9 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
 <!-- The three-statement model engine. Valid CommonJS too, so a function can
      require the same file server-side — one copy, no mirrors. -->
 <script src="/reit-model.js"></script>
+<!-- pdf.js: bulk-upload text extraction happens in the browser so raw documents
+     never leave for a server round trip before you've reviewed the parse. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 const BOND = 0.0507;
 let db = null;
@@ -4982,6 +5002,151 @@ function prefillDistFromParse(p) {
   showAddDist();
   const set = (id,v) => { const e=document.getElementById(id); if (e && v!=null) e.value = v; };
   set('d-ticker', p.ticker); set('d-amount', p.amount); set('d-units', p.units); set('d-exdate', p.date);
+}
+
+// ── BULK UPLOAD + AI ROUTING ──────────────────────────────────────────────────
+/* Text is extracted in the BROWSER (pdf.js) and only the text is sent for
+ * classification — the files themselves stay local until you approve, and are
+ * uploaded as part of the confirm step. Everything comes back as a proposal;
+ * nothing is written until you press Save. */
+let bulkProposals = [], bulkFiles = [];
+
+async function extractText(file) {
+  if (/\.(txt|csv)$/i.test(file.name)) return await file.text();
+  if (!/\.pdf$/i.test(file.name)) return '';
+  if (!window.pdfjsLib) return '';
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    // 30 pages is plenty to identify and date a document; a 200-page annual
+    // report would otherwise blow the payload for no classification benefit.
+    const pages = Math.min(pdf.numPages, 30);
+    let text = '';
+    for (let p = 1; p <= pages; p++) {
+      const c = await (await pdf.getPage(p)).getTextContent();
+      text += c.items.map(i => i.str).join(' ') + '\n';
+    }
+    return text;
+  } catch (e) { return ''; }
+}
+
+async function bulkClassify() {
+  const st = document.getElementById('bulk-status');
+  const el = document.getElementById('bulk-results');
+  const files = Array.from(document.getElementById('bulk-files').files || []);
+  if (!files.length) { st.style.color='var(--red)'; st.textContent='Select some files first.'; return; }
+  if (files.length > 25) { st.style.color='var(--red)'; st.textContent=`${files.length} files — send 25 or fewer per batch.`; return; }
+
+  bulkFiles = files;
+  st.style.color='var(--muted)';
+  st.textContent = `Extracting text from ${files.length} file(s) in your browser…`;
+  el.innerHTML = '';
+
+  const docs = [];
+  for (let i = 0; i < files.length; i++) {
+    st.textContent = `Extracting ${i+1} of ${files.length}: ${files[i].name}`;
+    docs.push({ filename: files[i].name, text: await extractText(files[i]) });
+  }
+  const empty = docs.filter(d => !d.text.trim()).length;
+
+  st.textContent = `Classifying ${docs.length} document(s)…` + (empty ? ` (${empty} had no extractable text)` : '');
+  try {
+    const res = await fetch('/.netlify/functions/classify-documents', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ docs })
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || res.status);
+    bulkProposals = out.proposals || [];
+    st.style.color = 'var(--muted)';
+    st.textContent = `${bulkProposals.length} classified with ${out.model}. Review and correct below, then save.` +
+      (out.warnings?.length ? '\n' + out.warnings.join('\n') : '');
+    renderBulkProposals();
+  } catch (e) {
+    st.style.color='var(--red)';
+    st.textContent = 'Classification failed: ' + e.message +
+      '\nIf this says ANTHROPIC_API_KEY, add it in Netlify → Site settings → Environment variables.';
+  }
+}
+
+function renderBulkProposals() {
+  const el = document.getElementById('bulk-results');
+  if (!bulkProposals.length) { el.innerHTML = ''; return; }
+  const types = ['results_presentation','annual_report','analyst_report','research_note',
+                 'contract_note','distribution_statement','tax_statement','other'];
+  const inp = (i,f,v,type='text',w='90px') => `<input type="${type}" value="${v??''}" onchange="bulkEdit(${i},'${f}',this.value)"
+     style="width:${w};font-size:11px;padding:3px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">`;
+
+  el.innerHTML = `<table><thead><tr>
+      <th>File</th><th>Ticker</th><th>Type</th><th>Date</th><th>Period</th>
+      <th>Title</th><th>Author</th><th class="r">Target</th><th class="r">Conf.</th><th>Save</th>
+    </tr></thead><tbody>${bulkProposals.map((p,i)=>`
+    <tr style="${p.needs_review?'background:rgba(192,57,43,0.06)':''}">
+      <td style="font-size:11px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${(p.reasoning||'').replace(/"/g,'&quot;')}">${p.filename}</td>
+      <td>${inp(i,'ticker',p.ticker,'text','62px')}</td>
+      <td><select onchange="bulkEdit(${i},'doc_type',this.value)" style="font-size:11px;padding:3px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
+        <option value="">—</option>${types.map(t=>`<option value="${t}" ${p.doc_type===t?'selected':''}>${DOC_TYPE_LABEL[t]||t}</option>`).join('')}</select></td>
+      <td>${inp(i,'doc_date',p.doc_date,'date','120px')}</td>
+      <td>${inp(i,'period_label',p.period_label,'text','60px')}</td>
+      <td>${inp(i,'title',p.title,'text','160px')}</td>
+      <td>${inp(i,'author',p.author,'text','100px')}</td>
+      <td class="r">${inp(i,'price_target',p.price_target,'number','70px')}</td>
+      <td class="r"><span class="hz ${p.confidence>=0.7?'pass':'fail'}">${p.confidence!=null?(p.confidence*100).toFixed(0)+'%':'—'}</span></td>
+      <td class="r"><input type="checkbox" ${p.ticker&&p.doc_type?'checked':''} onchange="bulkEdit(${i},'_save',this.checked)"></td>
+    </tr>`).join('')}</tbody></table>
+    <div style="margin-top:8px">
+      <button class="btn btn-primary" onclick="bulkSave()">Upload &amp; file the ticked rows</button>
+      <span style="font-size:11px;color:var(--muted);margin-left:10px">Rows shaded red need a look — low confidence, or no ticker.</span>
+    </div>`;
+}
+
+function bulkEdit(i, field, value) {
+  const p = bulkProposals[i];
+  if (field === '_save') p._save = value;
+  else if (field === 'ticker') p.ticker = (value||'').toUpperCase().trim() || null;
+  else if (field === 'price_target') p.price_target = value === '' ? null : parseFloat(value);
+  else p[field] = value || null;
+  if (['ticker','doc_type'].includes(field)) { p.needs_review = !p.ticker || !p.doc_type; renderBulkProposals(); }
+}
+
+/* Uploads each approved file to storage and writes its document_uploads row.
+ * Failures are collected per file rather than aborting the batch — one bad
+ * document should not cost you the other twenty. */
+async function bulkSave() {
+  const st = document.getElementById('bulk-status');
+  const chosen = bulkProposals.filter(p => p._save !== false && p.ticker && p.doc_type);
+  if (!chosen.length) { st.style.color='var(--red)'; st.textContent='Nothing ticked (a row needs both a ticker and a type).'; return; }
+
+  st.style.color='var(--muted)';
+  st.textContent = `Uploading ${chosen.length} document(s)…`;
+  const problems = [];
+  let saved = 0;
+
+  for (const p of chosen) {
+    const file = bulkFiles.find(f => f.name === p.filename);
+    if (!file) { problems.push(`${p.filename}: original file not found in this batch`); continue; }
+    try {
+      const path = `${p.doc_type}/${p.ticker}/${Date.now()}_${file.name.replace(/[^A-Za-z0-9._-]/g,'_')}`;
+      const { error: upErr } = await db.storage.from('documents').upload(path, file, { upsert:false });
+      if (upErr) throw upErr;
+      const { error } = await db.from('document_uploads').insert({
+        doc_type: p.doc_type, ticker: p.ticker, doc_date: p.doc_date || null,
+        period_label: p.period_label || null, title: p.title || file.name,
+        author: p.author || null, rating: p.rating || null,
+        price_target: p.price_target ?? null,
+        summary: p.reasoning || null,
+        file_path: path, file_name: file.name, file_size: file.size, status: 'stored',
+      });
+      if (error) throw error;
+      saved++;
+    } catch (e) { problems.push(`${p.filename}: ${e.message}`); }
+  }
+
+  st.style.color = problems.length ? 'var(--red)' : 'var(--green)';
+  st.textContent = `${saved} filed.` + (problems.length ? `\n${problems.length} failed:\n` + problems.join('\n') : '');
+  if (saved) { bulkProposals = []; document.getElementById('bulk-results').innerHTML = ''; loadDocuments(); }
 }
 
 const DOC_TYPE_LABEL = {
