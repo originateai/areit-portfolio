@@ -163,15 +163,24 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
          Delete the pages outright once you're sure you don't want them back. -->
 
     <div class="nav-sec">Value Layer</div>
-    <a href="/value-layer.html">◉ Value Layer</a>
+    <!-- LAYOUT UNIFICATION 2026-08-18: the standalone pages are out of the nav.
+         Each had its own markup and style block, which is why they read as a
+         different application. What was unique to them now lives in the SPA:
+           value-layer.html  -> REIT Model (statements, actuals) + Analyst Coverage
+           models.html       -> REIT Model, "Source workbook"
+           assumptions.html  -> REIT Model (editable assumptions) + Market Evidence
+                                (the cap-rate / leasing benchmark views)
+           reit-value.html   -> Value Engine (live, not the stale Excel view)
+           evidence.html     -> Market Evidence, ported wholesale
+         The files remain on disk and reachable by URL so nothing is lost, and
+         deep links from the drawer still resolve. Delete them once you are happy
+         nothing is missing. -->
     <!-- CULLED 2026-08-17: "REIT Value" (reit-value.html) was a discount table
          built on v_discount_to_fair_value, which derives from the STALE Excel
          reit_model_outputs.blended_value. The Value Engine page computes the same
          discount live from valuation_runs and adds IRR and the hurdle test, so the
          two showed DIFFERENT fair values for the same REIT off the same nav.
          File retained and still reachable at /reit-value.html. -->
-    <a href="/models.html">⬢ Models</a>
-    <a href="/assumptions.html">✎ Assumptions</a>
     <a data-page="evidence">▦ Market Evidence</a>
     <a data-page="fundamentals">▤ Fundamentals</a>
     <a data-page="reitmodel">▦ REIT Model</a>
@@ -756,6 +765,18 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       </select>
     </div>
     <div style="overflow-x:auto"><table id="rm-sens"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+    <!-- REPORTED ACTUALS + THE WORKBOOK BEHIND THE NAME -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px">
+      <div>
+        <div class="sl">Reported actuals</div>
+        <div style="overflow-x:auto"><table id="rm-actuals"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+      </div>
+      <div>
+        <div class="sl">Source workbook</div>
+        <div id="rm-files"><div class="empty" style="font-size:11px">—</div></div>
+      </div>
+    </div>
 
     <!-- OUR FORECAST vs EACH ANALYST -->
     <div class="sl" style="margin-top:22px">Our forecast vs the analysts</div>
@@ -3584,6 +3605,53 @@ function renderReitModel() {
   renderRmStatement(m);
   renderRmSensitivity(m);
   renderRmAnalysts(m);
+  renderRmActuals();
+}
+
+/* Reported actuals and the source workbook — the two things value-layer.html and
+ * models.html carried that nothing else did. Folded in here so the whole picture
+ * for a REIT sits on one screen instead of across three standalone pages. */
+async function renderRmActuals() {
+  if (!db || !rmTicker) return;
+
+  const { data: act } = await db.from('reit_model_actuals').select('*').eq('ticker', rmTicker).order('fy');
+  const el = document.getElementById('rm-actuals');
+  if (!act?.length) el.innerHTML = '<tbody><tr><td class="empty" style="font-size:11px">No reported actuals loaded for '+rmTicker+'.</td></tr></tbody>';
+  else {
+    // ffo_per_unit and dpu here are CENTS (workbook convention, SPEC §1.1) while
+    // nta is dollars. Rendered in their own units and labelled, not converted.
+    const rows = [['noi_m','NOI $m'],['ffo_m','FFO $m'],['ffo_per_unit','FFO/unit ¢'],
+                  ['dpu','DPU ¢'],['nta','NTA $'],['gearing','Gearing'],['ocf_cover','OCF cover']];
+    el.innerHTML = `<thead><tr><th></th>${act.map(a=>`<th class="r">${a.fy}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(([k,label])=>`<tr><td style="font-size:11px">${label}</td>${
+        act.map(a=>{ const v=a[k];
+          const s = v==null ? '—'
+            : k==='gearing' ? f.pct0(v)
+            : k==='nta' ? f.$(v)
+            : k==='ocf_cover' ? Number(v).toFixed(2)+'x'
+            : Number(v).toFixed(1);
+          return `<td class="r" style="font-size:11px">${s}</td>`; }).join('')}</tr>`).join('')}</tbody>`;
+  }
+
+  const { data: files } = await db.from('reit_model_files').select('*').eq('ticker', rmTicker)
+    .order('uploaded_at', { ascending:false, nullsFirst:false }).limit(5);
+  const fe = document.getElementById('rm-files');
+  fe.innerHTML = files?.length
+    ? files.map(x => `<div style="font-size:11px;padding:6px 0;border-bottom:1px solid var(--rule)">
+        ${x.file_name || x.storage_path || 'workbook'}
+        <span style="color:var(--muted)"> · ${(x.uploaded_at||'').slice(0,10)}</span>
+        ${x.storage_path?`<a href="#" style="color:var(--teal);margin-left:8px" onclick="downloadModelFile('${x.storage_path}');return false">Download</a>`:''}
+      </div>`).join('')
+    : `<div class="empty" style="font-size:11px">No workbook uploaded for ${rmTicker}. The model above runs entirely in-platform — a workbook is only the seed for assumptions.</div>`;
+}
+
+async function downloadModelFile(path) {
+  try {
+    const res = await fetch('/.netlify/functions/get-model-url?path=' + encodeURIComponent(path));
+    const out = await res.json();
+    if (out.url) window.open(out.url, '_blank');
+    else throw new Error(out.error || 'no URL returned');
+  } catch (e) { alert('Could not open the workbook: ' + e.message); }
 }
 
 /* Our modelled DPU/FFO against every broker on the name, plus a consensus.
