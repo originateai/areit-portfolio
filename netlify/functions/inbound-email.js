@@ -82,7 +82,44 @@ exports.handler = async (event) => {
     }
 
     const warnings = [];
-    if (!attachments.length) warnings.push('No attachments found; classified the email body instead.');
+
+    /* ── LINKS ────────────────────────────────────────────────────────────────
+     * The inbound size cap (512KB on CloudMailin's free tier) makes attaching a
+     * results presentation or an annual report impossible. A link has no such
+     * limit, so any PDF URL in the body is FETCHED and treated exactly as if it
+     * had been attached. Forwarding the ASX announcement email — which already
+     * contains the link — is now the path of least resistance AND the one with
+     * no size ceiling.
+     *
+     * Only http(s) and only documents: this endpoint pulls whatever it is given,
+     * so it will not follow a link to something that is not a document, and it
+     * caps what it will download. */
+    const MAX_FETCH = 25 * 1024 * 1024;
+    const urls = [...new Set(
+      (bodyText.match(/https?:\/\/[^\s<>"')]+/gi) || [])
+        .map(u => u.replace(/[.,;:]+$/, ''))
+        .filter(u => /\.pdf(\?|$)/i.test(u) || /announcement|asx|results|report|compendium|presentation/i.test(u))
+    )].slice(0, 5);
+
+    for (const url of urls) {
+      try {
+        const r = await fetch(url, { redirect: 'follow' });
+        if (!r.ok) { warnings.push(`link ${url.slice(0, 70)}: HTTP ${r.status}`); continue; }
+        const ctype = (r.headers.get('content-type') || '').toLowerCase();
+        if (!/pdf|octet-stream/.test(ctype)) { warnings.push(`link ${url.slice(0, 70)}: not a document (${ctype || 'unknown type'}) — skipped`); continue; }
+        const len = Number(r.headers.get('content-length') || 0);
+        if (len > MAX_FETCH) { warnings.push(`link ${url.slice(0, 70)}: ${(len/1e6).toFixed(1)}MB exceeds the ${MAX_FETCH/1e6}MB fetch cap`); continue; }
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length > MAX_FETCH) { warnings.push(`link ${url.slice(0, 70)}: too large once downloaded`); continue; }
+        const name = decodeURIComponent((url.split('/').pop() || 'document.pdf').split('?')[0]) || 'document.pdf';
+        attachments.push({ filename: name.endsWith('.pdf') ? name : name + '.pdf',
+                           content: buf.toString('base64'), encoding: 'base64',
+                           type: 'application/pdf', from_link: url });
+        warnings.push(`fetched ${name} (${(buf.length/1e6).toFixed(1)}MB) from a link — no email size limit applies to this path.`);
+      } catch (e) { warnings.push(`link ${url.slice(0, 70)}: ${e.message.slice(0, 60)}`); }
+    }
+
+    if (!attachments.length) warnings.push('No attachments and no document links found; classified the email body instead.');
 
     // Build the classification payload. Server-side we have no PDF extractor, so
     // a PDF contributes its filename and the email subject — enough for a
