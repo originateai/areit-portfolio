@@ -10,3 +10,7 @@ scripts/node_modules/
 # OS / editor cruft
 .DS_Store
 Thumbs.db
+
+# Sample documents for parser development. NEVER committed: broker research is
+# licensed material and this repo is on GitHub. Files here are read locally only.
+samples/

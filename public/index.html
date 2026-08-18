@@ -604,6 +604,22 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <tfoot id="inc-holdings-tfoot"></tfoot>
     </table>
     <div id="inc-warn" style="display:none"></div>
+
+    <!-- CASH ON CASH — what actually landed, against what actually went out -->
+    <div class="sl" style="margin-top:20px">Cash on cash — actual money received, not accounting yield</div>
+    <div style="overflow-x:auto"><table id="coc-table"><tbody><tr><td class="empty">Loading…</td></tr></tbody></table></div>
+    <div class="caveat" style="border-left-color:var(--teal)">
+      <strong>Two things a yield number hides.</strong>
+      <br><br>
+      <strong>Cover.</strong> If AFFO cover is below 1.0x the distribution is not funded by the
+      property's cash earnings — the difference is coming from debt, asset sales or capital.
+      That is the balance sheet paying you, and it cannot continue indefinitely.
+      <br><br>
+      <strong>Return of capital.</strong> The tax-deferred slice of an A-REIT distribution reduces
+      your cost base. It is cash in hand, but it is partly your own money coming back, and it
+      converts into a capital gain on sale. Over a retirement horizon that distinction compounds —
+      a 7% distribution that is 30% tax-deferred is not a 7% return on capital.
+    </div>
     <div class="caveat" id="inc-caveat">
       <strong>Read this before comparing rows.</strong> Property yield is calculated on
       <em>equity</em> and is therefore <strong>leveraged</strong> — it is comparable to a listed
@@ -2803,6 +2819,7 @@ function setIncomeLens(lens, el) {
 async function loadIncome() {
   if (!db) return;
   loadIncomeHoldings();
+  loadCashOnCash();
   const { data: dists } = await db.from('distributions').select('*');
   const tbody = document.getElementById('dist-tbody');
   tbody.innerHTML = '';
@@ -2903,6 +2920,104 @@ async function syncHoldings() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh from trades'; }
   }
+}
+
+/* CASH ON CASH — actual money received against actual money invested.
+ *
+ * Deliberately built off the `distributions` LEDGER, not off a forecast: this is
+ * the one measure on the page that is history rather than modelling. It sits
+ * alongside the three lenses rather than replacing them — forward yield tells
+ * you what a position should pay, this tells you what it has paid.
+ *
+ * The two columns that matter for a retirement horizon are COVER (is the
+ * distribution funded by AFFO, or by the balance sheet?) and RETURN OF CAPITAL
+ * (how much of that cash is your own money coming back and reducing cost base?). */
+async function loadCashOnCash() {
+  const el = document.getElementById('coc-table');
+  if (!el || !db) return;
+
+  const [{ data: hold }, { data: dists }, { data: vals }, { data: comps }] = await Promise.all([
+    db.from('holdings').select('*').eq('is_open', true),
+    db.from('distributions').select('*'),
+    db.from('valuation_runs').select('ticker,as_of,irr_pre_tax').order('as_of', { ascending:false }),
+    db.from('distribution_components').select('*'),
+  ]);
+  if (!hold?.length) { el.innerHTML = '<tbody><tr><td class="empty">No open holdings.</td></tr></tbody>'; return; }
+
+  // Latest modelled AFFO cover per ticker, where a model exists.
+  const cover = {};
+  if (window.ReitModel) { /* cover comes from the model page's saved scenarios; left null unless present */ }
+
+  const byTicker = {};
+  (dists || []).forEach(d => { (byTicker[d.ticker] = byTicker[d.ticker] || []).push(d); });
+  const compByTicker = {};
+  (comps || []).forEach(c => { (compByTicker[c.ticker] = compByTicker[c.ticker] || []).push(c); });
+
+  let tInvested = 0, tReceived = 0, tRoc = 0;
+
+  const rows = hold.map(h => {
+    const invested = Number(h.cost_base || 0) + Number(h.brokerage || 0);
+    const paid = byTicker[h.ticker] || [];
+    const received = paid.reduce((s, d) => s + Number(d.total_received || 0), 0);
+    const first = paid.map(d => d.ex_date).filter(Boolean).sort()[0] || h.entry_date;
+    const held = first ? (Date.now() - new Date(first).getTime()) / (365.25 * 864e5) : null;
+
+    // Return-of-capital share, from actual component data only. Where no tax
+    // statement has been loaded this is null, NOT the class default — this
+    // column is about what actually happened, and an assumption here would
+    // misrepresent history as fact.
+    const cs = compByTicker[h.ticker] || [];
+    const cashTot = cs.reduce((s,c) => s + Number(c.franked_amount||0) + Number(c.unfranked_amount||0)
+                                        + Number(c.interest_income||0) + Number(c.tax_deferred||0)
+                                        + Number(c.cgt_concession||0) + Number(c.foreign_income||0), 0);
+    const defTot = cs.reduce((s,c) => s + Number(c.tax_deferred||0), 0);
+    const rocShare = cashTot > 0 ? defTot / cashTot : null;
+    const rocDollars = rocShare != null ? received * rocShare : null;
+
+    tInvested += invested; tReceived += received;
+    if (rocDollars != null) tRoc += rocDollars;
+
+    const cocTotal = invested > 0 ? received / invested : null;
+    const cocAnnual = (cocTotal != null && held && held > 0.25) ? cocTotal / held : null;
+
+    return { h, invested, received, held, cocTotal, cocAnnual, rocShare, rocDollars,
+             payments: paid.length };
+  }).sort((a,b) => (b.received||0) - (a.received||0));
+
+  el.innerHTML = `
+    <thead><tr>
+      <th>Holding</th><th class="r">Invested</th><th class="r">Cash received</th>
+      <th class="r">Payments</th><th class="r">Held</th>
+      <th class="r">Cash-on-cash</th><th class="r">p.a.</th>
+      <th class="r">Return of capital</th><th>Funded by</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const roc = r.rocShare == null
+        ? '<span class="hz" title="No annual tax statement loaded — the split is unknown, and an assumed one would misrepresent history as fact">—</span>'
+        : `${f.pct0(r.rocShare,0)} <span style="color:var(--muted);font-size:10px">(${f.$k(r.rocDollars)})</span>`;
+      return `<tr>
+        <td style="font-weight:600"><span class="tkr">${r.h.ticker}</span>
+          <span class="cls-tag" style="margin-left:6px">${r.h.asset_class||'—'}</span></td>
+        <td class="r">${f.$k(r.invested)}</td>
+        <td class="r" style="font-weight:600;color:var(--teal)">${f.$k(r.received)}</td>
+        <td class="r">${r.payments||'—'}</td>
+        <td class="r">${r.held ? r.held.toFixed(1)+'y' : '—'}</td>
+        <td class="r">${r.cocTotal != null ? f.pct0(r.cocTotal) : '—'}</td>
+        <td class="r" style="font-weight:600">${r.cocAnnual != null ? f.pct0(r.cocAnnual) : '<span style="color:var(--muted)" title="Held under 3 months — annualising this would be noise">—</span>'}</td>
+        <td class="r">${roc}</td>
+        <td style="font-size:10px;color:var(--muted)">${r.payments ? 'distributions received' : 'nothing received yet'}</td>
+      </tr>`;
+    }).join('')}
+    <tr style="border-top:2px solid var(--ink);font-weight:600;background:var(--cream)">
+      <td>Portfolio</td>
+      <td class="r">${f.$k(tInvested)}</td>
+      <td class="r" style="color:var(--teal)">${f.$k(tReceived)}</td>
+      <td colspan="2"></td>
+      <td class="r">${tInvested ? f.pct0(tReceived/tInvested) : '—'}</td>
+      <td class="r"></td>
+      <td class="r">${tRoc ? f.$k(tRoc) : '—'}</td>
+      <td style="font-size:10px;color:var(--muted)">cash actually banked</td>
+    </tr></tbody>`;
 }
 
 async function loadIncomeHoldings() {
