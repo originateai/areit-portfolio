@@ -172,7 +172,7 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
          File retained and still reachable at /reit-value.html. -->
     <a href="/models.html">⬢ Models</a>
     <a href="/assumptions.html">✎ Assumptions</a>
-    <a href="/evidence.html">▦ Market Evidence</a>
+    <a data-page="evidence">▦ Market Evidence</a>
     <a data-page="fundamentals">▤ Fundamentals</a>
     <a data-page="reitmodel">▦ REIT Model</a>
     <a data-page="assets">⌗ Asset Models</a>
@@ -643,6 +643,57 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <tbody id="mg-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
     </table>
     <div id="mg-status" style="font-size:11px;margin-top:8px;white-space:pre-wrap"></div>
+  </div>
+
+  <!-- MARKET EVIDENCE — ported into the SPA from the old standalone page -->
+  <div id="pg-evidence" class="page">
+    <div class="ph"><h1>Market Evidence</h1><p>Transactions, leasing deals and developments · the market's cap rates, against the book</p></div>
+
+    <div class="tab-row">
+      <button class="tab active" onclick="evTable('cre_transactions',this)">Transactions</button>
+      <button class="tab" onclick="evTable('cre_leasing_deals',this)">Leasing deals</button>
+      <button class="tab" onclick="evTable('cre_developments',this)">Developments</button>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sl" style="flex:1" id="ev-title">Recent records</div>
+      <button class="btn btn-secondary" onclick="toggleEvForm()" style="font-size:11px">+ Add record</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('ev-csv').click()" style="font-size:11px;margin-left:8px">Import CSV</button>
+      <input type="file" id="ev-csv" accept=".csv" style="display:none" onchange="evImportCsv()">
+    </div>
+    <div id="ev-status" style="font-size:11px;color:var(--muted);margin:4px 0;white-space:pre-wrap"></div>
+
+    <div id="ev-form" style="display:none;margin:10px 0;padding:14px;border:1px solid var(--rule);background:var(--cream)">
+      <div class="sl">Add record</div>
+      <div class="form-grid" id="ev-form-fields"></div>
+      <button class="btn btn-primary" onclick="evAddRow()">Save record</button>
+      <button class="btn btn-secondary" onclick="toggleEvForm()" style="margin-left:8px">Cancel</button>
+    </div>
+
+    <div style="overflow-x:auto"><table id="ev-recent"><tbody><tr><td class="empty">Loading…</td></tr></tbody></table></div>
+
+    <div class="sl" style="margin-top:22px">Benchmarks — what the market is actually paying</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div>
+        <div class="sl" style="font-size:11px">Market cap rates by sector / state</div>
+        <div style="overflow-x:auto"><table id="ev-bench-caps"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+      </div>
+      <div>
+        <div class="sl" style="font-size:11px">Leasing benchmarks</div>
+        <div style="overflow-x:auto"><table id="ev-bench-lease"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+      </div>
+    </div>
+    <div class="sl" style="font-size:11px;margin-top:14px">REIT book cap rate vs the market</div>
+    <div style="overflow-x:auto"><table id="ev-bench-vs"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+    <div class="caveat">
+      <strong>Cap rates only compare within a sector.</strong> An industrial cap rate and a retail
+      cap rate are not the same measure of anything — blending them produces a number that
+      describes no market. The benchmarks below are grouped for that reason.
+      <br><br>
+      This page was a standalone file until now, which is why it used to look like a different
+      application. Same data, same ingest function, one layout.
+    </div>
   </div>
 
   <!-- REIT MODEL — full three-statement, editable, sensitised -->
@@ -1571,7 +1622,7 @@ function go(page, el) {
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
     income: loadIncome, property: loadProperty, valuation: loadValuation, manage: loadManage,
     fundamentals: loadFundamentals, assets: loadAssets, analysts: loadAnalysts,
-    reitmodel: loadReitModel,
+    reitmodel: loadReitModel, evidence: loadEvidence,
     performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
@@ -3157,6 +3208,154 @@ async function runValuation() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '▸ Run engine'; }
   }
+}
+
+// ── MARKET EVIDENCE ───────────────────────────────────────────────────────────
+/* Ported from the standalone evidence.html so it stops looking like a different
+ * application. Same tables, same ingest function (service-role writer) — only the
+ * chrome changed. */
+const EV_TABLES = {
+  cre_transactions: { label:'Transactions', date:'sale_date', fields:[
+    ['asset_name','Asset','text'],['address','Address','text'],['sector','Sector','text'],
+    ['state','State','text'],['metro','Metro','text'],['sale_price_m','Price $m','number'],
+    ['cap_rate','Cap rate %','pct'],['passing_income_m','Passing income $m','number'],
+    ['wale_years','WALE yrs','number'],['area_sqm','Area sqm','number'],
+    ['sale_date','Sale date','date'],['vendor','Vendor','text'],['purchaser','Purchaser','text'],
+    ['reit_linked','REIT','text'],['source','Source','text'] ] },
+  cre_leasing_deals: { label:'Leasing deals', date:'deal_date', fields:[
+    ['property','Property','text'],['tenant','Tenant','text'],['sector','Sector','text'],
+    ['state','State','text'],['metro','Metro','text'],['area_sqm','Area sqm','number'],
+    ['face_rent_psm','Face rent $/sqm','number'],['effective_rent_psm','Effective $/sqm','number'],
+    ['incentive_pct','Incentive %','pct'],['term_years','Term yrs','number'],
+    ['review_type','Review type','text'],['review_pct','Review %','pct'],
+    ['deal_date','Deal date','date'],['reit_linked','REIT','text'],['source','Source','text'] ] },
+  cre_developments: { label:'Developments', date:'pc_date', fields:[
+    ['project','Project','text'],['location','Location','text'],['state','State','text'],
+    ['sector','Sector','text'],['gla_sqm','GLA sqm','number'],['cost_m','Cost $m','number'],
+    ['end_value_m','End value $m','number'],['yield_on_cost','Yield on cost %','pct'],
+    ['prelease_pct','Pre-lease %','pct'],['pc_date','PC date','date'],
+    ['status','Status','text'],['reit_linked','REIT','text'],['source','Source','text'] ] },
+};
+let evCurrent = 'cre_transactions';
+
+function evTable(t, el) {
+  evCurrent = t;
+  document.querySelectorAll('#pg-evidence .tab-row .tab').forEach(x => x.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('ev-form').style.display = 'none';
+  loadEvidence();
+}
+
+function toggleEvForm() {
+  const el = document.getElementById('ev-form');
+  const open = el.style.display === 'none';
+  el.style.display = open ? 'block' : 'none';
+  if (open) {
+    // Percentages are entered as percentages and stored as decimals — same rule
+    // as everywhere else on the platform (SPEC §1.3).
+    document.getElementById('ev-form-fields').innerHTML = EV_TABLES[evCurrent].fields.map(([k,label,type]) =>
+      `<div class="form-group"><label>${label}</label>
+        <input id="ev-${k}" type="${type==='pct'?'number':type}" step="any"></div>`).join('');
+  }
+}
+
+async function evAddRow() {
+  const st = document.getElementById('ev-status');
+  const spec = EV_TABLES[evCurrent];
+  const row = {};
+  spec.fields.forEach(([k,,type]) => {
+    const v = document.getElementById('ev-'+k)?.value;
+    if (v === '' || v == null) return;
+    row[k] = type === 'number' ? parseFloat(v) : type === 'pct' ? parseFloat(v)/100 : v;
+  });
+  if (!Object.keys(row).length) { st.style.color='var(--red)'; st.textContent='Nothing entered.'; return; }
+  st.style.color='var(--muted)'; st.textContent='Saving…';
+  try {
+    const res = await fetch('/.netlify/functions/ingest-evidence', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ table: evCurrent, rows: [row] })
+    });
+    const out = await res.json().catch(()=>({}));
+    if (!res.ok) throw new Error(out.error || res.status);
+    st.style.color='var(--green)'; st.textContent = `Saved to ${spec.label}.`;
+    toggleEvForm(); loadEvidence();
+  } catch (e) { st.style.color='var(--red)'; st.textContent='Save failed: '+e.message; }
+}
+
+/* Minimal CSV parse: header row drives the column names, which must match the
+ * table's columns. Quoted fields containing commas are handled; anything more
+ * exotic should go through the AI reader instead. */
+function evParseCsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const split = l => {
+    const out = []; let cur = '', q = false;
+    for (const ch of l) {
+      if (ch === '"') q = !q;
+      else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur); return out.map(s => s.trim());
+  };
+  const head = split(lines[0]);
+  return lines.slice(1).map(l => {
+    const cells = split(l), row = {};
+    head.forEach((h,i) => { const v = cells[i]; if (v !== undefined && v !== '') row[h] = isNaN(Number(v)) ? v : Number(v); });
+    return row;
+  }).filter(r => Object.keys(r).length);
+}
+
+async function evImportCsv() {
+  const st = document.getElementById('ev-status');
+  const file = document.getElementById('ev-csv').files?.[0];
+  if (!file) return;
+  st.style.color='var(--muted)'; st.textContent='Reading CSV…';
+  try {
+    const rows = evParseCsv(await file.text());
+    if (!rows.length) throw new Error('no data rows found — the first line must be a header naming the columns');
+    const res = await fetch('/.netlify/functions/ingest-evidence', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ table: evCurrent, rows })
+    });
+    const out = await res.json().catch(()=>({}));
+    if (!res.ok) throw new Error(out.error || res.status);
+    st.style.color='var(--green)';
+    st.textContent = `Imported ${out.inserted ?? rows.length} row(s) into ${EV_TABLES[evCurrent].label}.`;
+    document.getElementById('ev-csv').value = '';
+    loadEvidence();
+  } catch (e) { st.style.color='var(--red)'; st.textContent='Import failed: '+e.message; }
+}
+
+function evRender(elId, rows, emptyMsg) {
+  const el = document.getElementById(elId);
+  if (!rows?.length) { el.innerHTML = `<tbody><tr><td class="empty">${emptyMsg}</td></tr></tbody>`; return; }
+  const keys = Object.keys(rows[0]).filter(k => !['id','ingested_at'].includes(k));
+  const fmt = (k,v) => v == null ? '—'
+    : /cap_rate|_pct|yield_on_cost/.test(k) && typeof v === 'number' && Math.abs(v) < 2 ? (v*100).toFixed(2)+'%'
+    : typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2))
+    : String(v);
+  el.innerHTML = `<thead><tr>${keys.map(k=>`<th>${k.replace(/_/g,' ')}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${keys.map(k=>`<td${typeof r[k]==='number'?' class="r"':''} style="font-size:11px">${fmt(k,r[k])}</td>`).join('')}</tr>`).join('')}</tbody>`;
+}
+
+async function loadEvidence() {
+  if (!db) return;
+  const spec = EV_TABLES[evCurrent];
+  document.getElementById('ev-title').textContent = `Recent ${spec.label.toLowerCase()}`;
+
+  const { data, error } = await db.from(evCurrent).select('*')
+    .order(spec.date, { ascending:false, nullsFirst:false }).limit(50);
+  if (error) evRender('ev-recent', null, error.message);
+  else evRender('ev-recent', data, `No ${spec.label.toLowerCase()} recorded yet.`);
+
+  const [caps, lease, vs] = await Promise.all([
+    db.from('v_market_cap_rates').select('*').limit(40),
+    db.from('v_leasing_benchmarks').select('*').limit(40),
+    db.from('v_reit_vs_market_cap').select('*').limit(40),
+  ]);
+  evRender('ev-bench-caps',  caps.data,  caps.error?.message  || 'No transactions yet — cap-rate benchmarks build from the records above.');
+  evRender('ev-bench-lease', lease.data, lease.error?.message || 'No leasing deals recorded yet.');
+  evRender('ev-bench-vs',    vs.data,    vs.error?.message    || 'Needs both market transactions and REIT book cap rates.');
 }
 
 // ── REIT MODEL (three-statement, editable, sensitised) ────────────────────────
