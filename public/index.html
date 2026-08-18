@@ -706,6 +706,11 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
     </div>
     <div style="overflow-x:auto"><table id="rm-sens"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
 
+    <!-- OUR FORECAST vs EACH ANALYST -->
+    <div class="sl" style="margin-top:22px">Our forecast vs the analysts</div>
+    <div style="overflow-x:auto"><table id="rm-analysts"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+    <div id="rm-analyst-note" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+
     <div class="caveat">
       <strong>Landlord REITs only.</strong> This model capitalises NPI at a cap rate, gears against
       the result and distributes AFFO — that describes a rent-collecting landlord. A fund manager's
@@ -3359,6 +3364,89 @@ function renderReitModel() {
 
   renderRmStatement(m);
   renderRmSensitivity(m);
+  renderRmAnalysts(m);
+}
+
+/* Our modelled DPU/FFO against every broker on the name, plus a consensus.
+ *
+ * UNITS: broker eps_fy*/dpu_fy* are CENTS (SPEC §1.1 — the stored DXC row reads
+ * 20.9). The model emits DOLLARS. Everything is converted to cents here so one
+ * table is internally consistent, and the header says so.
+ *
+ * YEAR ALIGNMENT is an assumption, not a fact: broker columns are labelled by
+ * financial year while the model counts forecast years from its base. They are
+ * lined up in order and the page states that, rather than pretending the mapping
+ * is certain. */
+async function renderRmAnalysts(m) {
+  const el = document.getElementById('rm-analysts');
+  const note = document.getElementById('rm-analyst-note');
+  if (!db || !rmTicker) return;
+
+  const { data: fc, error } = await db.from('reit_broker_forecasts').select('*')
+    .eq('ticker', rmTicker).order('note_date', { ascending:false });
+  if (error) { el.innerHTML = `<tbody><tr><td class="empty">${error.message}</td></tr></tbody>`; return; }
+  if (!fc?.length) {
+    el.innerHTML = `<tbody><tr><td class="empty">No broker coverage recorded for ${rmTicker}. Add forecasts under Analyst Coverage and they appear here.</td></tr></tbody>`;
+    note.textContent = '';
+    return;
+  }
+
+  const FY = ['fy26','fy27','fy28'];
+  const ours = m.years.slice(0,3);
+  const oursDpuCents = ours.map(y => y.dpu * 100);
+  const oursFfoCents = ours.map(y => y.ffo_per_unit * 100);
+
+  // Consensus = simple mean across brokers that published the figure. Median
+  // would be more robust with a large panel; with two or three names the mean is
+  // more honest than pretending a median means anything.
+  const mean = arr => { const v = arr.filter(x => x != null); return v.length ? v.reduce((a,c)=>a+c,0)/v.length : null; };
+  const consEps = FY.map(fy => mean(fc.map(r => r['eps_'+fy])));
+  const consDpu = FY.map(fy => mean(fc.map(r => r['dpu_'+fy])));
+  const consTarget = mean(fc.map(r => r.valuation));
+
+  const c = (v,d=1) => v == null ? '—' : v.toFixed(d)+'c';
+  const delta = (o,cv) => (o==null||cv==null||cv===0) ? '' :
+    `<span style="font-size:10px;color:${o>cv?'var(--green)':'var(--red)'}"> ${o>cv?'+':''}${(((o-cv)/cv)*100).toFixed(0)}%</span>`;
+
+  el.innerHTML = `
+    <thead><tr>
+      <th>Source</th><th>Note date</th><th>Rating</th><th class="r">Target $</th>
+      <th class="r">EPS FY26</th><th class="r">FY27</th><th class="r">FY28</th>
+      <th class="r">DPU FY26</th><th class="r">FY27</th><th class="r">FY28</th>
+    </tr></thead>
+    <tbody>
+      <tr style="font-weight:600;background:var(--cream)">
+        <td>Our model</td><td style="font-size:11px;color:var(--muted)">live</td><td>—</td>
+        <td class="r">${m.valuation?.blended_value!=null?f.$(m.valuation.blended_value):'—'}</td>
+        ${oursFfoCents.map(v=>`<td class="r">${c(v)}</td>`).join('')}
+        ${oursDpuCents.map(v=>`<td class="r">${c(v)}</td>`).join('')}
+      </tr>
+      ${fc.map(r=>`<tr>
+        <td style="font-size:11px">${r.broker_name||'—'}</td>
+        <td style="font-size:11px;color:var(--muted)">${r.note_date||'—'}</td>
+        <td>${r.rating?`<span class="hz">${r.rating}</span>`:'—'}</td>
+        <td class="r">${r.valuation!=null?f.$(r.valuation):'—'}</td>
+        ${FY.map(fy=>`<td class="r">${c(r['eps_'+fy])}</td>`).join('')}
+        ${FY.map(fy=>`<td class="r">${c(r['dpu_'+fy])}</td>`).join('')}
+      </tr>`).join('')}
+      <tr style="border-top:2px solid var(--ink);font-weight:600">
+        <td>Consensus (${fc.length})</td><td colspan="2" style="font-size:10px;color:var(--muted)">mean of published</td>
+        <td class="r">${consTarget!=null?f.$(consTarget):'—'}</td>
+        ${consEps.map(v=>`<td class="r">${c(v)}</td>`).join('')}
+        ${consDpu.map(v=>`<td class="r">${c(v)}</td>`).join('')}
+      </tr>
+      <tr style="color:var(--muted)">
+        <td colspan="3" style="font-size:11px">Us vs consensus</td>
+        <td class="r" style="font-size:11px">${(m.valuation?.blended_value!=null&&consTarget)?((m.valuation.blended_value>consTarget?'+':'')+(((m.valuation.blended_value-consTarget)/consTarget)*100).toFixed(0)+'%'):'—'}</td>
+        ${oursFfoCents.map((o,i)=>`<td class="r" style="font-size:11px">${consEps[i]!=null?delta(o,consEps[i]).replace(/<[^>]+>/g,'').trim():'—'}</td>`).join('')}
+        ${oursDpuCents.map((o,i)=>`<td class="r" style="font-size:11px">${consDpu[i]!=null?delta(o,consDpu[i]).replace(/<[^>]+>/g,'').trim():'—'}</td>`).join('')}
+      </tr>
+    </tbody>`;
+
+  note.innerHTML = `All per-security figures in <strong>cents</strong>. Our FFO per security is compared against broker EPS —
+    they are related but not identical measures, so read the gap as directional.
+    <strong>Year alignment is assumed:</strong> the model's forecast years 1–3 are lined up against FY26–FY28 in order;
+    if your model base year differs, the columns shift.`;
 }
 
 const RM_ROWS = {
