@@ -4,7 +4,10 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["@netlify/functions"]
+  # pdf-parse is left EXTERNAL rather than bundled: esbuild inlines it and then
+  # its dynamic requires and debug path resolution break at runtime. Shipping it
+  # as a real node_module keeps it working.
+  external_node_modules = ["@netlify/functions", "pdf-parse"]
 
 [context.production]
   environment = { NODE_VERSION = "18" }

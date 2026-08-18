@@ -93,8 +93,17 @@ exports.handler = async (event) => {
      * "DXI 1H26 results presentation.pdf", useless for "document(3).pdf".
      * pdf-parse is pinned to 1.1.1; see the note in package.json. */
     let pdfParse = null;
-    try { pdfParse = require('pdf-parse'); }
-    catch { warnings.push('pdf-parse unavailable — PDFs classified from filename and subject only.'); }
+    try {
+      // Require the LIB directly, not the package root. pdf-parse@1.1.1's
+      // index.js runs debug code when `module.parent` is undefined — which is
+      // exactly the case once esbuild has bundled it — and that code tries to
+      // read a test PDF that was never shipped, so the require throws.
+      // ./lib/pdf-parse.js is the actual parser with no such wrapper.
+      pdfParse = require('pdf-parse/lib/pdf-parse.js');
+    } catch (e1) {
+      try { pdfParse = require('pdf-parse'); }
+      catch { warnings.push(`pdf-parse unavailable (${e1.message.slice(0, 60)}) — PDFs classified from filename and subject only.`); }
+    }
 
     const docs = [];
     if (attachments.length) {
