@@ -800,8 +800,23 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <button class="tab" onclick="rmStatement('bs',this)">Balance Sheet</button>
       <button class="tab" onclick="rmStatement('cf',this)">Cash Flow</button>
       <button class="tab" onclick="rmStatement('ps',this)">Per Security</button>
+      <button class="tab" onclick="rmStatement('debt',this)">Debt Schedule</button>
+      <button class="tab" onclick="rmStatement('bridge',this)">FFO Bridge</button>
+      <div style="flex:1"></div>
+      <div class="lens-note">Click any line to see the formula and the inputs behind it</div>
     </div>
     <div style="overflow-x:auto"><table id="rm-statement"><tbody><tr><td class="empty">Pick a REIT above.</td></tr></tbody></table></div>
+
+    <!-- WORKINGS DRAWER — the formula and inputs behind one line -->
+    <div id="rm-working" style="display:none;margin-top:12px;padding:16px;border:1px solid var(--ink);background:var(--cream)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div class="sl" style="margin:0;flex:1">Workings — <span id="rm-working-title"></span></div>
+        <button class="btn btn-secondary" style="font-size:11px" onclick="rmCloseWorking()">Close</button>
+      </div>
+      <div id="rm-working-formula" style="font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;background:var(--paper);border-left:2px solid var(--teal)"></div>
+      <div id="rm-working-note"></div>
+      <div id="rm-working-body" style="margin-top:12px"></div>
+    </div>
 
     <!-- SENSITIVITY -->
     <div style="display:flex;gap:10px;align-items:center;margin-top:22px;flex-wrap:wrap">
@@ -3432,21 +3447,33 @@ let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl', 
  * shown as percentages — the form converts on the way in and out, because typing
  * 6.25 for a cap rate is natural and storing 6.25 would be a 100x error. */
 const RM_FIELDS = [
-  ['Portfolio', [
-    ['base_noi_m','Base NPI $m','num'], ['cap_rate','Cap rate','pct'],
-    ['escalation','Rent escalation','pct'], ['reversion','Reversion on expiry','pct'],
-    ['occupancy','Occupancy','pct'], ['base_occupancy','Occupancy in base NPI','pct'],
-    ['like_for_like_growth','LFL growth (overrides)','pct'],
+  ['Reported opening balance sheet — from the last results pack', [
+    ['opening_investment_properties_m','Investment properties $m','num'],
+    ['opening_net_debt_m','Net debt $m','num'],
+    ['opening_cash_m','Cash $m','num'],
+    ['securities_m','Securities on issue (m)','num'],
   ]],
-  ['Capital structure', [
+  ['Portfolio income', [
+    ['base_noi_m','Passing NPI $m','num'], ['cap_rate','Cap rate','pct'],
+    ['escalation','Rent escalation','pct'], ['reversion','Reversion on expiry','pct'],
+    ['default_expiry_rate','Leases expiring p.a.','pct'],
+    ['occupancy','Occupancy','pct'], ['base_occupancy','Occupancy in base NPI','pct'],
+    ['straight_line_m','Straight-lining $m (non-cash)','num'],
+    ['jv_equity_income_m','JV equity income $m','num'],
+    ['like_for_like_growth','LFL growth (overrides build-up)','pct'],
+  ]],
+  ['Debt', [
     ['gearing_target','Target gearing','pct'], ['cost_of_debt','Cost of debt (hedged)','pct'],
+    ['market_refi_rate','Market refi rate','pct'],
     ['hedge_ratio','Hedge ratio','pct'], ['unhedged_rate_shift','Rate shock on unhedged','pct'],
-    ['opening_net_debt_m','Opening net debt $m','num'], ['opening_cash_m','Opening cash $m','num'],
+    ['derivative_mtm_m','Derivative MTM $m (non-cash)','num'],
   ]],
   ['Costs', [
     ['mgmt_fee_pct_gav','Mgmt fee % GAV','pct'], ['admin_cost_m','Admin $m','num'],
     ['maintenance_capex_pct_noi','Maint. capex % NPI','pct'],
     ['leasing_incentive_pct_noi','Incentives % NPI','pct'],
+    ['incentive_amortisation_m','Incentive amortisation $m','num'],
+    ['working_capital_pct_noi','Working capital % NPI','pct'],
   ]],
   ['Distribution', [
     ['payout_ratio','Payout ratio','pct'], ['payout_basis','Payout basis','sel:affo|ffo'],
@@ -3454,9 +3481,7 @@ const RM_FIELDS = [
   ['Valuation', [
     ['required_return','Required return','pct'], ['exit_cap_rate','Exit cap rate','pct'],
     ['terminal_growth','Terminal growth','pct'], ['ffo_multiple','FFO multiple x','num'],
-  ]],
-  ['Structure', [
-    ['securities_m','Securities m','num'], ['forecast_years','Forecast years','num'],
+    ['forecast_years','Forecast years','num'],
   ]],
 ];
 const RM_SENS_FIELDS = ['cap_rate','required_return','cost_of_debt','escalation','terminal_growth',
@@ -3778,39 +3803,129 @@ async function renderRmAnalysts(m) {
     if your model base year differs, the columns shift.`;
 }
 
+/* Each row maps a statement line to the workings key that explains it, so a
+ * click can show the formula and inputs that produced the number. A model you
+ * cannot interrogate is worth nothing — this is the whole point of v2. */
 const RM_ROWS = {
-  pl: [['npi','Net property income'],['mgmt_fee_m','Management fee'],['admin_m','Admin'],
-       ['ebit_m','EBIT'],['net_finance_m','Net finance cost'],['ffo_m','FFO'],
+  pl: [['npi','Net property income',null,'npi'],['cash_npi','  of which cash (ex straight-lining)',null,'cash_npi'],
+       ['mgmt_fee_m','Management fee',null,'mgmt_fee'],['admin_m','Admin'],
+       ['ebit_m','EBIT',null,'ebit'],['net_finance_m','Net finance cost',null,'interest'],
+       ['ffo_m','FFO',null,'ffo'],
        ['maintenance_capex_m','Maintenance capex'],['incentives_m','Leasing incentives'],
-       ['affo_m','AFFO'],['revaluation_m','Revaluation (non-cash)'],
-       ['statutory_profit_m','Statutory profit'],['distributions_m','Distributions']],
-  bs: [['investment_properties_m','Investment properties'],['cash_m','Cash'],
-       ['total_assets_m','Total assets'],['net_debt_m','Net debt'],['equity_m','Equity'],
-       ['gearing','Gearing','pct']],
-  cf: [['cfo_m','Operating cash flow'],['cfi_m','Investing'],['debt_drawn_m','Debt drawn / (repaid)'],
-       ['distributions_m','Distributions paid'],['cff_m','Financing'],
-       ['net_cash_movement_m','Net cash movement'],['cash_m','Closing cash']],
+       ['affo_m','AFFO',null,'affo'],['revaluation_m','Revaluation (non-cash)',null,'revaluation'],
+       ['derivative_mtm_m','Derivative MTM (non-cash)'],
+       ['statutory_profit_m','Statutory profit',null,'statutory_profit'],
+       ['distributions_m','Distributions',null,'distributions']],
+  bs: [['investment_properties_m','Investment properties',null,'investment_properties'],
+       ['cash_m','Cash',null,'cash'],
+       ['working_capital_m','Working capital movement'],
+       ['total_assets_m','Total assets',null,'total_assets'],
+       ['net_debt_m','Net debt',null,'target_debt'],['equity_m','Equity',null,'equity'],
+       ['gearing','Gearing','pct','gearing']],
+  cf: [['cfo_m','Operating cash flow',null,'cfo'],['cfi_m','Investing',null,'cfi'],
+       ['debt_drawn_m','Debt drawn / (repaid)'],['distributions_m','Distributions paid'],
+       ['cff_m','Financing',null,'cff'],
+       ['net_cash_movement_m','Net cash movement'],['cash_m','Closing cash',null,'cash']],
   ps: [['ffo_per_unit','FFO per security','$'],['affo_per_unit','AFFO per security','$'],
-       ['dpu','Distribution per security','$'],['nta','NTA per security','$'],
+       ['dpu','Distribution per security','$','dpu'],['nta','NTA per security','$','nta'],
        ['affo_cover','Distribution cover','x'],['icr','Interest cover','x'],
-       ['lfl_growth','Like-for-like growth','pct']],
+       ['lfl_growth','Like-for-like growth','pct','lfl_growth'],
+       ['expiring_share','Leases expiring','pct'],
+       ['blended_debt_rate','Blended debt rate','pct']],
 };
 
-function renderRmStatement(m) {
-  const rows = RM_ROWS[rmStatementTab];
-  const fmt = (val, type) => val == null ? '—'
+function rmFmt(val, type) {
+  return val == null ? '—'
     : type === 'pct' ? f.pct0(val)
     : type === '$'   ? f.$(val, 4)
     : type === 'x'   ? val.toFixed(2)+'x'
     : '$'+val.toFixed(1)+'m';
-  document.getElementById('rm-statement').innerHTML = `
+}
+
+function renderRmStatement(m) {
+  const el = document.getElementById('rm-statement');
+
+  if (rmStatementTab === 'debt') {
+    // Tranche-level, year by year. A maturity wall shows as a step in the rate.
+    const anyTranches = m.years.some(y => y.debt_tranches);
+    if (!anyTranches) {
+      el.innerHTML = `<tbody><tr><td class="empty" style="font-size:11px">
+        No debt tranches supplied — interest is modelled on a single blended rate against average debt.
+        Add tranches (amount, rate, maturity year, hedged) to see refinancing risk year by year.</td></tr></tbody>`;
+      return;
+    }
+    el.innerHTML = m.years.map(y => `
+      <tbody><tr style="background:var(--cream);font-weight:600">
+        <td colspan="5">Year ${y.year} — blended ${f.pct0(y.blended_debt_rate)} · interest ${rmFmt(y.net_finance_m)}</td></tr>
+      <tr><th>Tranche</th><th class="r">Drawn $m</th><th class="r">Rate</th><th>Hedged</th><th class="r">Interest $m</th></tr>
+      ${(y.debt_tranches||[]).map(t=>`<tr>
+        <td style="font-size:11px">${t.name}</td>
+        <td class="r">${t.amount_m.toFixed(1)}</td>
+        <td class="r">${f.pct0(t.rate)}</td>
+        <td>${t.hedged?'<span class="hz pass">hedged</span>':'<span class="hz fail">floating</span>'}</td>
+        <td class="r">${t.interest_m.toFixed(2)}</td></tr>`).join('')}
+      </tbody>`).join('');
+    return;
+  }
+
+  if (rmStatementTab === 'bridge') {
+    // Statutory profit reconciled to FFO — the reconciliation the workbook has
+    // and v1 did not.
+    el.innerHTML = `<thead><tr><th>Reconciliation</th>${m.years.map(y=>`<th class="r">Year ${y.year}</th>`).join('')}</tr></thead>
+      <tbody>${(m.years[0].ffo_bridge||[]).map((_,i)=>{
+        const line = m.years[0].ffo_bridge[i];
+        return `<tr${line.bold?' style="font-weight:600;background:var(--cream)"':''}>
+          <td style="font-size:11px">${line.line}</td>
+          ${m.years.map(y=>`<td class="r">${y.ffo_bridge[i]?.value!=null?'$'+y.ffo_bridge[i].value.toFixed(1)+'m':'—'}</td>`).join('')}
+        </tr>`; }).join('')}</tbody>`;
+    return;
+  }
+
+  const rows = RM_ROWS[rmStatementTab];
+  el.innerHTML = `
     <thead><tr><th>${rmStatementTab==='ps'?'Per security':'$m'}</th>${m.years.map(y=>`<th class="r">Year ${y.year}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map(([key,label,type]) => {
+    <tbody>${rows.map(([key,label,type,wkey]) => {
       const bold = ['ffo_m','affo_m','ebit_m','total_assets_m','equity_m','net_cash_movement_m','dpu','nta'].includes(key);
-      return `<tr${bold?' style="font-weight:600;background:var(--cream)"':''}>
-        <td>${label}</td>${m.years.map(y=>`<td class="r">${fmt(y[key], type)}</td>`).join('')}</tr>`;
+      const has = wkey && m.years[0].workings?.[wkey];
+      return `<tr${bold?' style="font-weight:600;background:var(--cream)"':''}
+                ${has?`class="clickable" onclick="rmShowWorking('${wkey}','${label.trim().replace(/'/g,"")}')"`:''}>
+        <td>${label}${has?'<span class="est" title="Click to see the formula and inputs">ƒ</span>':''}</td>
+        ${m.years.map(y=>`<td class="r">${rmFmt(y[key], type)}</td>`).join('')}</tr>`;
     }).join('')}</tbody>`;
 }
+
+/* The workings drawer. Shows, for one line, the formula and the exact named
+ * inputs in every forecast year — so any number on the page can be checked
+ * without opening the source. */
+function rmShowWorking(key, label) {
+  const M = window.ReitModel;
+  const m = M.buildModel(rmAssumptions, { subclass:'landlord' });
+  if (!m.ok) return;
+  const first = m.years[0].workings[key];
+  if (!first) return;
+
+  const body = m.years.map(y => {
+    const wk = y.workings[key];
+    if (!wk) return '';
+    const inputs = Object.entries(wk.inputs || {})
+      .filter(([k]) => k !== 'note')
+      .map(([k,v]) => `<tr><td style="font-size:11px;color:var(--muted);padding-right:14px">${k.replace(/_/g,' ')}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:11px">${
+          Array.isArray(v) ? v.join('<br>') :
+          typeof v === 'number' ? (Math.abs(v)<1 && v!==0 ? v.toFixed(6) : v.toLocaleString()) : String(v)}</td></tr>`).join('');
+    return `<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--rule)">
+      <div style="font-weight:600;font-size:12px">Year ${y.year} = <span style="font-family:'DM Mono',monospace">${wk.value}</span></div>
+      <table style="margin-top:6px">${inputs}</table></div>`;
+  }).join('');
+
+  const note = first.inputs?.note;
+  document.getElementById('rm-working-title').textContent = label;
+  document.getElementById('rm-working-formula').textContent = first.formula;
+  document.getElementById('rm-working-note').innerHTML = note ? `<div class="caveat" style="margin:10px 0">${note}</div>` : '';
+  document.getElementById('rm-working-body').innerHTML = body;
+  document.getElementById('rm-working').style.display = 'block';
+}
+function rmCloseWorking(){ document.getElementById('rm-working').style.display='none'; }
 
 function renderRmSensitivity(m) {
   const M = window.ReitModel;
