@@ -376,4 +376,19 @@ function sensitivity(baseAssumptions, spec = {}, opts = {}) {
   };
 }
 
-module.exports = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity };
+/* Lives under public/ so it can be loaded by the SPA with a script tag: the
+ * sensitivity grid rebuilds the full model at every cell, which has to run
+ * client-side to respond as you type.
+ *
+ * It stays a valid CommonJS module too, so a Netlify function can require it via
+ * ../../public/reit-model.js when the model is wired server-side. Nothing does
+ * yet — `run-valuation.js` uses the separate blended-valuation engine in
+ * scripts/model-engine.js. One file either way: this repo has been bitten by
+ * mirror files before (root-level duplicates deleted 2026-08-13 after silently
+ * diverging), so there is deliberately no second copy. */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity };
+}
+if (typeof window !== 'undefined') {
+  window.ReitModel = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity };
+}

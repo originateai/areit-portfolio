@@ -174,6 +174,7 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
     <a href="/assumptions.html">✎ Assumptions</a>
     <a href="/evidence.html">▦ Market Evidence</a>
     <a data-page="fundamentals">▤ Fundamentals</a>
+    <a data-page="reitmodel">▦ REIT Model</a>
     <a data-page="assets">⌗ Asset Models</a>
     <a data-page="analysts">◇ Analyst Coverage</a>
     <div class="nav-sec">My Portfolio</div>
@@ -642,6 +643,80 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
       <tbody id="mg-tbody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
     </table>
     <div id="mg-status" style="font-size:11px;margin-top:8px;white-space:pre-wrap"></div>
+  </div>
+
+  <!-- REIT MODEL — full three-statement, editable, sensitised -->
+  <div id="pg-reitmodel" class="page">
+    <div class="ph"><h1>REIT Model</h1><p>Full three-statement model · edit every assumption · sensitise anything · landlord REITs only</p></div>
+
+    <div class="tab-row" id="rm-ticker-tabs"></div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <select id="rm-scenario" onchange="loadScenario()"
+        style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
+      <input id="rm-scenario-name" type="text" placeholder="Scenario name"
+        style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
+      <button class="btn btn-secondary" style="font-size:11px" onclick="saveScenario()">Save scenario</button>
+      <button class="btn btn-secondary" style="font-size:11px" onclick="resetScenario()">Reset to base</button>
+      <div style="flex:1"></div>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--rule);background:var(--cream);cursor:pointer">
+        <input type="checkbox" id="rm-hedging" checked onchange="rmEdit('hedging_enabled', this.checked)">
+        <span>Hedging on</span>
+      </label>
+      <div id="rm-articulates"></div>
+    </div>
+
+    <div class="kb">
+      <div class="kc dk"><div class="kl">Blended value</div><div class="kv" id="rm-value">--</div><div class="kn" id="rm-value-note">weighted across four methods</div></div>
+      <div class="kc"><div class="kl">vs price</div><div class="kv teal" id="rm-disc">--</div><div class="kn" id="rm-disc-note">live</div></div>
+      <div class="kc"><div class="kl">Terminal DPU</div><div class="kv" id="rm-dpu">--</div><div class="kn" id="rm-dpu-note">final forecast year</div></div>
+      <div class="kc"><div class="kl">Distribution cover</div><div class="kv" id="rm-cover">--</div><div class="kn" id="rm-cover-note">AFFO / distributions</div></div>
+    </div>
+
+    <div id="rm-errors"></div>
+
+    <!-- ASSUMPTIONS -->
+    <div class="sl" style="margin-top:14px">Assumptions — every field recalculates the whole model</div>
+    <div id="rm-assumptions" style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px"></div>
+
+    <!-- STATEMENTS -->
+    <div class="tab-row">
+      <button class="tab active" onclick="rmStatement('pl',this)">Profit &amp; Loss</button>
+      <button class="tab" onclick="rmStatement('bs',this)">Balance Sheet</button>
+      <button class="tab" onclick="rmStatement('cf',this)">Cash Flow</button>
+      <button class="tab" onclick="rmStatement('ps',this)">Per Security</button>
+    </div>
+    <div style="overflow-x:auto"><table id="rm-statement"><tbody><tr><td class="empty">Pick a REIT above.</td></tr></tbody></table></div>
+
+    <!-- SENSITIVITY -->
+    <div style="display:flex;gap:10px;align-items:center;margin-top:22px;flex-wrap:wrap">
+      <div class="sl" style="margin:0;flex:1">Sensitivity — the full model is rebuilt at every cell</div>
+      <select id="rm-sens-x" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
+      <span style="font-size:11px;color:var(--muted)">against</span>
+      <select id="rm-sens-y" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
+      <span style="font-size:11px;color:var(--muted)">showing</span>
+      <select id="rm-sens-out" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
+        <option value="blended_value">Blended value</option>
+        <option value="cap_rate_nav">Cap-rate NAV</option>
+        <option value="ddm">DDM</option>
+        <option value="terminal_dpu">Terminal DPU</option>
+        <option value="terminal_gearing">Terminal gearing</option>
+        <option value="affo_cover">Distribution cover</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto"><table id="rm-sens"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+    <div class="caveat">
+      <strong>Landlord REITs only.</strong> This model capitalises NPI at a cap rate, gears against
+      the result and distributes AFFO — that describes a rent-collecting landlord. A fund manager's
+      value is a fee annuity on FUM and a developer's is inventory converting to profit; the engine
+      refuses both rather than producing a confident wrong number.
+      <br><br>
+      <strong>The statements articulate.</strong> Balance sheet balances, cash flow ties to the
+      cash movement, and equity rolls with profit less distributions — checked every rebuild, with
+      the result shown next to the hedging toggle. If it ever reads <em>does not articulate</em>,
+      the numbers below are not trustworthy and the failing check is listed.
+    </div>
   </div>
 
   <!-- ANALYST COVERAGE -->
@@ -1232,6 +1307,9 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<!-- The three-statement model engine. Valid CommonJS too, so a function can
+     require the same file server-side — one copy, no mirrors. -->
+<script src="/reit-model.js"></script>
 <script>
 const BOND = 0.0507;
 let db = null;
@@ -1468,6 +1546,7 @@ function go(page, el) {
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
     income: loadIncome, property: loadProperty, valuation: loadValuation, manage: loadManage,
     fundamentals: loadFundamentals, assets: loadAssets, analysts: loadAnalysts,
+    reitmodel: loadReitModel,
     performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
@@ -3053,6 +3132,302 @@ async function runValuation() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '▸ Run engine'; }
   }
+}
+
+// ── REIT MODEL (three-statement, editable, sensitised) ────────────────────────
+/* The engine (window.ReitModel) is the SAME file run-valuation.js requires
+ * server-side. Everything here runs client-side so a keystroke rebuilds the model
+ * and the sensitivity grid immediately — a server round-trip per edit would make
+ * sensitising unusable. */
+let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl', rmScenarios = [];
+
+/* Field groups drive the editor layout. `pct` fields are stored as decimals and
+ * shown as percentages — the form converts on the way in and out, because typing
+ * 6.25 for a cap rate is natural and storing 6.25 would be a 100x error. */
+const RM_FIELDS = [
+  ['Portfolio', [
+    ['base_noi_m','Base NPI $m','num'], ['cap_rate','Cap rate','pct'],
+    ['escalation','Rent escalation','pct'], ['reversion','Reversion on expiry','pct'],
+    ['occupancy','Occupancy','pct'], ['base_occupancy','Occupancy in base NPI','pct'],
+    ['like_for_like_growth','LFL growth (overrides)','pct'],
+  ]],
+  ['Capital structure', [
+    ['gearing_target','Target gearing','pct'], ['cost_of_debt','Cost of debt (hedged)','pct'],
+    ['hedge_ratio','Hedge ratio','pct'], ['unhedged_rate_shift','Rate shock on unhedged','pct'],
+    ['opening_net_debt_m','Opening net debt $m','num'], ['opening_cash_m','Opening cash $m','num'],
+  ]],
+  ['Costs', [
+    ['mgmt_fee_pct_gav','Mgmt fee % GAV','pct'], ['admin_cost_m','Admin $m','num'],
+    ['maintenance_capex_pct_noi','Maint. capex % NPI','pct'],
+    ['leasing_incentive_pct_noi','Incentives % NPI','pct'],
+  ]],
+  ['Distribution', [
+    ['payout_ratio','Payout ratio','pct'], ['payout_basis','Payout basis','sel:affo|ffo'],
+  ]],
+  ['Valuation', [
+    ['required_return','Required return','pct'], ['exit_cap_rate','Exit cap rate','pct'],
+    ['terminal_growth','Terminal growth','pct'], ['ffo_multiple','FFO multiple x','num'],
+  ]],
+  ['Structure', [
+    ['securities_m','Securities m','num'], ['forecast_years','Forecast years','num'],
+  ]],
+];
+const RM_SENS_FIELDS = ['cap_rate','required_return','cost_of_debt','escalation','terminal_growth',
+                        'exit_cap_rate','gearing_target','payout_ratio','occupancy','unhedged_rate_shift'];
+
+async function loadReitModel(ticker) {
+  if (!db) return;
+  if (!window.ReitModel) {
+    document.getElementById('rm-errors').innerHTML =
+      '<div class="caveat" style="border-left-color:var(--red)">Model engine failed to load (/reit-model.js).</div>';
+    return;
+  }
+  // Landlords only — the engine refuses anything else, so don't offer it.
+  const { data: reits } = await db.from('stocks').select('ticker,name,reit_subclass')
+    .eq('asset_class','reit').eq('reit_subclass','landlord').order('ticker');
+  const withModels = new Set();
+  const { data: mv } = await db.from('reit_model_assumptions').select('ticker');
+  (mv||[]).forEach(r => withModels.add(r.ticker));
+  const list = (reits||[]).sort((a,b) => (withModels.has(b.ticker)?1:0)-(withModels.has(a.ticker)?1:0) || a.ticker.localeCompare(b.ticker));
+  if (!list.length) { document.getElementById('rm-ticker-tabs').innerHTML = '<span class="empty">No landlord REITs classified.</span>'; return; }
+
+  rmTicker = ticker || rmTicker || list[0].ticker;
+  document.getElementById('rm-ticker-tabs').innerHTML = list.map(r =>
+    `<button class="tab ${r.ticker===rmTicker?'active':''}" onclick="loadReitModel('${r.ticker}')"
+      title="${(r.name||'').replace(/"/g,'&quot;')}${withModels.has(r.ticker)?'':' — no workbook assumptions, seeded from defaults'}">${r.ticker}${withModels.has(r.ticker)?'':'<span class="est">new</span>'}</button>`).join('');
+
+  await seedAssumptions();
+  await loadScenarioList();
+  renderReitModel();
+}
+
+/* Seed the editor: saved scenario first, then the workbook assumptions, then
+ * engine defaults. Anything genuinely unknown stays null so the engine refuses
+ * rather than valuing off an invented cap rate. */
+async function seedAssumptions() {
+  const D = window.ReitModel.DEFAULTS;
+  const [{ data: sc }, { data: asm }, { data: mdl }, { data: px }, { data: fc }] = await Promise.all([
+    db.from('reit_model_scenarios').select('*').eq('ticker', rmTicker).eq('is_base', true).limit(1),
+    db.from('reit_model_assumptions').select('*').eq('ticker', rmTicker).limit(1),
+    db.from('reit_models').select('*').eq('ticker', rmTicker).eq('is_current', true).limit(1),
+    db.from('reit_prices').select('*').eq('ticker', rmTicker).limit(1),
+    db.from('reit_model_forecasts').select('*').eq('ticker', rmTicker).order('fy').limit(1),
+  ]);
+
+  if (sc?.[0]) { rmAssumptions = { ...D, ...sc[0].assumptions }; }
+  else {
+    const a = asm?.[0] || {}, m = mdl?.[0] || {};
+    rmAssumptions = {
+      ...D,
+      base_noi_m:      a.base_noi_m ?? null,
+      cap_rate:        a.cap_rate ?? null,
+      escalation:      a.escalation ?? D.escalation,
+      reversion:       a.reversion ?? D.reversion,
+      occupancy:       a.occupancy ?? D.occupancy,
+      base_occupancy:  a.occupancy ?? D.base_occupancy,
+      gearing_target:  a.gearing_current ?? D.gearing_target,
+      cost_of_debt:    a.cost_of_debt ?? D.cost_of_debt,
+      hedge_ratio:     a.hedge_ratio ?? D.hedge_ratio,
+      mgmt_fee_pct_gav: a.fee_rate_gav ?? D.mgmt_fee_pct_gav,
+      payout_ratio:    a.payout_ratio ?? D.payout_ratio,
+      required_return: a.req_return ?? D.required_return,
+      exit_cap_rate:   a.exit_cap ?? null,
+      ffo_multiple:    a.base_pe ?? D.ffo_multiple,
+      securities_m:    m.securities_m ?? null,
+    };
+  }
+  rmContext = { price: px?.[0]?.last_price != null ? Number(px[0].last_price) : null,
+                seeded_from: sc?.[0] ? 'scenario' : (asm?.[0] ? 'workbook' : 'defaults') };
+}
+
+async function loadScenarioList() {
+  const { data } = await db.from('reit_model_scenarios').select('*').eq('ticker', rmTicker).order('scenario_name');
+  rmScenarios = data || [];
+  const sel = document.getElementById('rm-scenario');
+  sel.innerHTML = `<option value="">— workbook base —</option>` +
+    rmScenarios.map(s => `<option value="${s.id}">${s.scenario_name}</option>`).join('');
+}
+
+async function loadScenario() {
+  const id = document.getElementById('rm-scenario').value;
+  if (!id) { await seedAssumptions(); renderReitModel(); return; }
+  const s = rmScenarios.find(x => String(x.id) === String(id));
+  if (s) {
+    rmAssumptions = { ...window.ReitModel.DEFAULTS, ...s.assumptions };
+    document.getElementById('rm-scenario-name').value = s.scenario_name;
+    renderReitModel();
+  }
+}
+
+async function resetScenario() {
+  await seedAssumptions();
+  document.getElementById('rm-scenario').value = '';
+  renderReitModel();
+}
+
+async function saveScenario() {
+  const name = (document.getElementById('rm-scenario-name').value || '').trim();
+  const err = document.getElementById('rm-errors');
+  if (!name) { err.innerHTML = '<div class="caveat" style="border-left-color:var(--red)">Give the scenario a name first.</div>'; return; }
+  const { error } = await db.from('reit_model_scenarios').upsert({
+    ticker: rmTicker, scenario_name: name, assumptions: rmAssumptions,
+    model_version: window.ReitModel.MODEL_VERSION, updated_at: new Date().toISOString(),
+  }, { onConflict: 'ticker,scenario_name' });
+  err.innerHTML = error
+    ? `<div class="caveat" style="border-left-color:var(--red)">Save failed: ${error.message}</div>`
+    : `<div class="caveat" style="border-left-color:var(--green)">Saved scenario “${name}” for ${rmTicker}.</div>`;
+  if (!error) loadScenarioList();
+}
+
+function rmEdit(field, value) {
+  const def = RM_FIELDS.flatMap(g => g[1]).find(f => f[0] === field);
+  if (field === 'hedging_enabled') rmAssumptions.hedging_enabled = value;
+  else if (!def) rmAssumptions[field] = value;
+  else if (def[2] === 'pct') rmAssumptions[field] = value === '' ? null : parseFloat(value)/100;
+  else if (def[2] === 'num') rmAssumptions[field] = value === '' ? null : parseFloat(value);
+  else rmAssumptions[field] = value;
+  renderReitModel();
+}
+
+function rmStatement(tab, el) {
+  rmStatementTab = tab;
+  document.querySelectorAll('#pg-reitmodel .tab-row:nth-of-type(2) .tab, #pg-reitmodel .tab-row .tab').forEach(t => {
+    if (t.textContent.match(/Profit|Balance|Cash Flow|Per Security/)) t.classList.remove('active');
+  });
+  if (el) el.classList.add('active');
+  renderReitModel();
+}
+
+function renderReitModel() {
+  const M = window.ReitModel;
+  if (!M || !rmTicker) return;
+
+  // Assumption editor
+  const box = document.getElementById('rm-assumptions');
+  box.innerHTML = RM_FIELDS.map(([group, fields]) => `
+    <div style="margin-bottom:12px">
+      <div class="sl" style="margin-bottom:6px">${group}</div>
+      <div class="form-grid">${fields.map(([key,label,type]) => {
+        const v = rmAssumptions[key];
+        if (type.startsWith('sel:')) {
+          const opts = type.slice(4).split('|');
+          return `<div class="form-group"><label>${label}</label>
+            <select onchange="rmEdit('${key}',this.value)">${opts.map(o=>`<option value="${o}" ${v===o?'selected':''}>${o.toUpperCase()}</option>`).join('')}</select></div>`;
+        }
+        const shown = v == null ? '' : (type==='pct' ? (v*100).toFixed(3).replace(/\.?0+$/,'') : v);
+        return `<div class="form-group"><label>${label}${type==='pct'?' %':''}</label>
+          <input type="number" step="any" value="${shown}" onchange="rmEdit('${key}',this.value)"></div>`;
+      }).join('')}</div>
+    </div>`).join('');
+
+  document.getElementById('rm-hedging').checked = rmAssumptions.hedging_enabled !== false;
+
+  // Build
+  const m = M.buildModel(rmAssumptions, { subclass: 'landlord' });
+  const errBox = document.getElementById('rm-errors');
+  const artBox = document.getElementById('rm-articulates');
+
+  if (!m.ok) {
+    errBox.innerHTML = `<div class="caveat" style="border-left-color:var(--red)">
+      <strong>Model cannot build.</strong><br>${m.errors.join('<br>')}</div>`;
+    artBox.innerHTML = '';
+    document.getElementById('rm-statement').innerHTML = '<tbody><tr><td class="empty">Fix the assumptions above.</td></tr></tbody>';
+    document.getElementById('rm-sens').innerHTML = '<tbody><tr><td class="empty">—</td></tr></tbody>';
+    ['rm-value','rm-disc','rm-dpu','rm-cover'].forEach(id => document.getElementById(id).textContent = '--');
+    return;
+  }
+  errBox.innerHTML = rmContext.seeded_from === 'defaults'
+    ? `<div class="caveat"><strong>Seeded from engine defaults</strong> — ${rmTicker} has no workbook assumptions. The numbers below are only as good as the assumptions you enter above.</div>` : '';
+
+  artBox.innerHTML = m.articulates
+    ? '<span class="hz pass" title="Balance sheet balances, cash flow ties, equity rolls">✓ articulates</span>'
+    : `<span class="hz fail" title="${m.checks.map(c=>`yr${c.year} ${c.check} gap ${c.gap_m}`).join(' · ')}">✗ does not articulate (${m.checks.length})</span>`;
+
+  const last = m.years[m.years.length-1], v = m.valuation;
+  const price = rmContext.price;
+  const disc = (v?.blended_value != null && price) ? (v.blended_value - price)/price : null;
+  document.getElementById('rm-value').textContent = v?.blended_value != null ? f.$(v.blended_value) : '--';
+  document.getElementById('rm-value-note').textContent = v ? Object.entries(v.weights).map(([k,w])=>`${k.replace(/_/g,' ')} ${(w*100).toFixed(0)}%`).join(' · ') : '';
+  const de = document.getElementById('rm-disc');
+  de.textContent = disc != null ? f.pct(disc,1) : '--';
+  de.style.color = disc == null ? 'var(--ink)' : disc > 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('rm-disc-note').textContent = price != null ? `live price ${f.$(price)}` : 'no price';
+  document.getElementById('rm-dpu').textContent = last.dpu != null ? f.$(last.dpu,4) : '--';
+  document.getElementById('rm-dpu-note').textContent = `year ${last.year} · yield on price ${price?f.pct0(last.dpu/price):'—'}`;
+  document.getElementById('rm-cover').textContent = last.affo_cover != null ? last.affo_cover.toFixed(2)+'x' : '--';
+  document.getElementById('rm-cover-note').textContent = `ICR ${last.icr!=null?last.icr.toFixed(2)+'x':'—'} · gearing ${last.gearing!=null?f.pct0(last.gearing):'—'}`;
+
+  renderRmStatement(m);
+  renderRmSensitivity(m);
+}
+
+const RM_ROWS = {
+  pl: [['npi','Net property income'],['mgmt_fee_m','Management fee'],['admin_m','Admin'],
+       ['ebit_m','EBIT'],['net_finance_m','Net finance cost'],['ffo_m','FFO'],
+       ['maintenance_capex_m','Maintenance capex'],['incentives_m','Leasing incentives'],
+       ['affo_m','AFFO'],['revaluation_m','Revaluation (non-cash)'],
+       ['statutory_profit_m','Statutory profit'],['distributions_m','Distributions']],
+  bs: [['investment_properties_m','Investment properties'],['cash_m','Cash'],
+       ['total_assets_m','Total assets'],['net_debt_m','Net debt'],['equity_m','Equity'],
+       ['gearing','Gearing','pct']],
+  cf: [['cfo_m','Operating cash flow'],['cfi_m','Investing'],['debt_drawn_m','Debt drawn / (repaid)'],
+       ['distributions_m','Distributions paid'],['cff_m','Financing'],
+       ['net_cash_movement_m','Net cash movement'],['cash_m','Closing cash']],
+  ps: [['ffo_per_unit','FFO per security','$'],['affo_per_unit','AFFO per security','$'],
+       ['dpu','Distribution per security','$'],['nta','NTA per security','$'],
+       ['affo_cover','Distribution cover','x'],['icr','Interest cover','x'],
+       ['lfl_growth','Like-for-like growth','pct']],
+};
+
+function renderRmStatement(m) {
+  const rows = RM_ROWS[rmStatementTab];
+  const fmt = (val, type) => val == null ? '—'
+    : type === 'pct' ? f.pct0(val)
+    : type === '$'   ? f.$(val, 4)
+    : type === 'x'   ? val.toFixed(2)+'x'
+    : '$'+val.toFixed(1)+'m';
+  document.getElementById('rm-statement').innerHTML = `
+    <thead><tr><th>${rmStatementTab==='ps'?'Per security':'$m'}</th>${m.years.map(y=>`<th class="r">Year ${y.year}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(([key,label,type]) => {
+      const bold = ['ffo_m','affo_m','ebit_m','total_assets_m','equity_m','net_cash_movement_m','dpu','nta'].includes(key);
+      return `<tr${bold?' style="font-weight:600;background:var(--cream)"':''}>
+        <td>${label}</td>${m.years.map(y=>`<td class="r">${fmt(y[key], type)}</td>`).join('')}</tr>`;
+    }).join('')}</tbody>`;
+}
+
+function renderRmSensitivity(m) {
+  const M = window.ReitModel;
+  const xSel = document.getElementById('rm-sens-x'), ySel = document.getElementById('rm-sens-y');
+  if (!xSel.options.length) {
+    const opts = RM_SENS_FIELDS.map(k=>`<option value="${k}">${k.replace(/_/g,' ')}</option>`).join('');
+    xSel.innerHTML = opts; ySel.innerHTML = opts;
+    xSel.value = 'cap_rate'; ySel.value = 'required_return';
+  }
+  const out = document.getElementById('rm-sens-out').value;
+  const s = M.sensitivity(rmAssumptions,
+    { x_field: xSel.value, y_field: ySel.value, output: out }, { subclass:'landlord' });
+
+  const fmtCell = v => v == null ? '—'
+    : ['terminal_gearing','affo_cover'].includes(out)
+      ? (out==='affo_cover' ? v.toFixed(2)+'x' : f.pct0(v))
+      : out === 'terminal_dpu' ? f.$(v,4) : f.$(v);
+  const axisFmt = v => (Math.abs(v) < 1 ? (v*100).toFixed(2)+'%' : v.toFixed(2));
+
+  document.getElementById('rm-sens').innerHTML = `
+    <thead><tr><th style="font-size:10px;color:var(--muted)">${ySel.value.replace(/_/g,' ')} ↓ / ${xSel.value.replace(/_/g,' ')} →</th>
+      ${s.x_axis.map(x=>`<th class="r">${axisFmt(x)}</th>`).join('')}</tr></thead>
+    <tbody>${s.grid.map((row,i)=>`<tr>
+      <td style="font-weight:600">${axisFmt(s.y_axis[i])}</td>
+      ${row.map(c=>{
+        // Shade against the base cell so the gradient reads at a glance.
+        const rel = c.vs_base;
+        const bg = rel == null ? 'transparent'
+          : rel > 0 ? `rgba(31,138,76,${Math.min(0.30, Math.abs(rel)*3).toFixed(3)})`
+                    : `rgba(192,57,43,${Math.min(0.30, Math.abs(rel)*3).toFixed(3)})`;
+        const isBase = Math.abs(rel ?? 1) < 1e-9;
+        return `<td class="r" style="background:${bg}${isBase?';outline:2px solid var(--ink);font-weight:700':''}"
+          title="${rel!=null?(rel>=0?'+':'')+(rel*100).toFixed(1)+'% vs base':''}">${fmtCell(c.value)}</td>`;
+      }).join('')}</tr>`).join('')}</tbody>`;
 }
 
 // ── MANAGE HOLDINGS ───────────────────────────────────────────────────────────
