@@ -3556,7 +3556,7 @@ async function loadEvidence() {
  * server-side. Everything here runs client-side so a keystroke rebuilds the model
  * and the sensitivity grid immediately — a server round-trip per edit would make
  * sensitising unusable. */
-let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl', rmScenarios = [];
+let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl', rmScenarios = [], rmRollup = null;
 
 /* Field groups drive the editor layout. `pct` fields are stored as decimals and
  * shown as percentages — the form converts on the way in and out, because typing
@@ -3641,13 +3641,27 @@ async function seedAssumptions() {
     db.from('reit_model_forecasts').select('*').eq('ticker', rmTicker).order('fy').limit(1),
   ]);
 
-  if (sc?.[0]) { rmAssumptions = { ...D, ...sc[0].assumptions }; }
+  /* BOTTOM-UP FIRST. Where an asset register exists, the portfolio NPI, the
+   * blended cap rate and the opening book are DERIVED from the assets rather
+   * than taken as three blended numbers on faith. A saved scenario still wins —
+   * a deliberate house view beats the roll-up — and the page says which is in
+   * force. */
+  const { data: assetRows } = await db.from('reit_assets').select('*').eq('ticker', rmTicker);
+  rmRollup = null;
+  if (assetRows?.length && window.ReitModel.rollUpAssets) {
+    const roll = window.ReitModel.rollUpAssets(assetRows);
+    if (roll.ok) rmRollup = roll;
+  }
+
+  if (sc?.[0]) { rmAssumptions = { ...D, ...(rmRollup?.assumptions || {}), ...sc[0].assumptions }; }
   else {
     const a = asm?.[0] || {}, m = mdl?.[0] || {};
     rmAssumptions = {
       ...D,
-      base_noi_m:      a.base_noi_m ?? null,
-      cap_rate:        a.cap_rate ?? null,
+      // Asset roll-up wins over the workbook's blended figures where it exists.
+      base_noi_m:      rmRollup?.assumptions.base_noi_m ?? a.base_noi_m ?? null,
+      cap_rate:        rmRollup?.assumptions.cap_rate ?? a.cap_rate ?? null,
+      opening_investment_properties_m: rmRollup?.assumptions.opening_investment_properties_m ?? null,
       escalation:      a.escalation ?? D.escalation,
       reversion:       a.reversion ?? D.reversion,
       occupancy:       a.occupancy ?? D.occupancy,
@@ -3664,7 +3678,7 @@ async function seedAssumptions() {
     };
   }
   rmContext = { price: px?.[0]?.last_price != null ? Number(px[0].last_price) : null,
-                seeded_from: sc?.[0] ? 'scenario' : (asm?.[0] ? 'workbook' : 'defaults') };
+                seeded_from: sc?.[0] ? 'scenario' : (rmRollup ? 'asset register (bottom-up)' : (asm?.[0] ? 'workbook' : 'defaults')) };
 }
 
 async function loadScenarioList() {
@@ -3763,8 +3777,27 @@ function renderReitModel() {
     ['rm-value','rm-disc','rm-dpu','rm-cover'].forEach(id => document.getElementById(id).textContent = '--');
     return;
   }
-  errBox.innerHTML = rmContext.seeded_from === 'defaults'
-    ? `<div class="caveat"><strong>Seeded from engine defaults</strong> — ${rmTicker} has no workbook assumptions. The numbers below are only as good as the assumptions you enter above.</div>` : '';
+  /* Say what the model is built FROM, and where it is bottom-up, show the
+   * roll-up: the value-weighted cap rate, the spread it conceals, and the
+   * concentration that only appears at asset level. */
+  let banner = '';
+  if (rmContext.seeded_from === 'defaults') {
+    banner = `<div class="caveat"><strong>Seeded from engine defaults</strong> — ${rmTicker} has no asset register and no workbook assumptions. The numbers below are only as good as what you enter above.</div>`;
+  } else if (rmRollup) {
+    const i = rmRollup.working.inputs, con = rmRollup.working.concentration;
+    const naive = rmRollup.working.breakdown.reduce((s,a)=>s+a.cap_rate,0) / rmRollup.working.breakdown.length;
+    banner = `<div class="caveat" style="border-left-color:var(--teal)">
+      <strong>Built bottom-up from ${i.assets_priced} assets.</strong>
+      Portfolio ${f.$k(i.portfolio_income_m)}m income → <strong>${f.$k(i.portfolio_value_m)}m</strong> value at a
+      <strong>value-weighted ${f.pct0(i.blended_cap_rate)}</strong> cap rate
+      (the naive average of the rates would be ${f.pct0(naive)} — those differ whenever the spread is wide, and the naive one is wrong).
+      Cap rates run ${f.pct0(i.cap_rate_range[0])}–${f.pct0(i.cap_rate_range[1])}, a <strong>${i.cap_spread_bps}bps spread</strong> a single blended rate would hide.
+      ${con.top_tenant_share != null ? `<br><br><strong>Concentration:</strong> ${con.by_tenant[0].key} is <strong>${f.pct0(con.top_tenant_share)}</strong> of passing income; the largest single asset is ${f.pct0(con.top_asset_share)} of value.` : ''}
+      ${i.assets_unpriced ? `<br><br><strong style="color:var(--red)">${i.assets_unpriced} asset(s) carry no usable income or cap rate</strong> and are excluded — the portfolio figure is understated. ${i.unpriced_names.slice(0,4).join(', ')}` : ''}
+      <br><br>Edit any asset on <a href="#" onclick="go('assets',null);return false" style="color:var(--teal)">Asset Models</a> and it flows through these statements.
+    </div>`;
+  }
+  errBox.innerHTML = banner;
 
   artBox.innerHTML = m.articulates
     ? '<span class="hz pass" title="Balance sheet balances, cash flow ties, equity rolls">✓ articulates</span>'

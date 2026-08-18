@@ -103,6 +103,88 @@ const DEFAULTS = {
   forecast_years:        5,
 };
 
+/* ── BOTTOM-UP ROLL-UP ────────────────────────────────────────────────────────
+ * Build the portfolio assumptions FROM the asset register instead of taking one
+ * blended NPI and one blended cap rate on faith.
+ *
+ * Why it matters: a blended cap rate is a weighted average that conceals the
+ * spread. A book carrying one asset at 4.9% and another at 7.8% is not the same
+ * risk as two at 6.3%, and only the bottom-up view shows which end of the book
+ * is holding up the valuation. It also means an edit to ONE asset — a cap rate
+ * you disagree with, a tenant you think is going — flows all the way through the
+ * three statements to DPU and fair value.
+ *
+ * The blended cap rate is DERIVED, not assumed:
+ *     portfolio value = Σ (income_i ÷ cap_i)
+ *     blended cap     = Σ income_i ÷ portfolio value
+ * which is the value-weighted rate, not the naive average of the rates. Those
+ * two differ materially whenever the spread is wide, and the naive one is wrong.
+ *
+ * Returns the assumption fragment to merge into buildModel(), plus the working.
+ */
+function rollUpAssets(assets, opts = {}) {
+  const rows = (assets || []).filter(a => !a.is_excluded);
+  const priced = [], unpriced = [];
+
+  for (const a of rows) {
+    const income = num(a.income_override_m) ?? num(a.passing_income_m);
+    const cap    = num(a.cap_rate_override) ?? num(a.cap_rate);
+    const own    = num(a.ownership_pct) ?? 1;
+    if (income == null || cap == null || cap <= 0 || income <= 0) { unpriced.push(a.asset_name || 'unnamed'); continue; }
+    priced.push({
+      asset_name: a.asset_name, sector: a.sector, state: a.state, tenant: a.major_tenant,
+      income_m: income * own, cap_rate: cap, ownership_pct: own,
+      value_m: (income / cap) * own,
+      overridden: num(a.cap_rate_override) != null || num(a.income_override_m) != null,
+    });
+  }
+
+  if (!priced.length) {
+    return { ok: false, reason: 'no asset row carries both a positive income and a cap rate',
+             unpriced, assumptions: null };
+  }
+
+  const incomeM = priced.reduce((s, a) => s + a.income_m, 0);
+  const valueM  = priced.reduce((s, a) => s + a.value_m, 0);
+  const blendedCap = valueM > 0 ? incomeM / valueM : null;
+  const caps = priced.map(a => a.cap_rate);
+
+  // Concentration, bottom-up. Both are risk facts the top-down model cannot see.
+  const group = (key) => {
+    const m = {};
+    priced.forEach(a => { const k = (a[key] || 'unattributed').trim(); m[k] = (m[k] || 0) + a.income_m; });
+    return Object.entries(m).map(([k, v]) => ({ key: k, income_m: r2(v), share: r2(v / incomeM) }))
+      .sort((x, y) => y.share - x.share);
+  };
+  const byTenant = group('tenant'), bySector = group('sector'), byState = group('state');
+
+  return {
+    ok: true,
+    assumptions: {
+      base_noi_m: r2(incomeM),
+      cap_rate: r2(blendedCap),
+      opening_investment_properties_m: r2(valueM),
+    },
+    working: {
+      formula: 'portfolio value = Σ(asset income ÷ asset cap rate); blended cap = Σ income ÷ portfolio value',
+      inputs: {
+        assets_priced: priced.length, assets_unpriced: unpriced.length,
+        unpriced_names: unpriced,
+        portfolio_income_m: r2(incomeM),
+        portfolio_value_m: r2(valueM),
+        blended_cap_rate: r2(blendedCap),
+        cap_rate_range: [Math.min(...caps), Math.max(...caps)],
+        cap_spread_bps: Math.round((Math.max(...caps) - Math.min(...caps)) * 10000),
+        note: 'blended cap is VALUE-WEIGHTED, not the average of the rates — those differ whenever the spread is wide, and the naive average is wrong',
+      },
+      breakdown: priced.sort((a, b) => b.value_m - a.value_m),
+      concentration: { by_tenant: byTenant, by_sector: bySector, by_state: byState,
+        top_tenant_share: byTenant[0]?.share ?? null,
+        top_asset_share: r2(Math.max(...priced.map(a => a.value_m)) / valueM) },
+    },
+  };
+}
+
 /* ── WORKINGS RECORDER ────────────────────────────────────────────────────────
  * w(key, value, formula, inputs) stores the number AND how it was reached.
  * The UI renders these verbatim, so a reader can check any line without reading
@@ -551,9 +633,18 @@ function sensitivity(baseAssumptions, spec = {}, opts = {}) {
     base_value: baseValue, grid };
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity };
+/* Build the whole model from the asset register up. Asset-derived figures are
+ * the base; `overrides` win, so a deliberate house view still beats the roll-up
+ * and the page can show you which is which. */
+function buildFromAssets(assets, overrides = {}, opts = {}) {
+  const roll = rollUpAssets(assets, opts);
+  if (!roll.ok) return { ok: false, errors: [`bottom-up roll-up failed: ${roll.reason}`], rollup: roll };
+  const merged = { ...roll.assumptions, ...overrides };
+  const m = buildModel(merged, opts);
+  return { ...m, rollup: roll, built_from: 'asset_register',
+           overridden_fields: Object.keys(overrides).filter(k => k in roll.assumptions) };
 }
-if (typeof window !== 'undefined') {
-  window.ReitModel = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity };
-}
+
+const API = { MODEL_VERSION, DEFAULTS, buildModel, valueModel, sensitivity, rollUpAssets, buildFromAssets };
+if (typeof module !== 'undefined' && module.exports) module.exports = API;
+if (typeof window !== 'undefined') window.ReitModel = API;
