@@ -172,6 +172,78 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
 .calib.def{background:var(--rule);color:var(--muted)}
 th.act{background:rgba(0,0,0,0.04)}
 td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
+
+/* ── STOCK PAGE ───────────────────────────────────────────────────────────────
+   One page per name. The old layout split a single REIT across six pages, each
+   with its own ticker strip, so answering "is this a buy" meant six navigations
+   and holding the numbers in your head. These styles are for the replacement:
+   a fixed identity header, then five collapsible sections in the order you
+   actually think — verdict, what it's worth, what it costs, what it owns, and
+   the statements underneath. */
+.stk-hd{position:sticky;top:0;z-index:20;background:var(--paper);border-bottom:2px solid var(--ink);
+        padding:12px 0 10px;margin-bottom:14px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.stk-id{flex:1;min-width:220px}
+.stk-tick{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;line-height:1.1}
+.stk-name{font-size:12px;color:var(--muted);margin-top:2px}
+.stk-tags{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+.stk-tag{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.07em;text-transform:uppercase;
+         padding:2px 6px;border:1px solid var(--rule);color:var(--muted);border-radius:2px}
+.stk-px{text-align:right;font-family:'DM Mono',monospace}
+.stk-px-v{font-size:24px;font-weight:600;font-family:'Playfair Display',serif}
+.stk-px-d{font-size:12px;margin-top:2px}
+.stk-pick{display:flex;align-items:center;gap:6px}
+.stk-pick select{font-size:12px;padding:7px 10px;border:1px solid var(--rule);background:var(--paper);
+                 color:var(--ink);font-family:'DM Mono',monospace;min-width:200px}
+
+/* Section shell — same accordion mechanic as the assumption editor, one level up. */
+.sec{border:1px solid var(--rule);margin-bottom:10px;background:var(--paper)}
+.sec-head{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;
+          background:var(--cream);user-select:none;border-left:3px solid var(--rule)}
+.sec.open .sec-head{border-left-color:var(--teal)}
+.sec-head:hover{background:rgba(75,151,178,0.08)}
+.sec-head .chev{font-size:11px;color:var(--muted);transition:transform .15s;width:11px}
+.sec.open .sec-head .chev{transform:rotate(90deg)}
+.sec-n{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);width:16px}
+.sec-title{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;flex:1}
+.sec-sum{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:right}
+.sec-body{display:none;padding:16px}
+.sec.open .sec-body{display:block}
+
+/* Verdict — the one-line answer, with the test that produced it spelled out. */
+.verdict{display:flex;gap:18px;align-items:center;padding:14px 16px;border:1px solid var(--rule);
+         border-left:4px solid var(--muted);background:var(--cream);margin-bottom:14px;flex-wrap:wrap}
+.verdict.buy{border-left-color:var(--green);background:rgba(31,138,76,0.06)}
+.verdict.watch{border-left-color:var(--gold);background:rgba(180,140,20,0.06)}
+.verdict.avoid{border-left-color:var(--red);background:rgba(192,57,43,0.05)}
+.verdict.na{border-left-color:var(--rule)}
+.vd-call{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;line-height:1;white-space:nowrap}
+.verdict.buy .vd-call{color:var(--green)}
+.verdict.watch .vd-call{color:var(--gold)}
+.verdict.avoid .vd-call{color:var(--red)}
+.verdict.na .vd-call{color:var(--muted)}
+.vd-why{flex:1;min-width:240px;font-size:12px;line-height:1.6}
+.vd-tests{display:flex;gap:14px;flex-wrap:wrap}
+.vd-test{font-family:'DM Mono',monospace;font-size:10px;text-align:center}
+.vd-test b{display:block;font-size:14px;font-family:'Playfair Display',serif;margin-top:2px}
+.vd-test.pass b{color:var(--green)}
+.vd-test.fail b{color:var(--red)}
+
+/* Valuation methods — one row per method, sorted by what it says the thing is worth. */
+.vm-bar{height:7px;background:var(--rule);border-radius:3px;overflow:hidden;min-width:70px}
+.vm-bar span{display:block;height:100%;background:var(--teal)}
+tr.vm-row{cursor:pointer}
+tr.vm-row:hover{background:rgba(75,151,178,0.07)}
+tr.vm-blend td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)}
+.vm-note{font-size:11px;color:var(--muted);line-height:1.5}
+
+/* Statement tab bar keeps its own download affordance on the right. */
+.stmt-bar{display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--rule);
+          margin-bottom:12px;flex-wrap:wrap}
+.stmt-bar .tab{margin-bottom:-1px}
+.xl{font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 11px;border:1px solid var(--rule);
+    background:var(--cream);color:var(--ink);border-radius:3px;cursor:pointer;white-space:nowrap}
+.xl:hover{border-color:var(--teal);color:var(--teal)}
+.xl[disabled]{opacity:0.45;cursor:default}
 </style>
 </head>
 <body>
@@ -188,13 +260,21 @@ td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
     <a data-page="performance">▲ Net Worth</a>
     <a data-page="manage">✎ Manage Holdings</a>
 
-    <div class="nav-sec">Research &amp; Models</div>
-    <a data-page="reitmodel">▦ REIT Model</a>
-    <a data-page="assets">⌗ Asset Models</a>
-    <a data-page="valuation">◈ Value Engine</a>
+    <!-- IA REBUILD 2026-08-18: one page per stock.
+         Research used to be seven entries — REIT Model, Asset Models, Value
+         Engine, Analyst Coverage, Research Library, Fundamentals, Market
+         Evidence — each a function of the platform rather than a thing you
+         research, and each carrying its OWN ticker strip. Answering "is CIP a
+         buy" meant six navigations and remembering the numbers in between.
+         Now: `Stock` is everything about one name, and the rest are genuinely
+         cross-sectional (a screen across all names, or a library). The folded
+         pages still exist below and are still reachable via go(), so nothing
+         is lost while this settles. -->
+    <div class="nav-sec">Research</div>
+    <a data-page="stock">◉ Stock</a>
+    <a data-page="valuation">◈ Screen — Value Engine</a>
     <a data-page="analysts">◇ Analyst Coverage</a>
     <a data-page="research">⬆ Research Library</a>
-    <a data-page="fundamentals">▤ Fundamentals</a>
     <a data-page="evidence">▦ Market Evidence</a>
 
     <div class="nav-sec">Signals</div>
@@ -235,9 +315,9 @@ td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
     <div class="nav-sec">Market Data</div>
     <a data-page="morning">☀ Morning Scan</a>
     <a data-page="bond">~ Bond Market</a>
-    <a data-page="stock-detail" id="nav-stock-detail" style="display:none">◉ Stock Detail</a>
     <div class="nav-sec">Admin</div>
     <a data-page="enter-trade">+ Record Trade</a>
+    <a data-page="fundamentals">▤ Capture Fundamentals</a>
     <a data-page="documents">⬆ Documents</a>
     <a data-page="settings">⚙ Settings</a>
     <a data-page="alerts">◎ Alerts</a>
@@ -794,108 +874,291 @@ td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
   </div>
 
   <!-- REIT MODEL — full three-statement, editable, sensitised -->
-  <div id="pg-reitmodel" class="page">
-    <div class="ph"><h1>REIT Model</h1><p>Full three-statement model · edit every assumption · sensitise anything · landlord REITs only</p></div>
+  <!-- ═══ STOCK — one page per name ═══════════════════════════════════════════
+       Replaces REIT Model, Asset Models, Stock Detail and the per-ticker slices
+       of Analyst Coverage and Fundamentals. Section order is the order the
+       question actually gets asked: what is the call, what is it worth, what
+       does it cost, what does it own, and what do the statements say. -->
+  <div id="pg-stock" class="page">
 
-    <div class="tab-row" id="rm-ticker-tabs"></div>
-
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <select id="rm-scenario" onchange="loadScenario()"
-        style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
-      <input id="rm-scenario-name" type="text" placeholder="Scenario name"
-        style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
-      <button class="btn btn-secondary" style="font-size:11px" onclick="saveScenario()">Save scenario</button>
-      <button class="btn btn-secondary" style="font-size:11px" onclick="resetScenario()">Reset to base</button>
-      <div style="flex:1"></div>
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--rule);background:var(--cream);cursor:pointer">
-        <input type="checkbox" id="rm-hedging" checked onchange="rmEdit('hedging_enabled', this.checked)">
-        <span>Hedging on</span>
-      </label>
-      <div id="rm-articulates"></div>
-    </div>
-
-    <div class="kb">
-      <div class="kc dk"><div class="kl">Blended value</div><div class="kv" id="rm-value">--</div><div class="kn" id="rm-value-note">weighted across four methods</div></div>
-      <div class="kc"><div class="kl">vs price</div><div class="kv teal" id="rm-disc">--</div><div class="kn" id="rm-disc-note">live</div></div>
-      <div class="kc"><div class="kl">Terminal DPU</div><div class="kv" id="rm-dpu">--</div><div class="kn" id="rm-dpu-note">final forecast year</div></div>
-      <div class="kc"><div class="kl">Distribution cover</div><div class="kv" id="rm-cover">--</div><div class="kn" id="rm-cover-note">AFFO / distributions</div></div>
-    </div>
-
-    <div id="rm-errors"></div>
-
-    <!-- ASSUMPTIONS -->
-    <div class="sl" style="margin-top:14px">Assumptions — every field recalculates the whole model</div>
-    <div id="rm-assumptions" style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px"></div>
-
-    <!-- STATEMENTS -->
-    <div class="tab-row">
-      <button class="tab active" onclick="rmStatement('pl',this)">Profit &amp; Loss</button>
-      <button class="tab" onclick="rmStatement('bs',this)">Balance Sheet</button>
-      <button class="tab" onclick="rmStatement('cf',this)">Cash Flow</button>
-      <button class="tab" onclick="rmStatement('ps',this)">Per Security</button>
-      <button class="tab" onclick="rmStatement('debt',this)">Debt Schedule</button>
-      <button class="tab" onclick="rmStatement('bridge',this)">FFO Bridge</button>
-      <div style="flex:1"></div>
-      <div class="lens-note">Click any line to see the formula and the inputs behind it</div>
-    </div>
-    <div style="overflow-x:auto"><table id="rm-statement"><tbody><tr><td class="empty">Pick a REIT above.</td></tr></tbody></table></div>
-
-    <!-- WORKINGS DRAWER — the formula and inputs behind one line -->
-    <div id="rm-working" style="display:none;margin-top:12px;padding:16px;border:1px solid var(--ink);background:var(--cream)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <div class="sl" style="margin:0;flex:1">Workings — <span id="rm-working-title"></span></div>
-        <button class="btn btn-secondary" style="font-size:11px" onclick="rmCloseWorking()">Close</button>
+    <div class="stk-hd">
+      <div class="stk-pick">
+        <select id="stk-select" onchange="openStock(this.value)"></select>
       </div>
-      <div id="rm-working-formula" style="font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;background:var(--paper);border-left:2px solid var(--teal)"></div>
-      <div id="rm-working-note"></div>
-      <div id="rm-working-body" style="margin-top:12px"></div>
-    </div>
-
-    <!-- SENSITIVITY -->
-    <div style="display:flex;gap:10px;align-items:center;margin-top:22px;flex-wrap:wrap">
-      <div class="sl" style="margin:0;flex:1">Sensitivity — the full model is rebuilt at every cell</div>
-      <select id="rm-sens-x" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
-      <span style="font-size:11px;color:var(--muted)">against</span>
-      <select id="rm-sens-y" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
-      <span style="font-size:11px;color:var(--muted)">showing</span>
-      <select id="rm-sens-out" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
-        <option value="blended_value">Blended value</option>
-        <option value="cap_rate_nav">Cap-rate NAV</option>
-        <option value="ddm">DDM</option>
-        <option value="terminal_dpu">Terminal DPU</option>
-        <option value="terminal_gearing">Terminal gearing</option>
-        <option value="affo_cover">Distribution cover</option>
-      </select>
-    </div>
-    <div style="overflow-x:auto"><table id="rm-sens"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
-
-    <!-- REPORTED ACTUALS + THE WORKBOOK BEHIND THE NAME -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px">
-      <div>
-        <div class="sl">Reported actuals</div>
-        <div style="overflow-x:auto"><table id="rm-actuals"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+      <div class="stk-id">
+        <div class="stk-tick" id="stk-ticker">—</div>
+        <div class="stk-name" id="stk-name">Pick a name</div>
+        <div class="stk-tags" id="stk-tags"></div>
       </div>
-      <div>
-        <div class="sl">Source workbook</div>
-        <div id="rm-files"><div class="empty" style="font-size:11px">—</div></div>
+      <div class="stk-px">
+        <div class="stk-px-v" id="stk-price">--</div>
+        <div class="stk-px-d" id="stk-chg"></div>
+        <button class="xl" style="margin-top:6px" onclick="refreshLivePrice(stkTicker)">↻ Live price</button>
       </div>
     </div>
 
-    <!-- OUR FORECAST vs EACH ANALYST -->
-    <div class="sl" style="margin-top:22px">Our forecast vs the analysts</div>
-    <div style="overflow-x:auto"><table id="rm-analysts"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
-    <div id="rm-analyst-note" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+    <!-- ── 1 · SNAPSHOT ──────────────────────────────────────────────────── -->
+    <div class="sec open" id="sec-snap">
+      <div class="sec-head" onclick="stkToggle('snap')">
+        <span class="chev">▶</span><span class="sec-n">1</span>
+        <span class="sec-title">Snapshot &amp; recommendation</span>
+        <span class="sec-sum" id="sum-snap"></span>
+      </div>
+      <div class="sec-body">
+        <div id="stk-verdict"></div>
 
-    <div class="caveat">
-      <strong>Landlord REITs only.</strong> This model capitalises NPI at a cap rate, gears against
-      the result and distributes AFFO — that describes a rent-collecting landlord. A fund manager's
-      value is a fee annuity on FUM and a developer's is inventory converting to profit; the engine
-      refuses both rather than producing a confident wrong number.
-      <br><br>
-      <strong>The statements articulate.</strong> Balance sheet balances, cash flow ties to the
-      cash movement, and equity rolls with profit less distributions — checked every rebuild, with
-      the result shown next to the hedging toggle. If it ever reads <em>does not articulate</em>,
-      the numbers below are not trustworthy and the failing check is listed.
+        <div class="kb">
+          <div class="kc dk"><div class="kl">Blended value</div><div class="kv" id="rm-value">--</div><div class="kn" id="rm-value-note">weighted across the methods</div></div>
+          <div class="kc"><div class="kl">vs price</div><div class="kv teal" id="rm-disc">--</div><div class="kn" id="rm-disc-note">live</div></div>
+          <div class="kc"><div class="kl">Terminal DPU</div><div class="kv" id="rm-dpu">--</div><div class="kn" id="rm-dpu-note">final forecast year</div></div>
+          <div class="kc"><div class="kl">Distribution cover</div><div class="kv" id="rm-cover">--</div><div class="kn" id="rm-cover-note">AFFO / distributions</div></div>
+        </div>
+
+        <div class="sl">Trading detail</div>
+        <div id="sd-metrics" class="kb" style="margin-bottom:14px"></div>
+
+        <div id="sd-tsr-wrap" style="display:none;margin-bottom:14px">
+          <div class="sl">Your position — total shareholder return</div>
+          <div id="sd-tsr" class="kb"></div>
+        </div>
+
+        <div class="sl">Price</div>
+        <div id="stk-spark" style="background:var(--cream);border-radius:4px;padding:8px;overflow:hidden"></div>
+        <div class="lens-note" style="display:block;margin-top:6px">Full chart, technicals and history are in section 3.</div>
+      </div>
+    </div>
+
+    <!-- ── 2 · VALUATION ─────────────────────────────────────────────────── -->
+    <div class="sec" id="sec-val">
+      <div class="sec-head" onclick="stkToggle('val')">
+        <span class="chev">▶</span><span class="sec-n">2</span>
+        <span class="sec-title">Valuation — every methodology, side by side</span>
+        <span class="sec-sum" id="sum-val"></span>
+      </div>
+      <div class="sec-body">
+        <div id="rm-errors"></div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:4px 0 12px">
+          <select id="rm-scenario" onchange="loadScenario()"
+            style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
+          <input id="rm-scenario-name" type="text" placeholder="Scenario name"
+            style="font-size:11px;padding:5px 8px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
+          <button class="btn btn-secondary" style="font-size:11px" onclick="saveScenario()">Save scenario</button>
+          <button class="btn btn-secondary" style="font-size:11px" onclick="resetScenario()">Reset to base</button>
+          <div style="flex:1"></div>
+          <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--rule);background:var(--cream);cursor:pointer">
+            <input type="checkbox" id="rm-hedging" checked onchange="rmEdit('hedging_enabled', this.checked)">
+            <span>Hedging on</span>
+          </label>
+          <div id="rm-articulates"></div>
+        </div>
+
+        <div class="sl">What each method says it is worth</div>
+        <div style="overflow-x:auto"><table id="stk-methods"><tbody><tr><td class="empty">Pick a name above.</td></tr></tbody></table></div>
+        <div class="vm-note" style="margin-top:6px">Click any method for its formula and inputs. SOTP is the
+          bottom-up roll-up of the asset register — every property at its own cap rate — and is the only
+          method that does not take a blended cap rate on faith.</div>
+
+        <div class="sl" style="margin-top:20px">Assumptions — every field recalculates the whole model</div>
+        <div id="rm-assumptions" style="padding:14px;border:1px solid var(--rule);background:var(--cream);margin-bottom:18px"></div>
+
+        <div id="rm-working" style="display:none;margin-top:12px;padding:16px;border:1px solid var(--ink);background:var(--cream)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div class="sl" style="margin:0;flex:1">Workings — <span id="rm-working-title"></span></div>
+            <button class="btn btn-secondary" style="font-size:11px" onclick="rmCloseWorking()">Close</button>
+          </div>
+          <div id="rm-working-formula" style="font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;background:var(--paper);border-left:2px solid var(--teal)"></div>
+          <div id="rm-working-note"></div>
+          <div id="rm-working-body" style="margin-top:12px"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;margin-top:22px;flex-wrap:wrap">
+          <div class="sl" style="margin:0;flex:1">Sensitivity — the full model is rebuilt at every cell</div>
+          <select id="rm-sens-x" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
+          <span style="font-size:11px;color:var(--muted)">against</span>
+          <select id="rm-sens-y" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)"></select>
+          <span style="font-size:11px;color:var(--muted)">showing</span>
+          <select id="rm-sens-out" onchange="renderReitModel()" style="font-size:11px;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)">
+            <option value="blended_value">Blended value</option>
+            <option value="cap_rate_nav">Cap-rate NAV</option>
+            <option value="ddm">DDM</option>
+            <option value="terminal_dpu">Terminal DPU</option>
+            <option value="terminal_gearing">Terminal gearing</option>
+            <option value="affo_cover">Distribution cover</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto"><table id="rm-sens"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+        <div class="caveat">
+          <strong>Landlord REITs only.</strong> This model capitalises NPI at a cap rate, gears against
+          the result and distributes AFFO — that describes a rent-collecting landlord. A fund manager's
+          value is a fee annuity on FUM and a developer's is inventory converting to profit; the engine
+          refuses both rather than producing a confident wrong number.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3 · PRICE &amp; TRADING ───────────────────────────────────────────── -->
+    <div class="sec" id="sec-px">
+      <div class="sec-head" onclick="stkToggle('px')">
+        <span class="chev">▶</span><span class="sec-n">3</span>
+        <span class="sec-title">Price, chart &amp; trading</span>
+        <span class="sec-sum" id="sum-px"></span>
+      </div>
+      <div class="sec-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+          <div class="sl" style="margin:0">Price chart</div>
+          <div id="sd-range" class="rangebar"></div>
+          <div id="sd-chart-perf" style="font-size:12px;font-family:'DM Mono',monospace;color:var(--muted)"></div>
+        </div>
+        <div id="sd-chart" style="background:var(--cream);border-radius:4px;padding:8px;margin-bottom:18px;overflow:hidden"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
+          <div>
+            <div class="sl">Signal breakdown</div>
+            <div id="sd-layers"></div>
+          </div>
+          <div>
+            <div class="sl">Why this signal fired</div>
+            <div id="sd-reasons" style="background:var(--cream);border-radius:3px;padding:14px;font-size:13px;line-height:1.9;margin-bottom:14px"></div>
+            <div class="sl">Trade levels</div>
+            <div id="sd-levels"></div>
+          </div>
+        </div>
+
+        <div class="sl">Technical indicators</div>
+        <div id="sd-technicals" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin-bottom:18px"></div>
+
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="sl" style="flex:1;margin:0">Recent price history</div>
+          <button class="xl" onclick="stkExport('history')">↓ Excel</button>
+        </div>
+        <table id="sd-history" style="margin-top:8px">
+          <thead><tr>
+            <th>Date</th><th class="r">Open</th><th class="r">High</th><th class="r">Low</th>
+            <th class="r">Close</th><th class="r">Volume</th><th class="r">Change</th>
+          </tr></thead>
+          <tbody id="sd-history-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── 4 · FUNDAMENTALS ──────────────────────────────────────────────── -->
+    <div class="sec" id="sec-fund">
+      <div class="sec-head" onclick="stkToggle('fund')">
+        <span class="chev">▶</span><span class="sec-n">4</span>
+        <span class="sec-title">Fundamentals — what the packs actually reported</span>
+        <span class="sec-sum" id="sum-fund"></span>
+      </div>
+      <div class="sec-body">
+        <div class="sl">Latest results pack <span id="stk-fund-asof" style="font-weight:400;color:var(--muted);font-size:10px"></span></div>
+        <div id="stk-fund" class="mg-grid" style="margin-bottom:16px"></div>
+
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="sl" style="flex:1;margin:0">Point-in-time history — dated to the announcement, never the balance date</div>
+          <button class="xl" onclick="stkExport('fundamentals')">↓ Excel</button>
+        </div>
+        <div style="overflow-x:auto;margin-top:8px"><table id="stk-fund-hist"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px">
+          <div>
+            <div class="sl">Reported actuals</div>
+            <div style="overflow-x:auto"><table id="rm-actuals"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+          </div>
+          <div>
+            <div class="sl">Source workbook</div>
+            <div id="rm-files"><div class="empty" style="font-size:11px">—</div></div>
+          </div>
+        </div>
+
+        <div class="sl" style="margin-top:22px">Our forecast vs the analysts</div>
+        <div style="overflow-x:auto"><table id="rm-analysts"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+        <div id="rm-analyst-note" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+
+        <div class="sl" style="margin-top:22px">Broker notes on this name</div>
+        <div style="overflow-x:auto"><table id="stk-brokers"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+        <div class="sl" style="margin-top:22px">Research &amp; documents</div>
+        <div id="sd-research"><div class="empty" style="font-size:11px">—</div></div>
+      </div>
+    </div>
+
+    <!-- ── 5 · STATEMENTS ────────────────────────────────────────────────── -->
+    <div class="sec" id="sec-stmt">
+      <div class="sec-head" onclick="stkToggle('stmt')">
+        <span class="chev">▶</span><span class="sec-n">5</span>
+        <span class="sec-title">Statements, debt book, property book &amp; DCF</span>
+        <span class="sec-sum" id="sum-stmt"></span>
+      </div>
+      <div class="sec-body">
+        <div class="stmt-bar" id="stk-stmt-tabs">
+          <button class="tab active" onclick="stkTab('pl',this)">Profit &amp; Loss</button>
+          <button class="tab" onclick="stkTab('bs',this)">Balance Sheet</button>
+          <button class="tab" onclick="stkTab('cf',this)">Cash Flow</button>
+          <button class="tab" onclick="stkTab('ps',this)">Per Security</button>
+          <button class="tab" onclick="stkTab('debt',this)">Debt Book</button>
+          <button class="tab" onclick="stkTab('prop',this)">Property Book</button>
+          <button class="tab" onclick="stkTab('dcf',this)">DCF</button>
+          <button class="tab" onclick="stkTab('bridge',this)">FFO Bridge</button>
+          <div style="flex:1"></div>
+          <button class="xl" onclick="stkExport('tab')">↓ This tab</button>
+          <button class="xl" onclick="stkExport('workbook')" style="margin-left:4px">↓ Full workbook</button>
+        </div>
+
+        <div id="pane-stmt">
+          <div class="lens-note" style="display:block;margin-bottom:6px">Click any line to see the formula and the inputs behind it.</div>
+          <div style="overflow-x:auto"><table id="rm-statement"><tbody><tr><td class="empty">Pick a name above.</td></tr></tbody></table></div>
+        </div>
+
+        <div id="pane-prop" style="display:none">
+          <div class="kb">
+            <div class="kc dk"><div class="kl">Portfolio value</div><div class="kv" id="as-portfolio">--</div><div class="kn" id="as-portfolio-note">sum of assets at their own cap rates</div></div>
+            <div class="kc"><div class="kl">Implied blended cap</div><div class="kv teal" id="as-blended">--</div><div class="kn" id="as-blended-note">derived, not assumed</div></div>
+            <div class="kc"><div class="kl">NAV per unit</div><div class="kv" id="as-nav">--</div><div class="kn" id="as-nav-note">less net debt</div></div>
+            <div class="kc"><div class="kl">vs price</div><div class="kv" id="as-disc">--</div><div class="kn" id="as-disc-note">live</div></div>
+          </div>
+          <div id="as-warn"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+            <div class="sl" style="flex:1">Assets — edit a cap rate or income and the NAV revalues immediately</div>
+            <button class="btn btn-secondary" onclick="saveAssetEdits()" style="font-size:11px" id="as-save-btn">Save overrides</button>
+          </div>
+          <div style="overflow-x:auto"><table id="as-table">
+            <thead><tr>
+              <th>Asset</th><th>Sector</th><th>State</th><th>Major tenant</th>
+              <th class="r">Income $m</th><th class="r">Cap rate %</th>
+              <th class="r">Value $m</th><th class="r">% of book</th><th class="r">Use</th>
+            </tr></thead>
+            <tbody id="as-tbody"><tr><td colspan="9" class="empty">No asset register for this name.</td></tr></tbody>
+            <tfoot id="as-tfoot"></tfoot>
+          </table></div>
+          <div id="as-save-status" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+          <div class="caveat" style="border-left-color:var(--red)">
+            <strong>WALE and occupancy are not shown here, because they are wrong in the source.</strong>
+            The asset-register scrape in <code>export-model.js</code> is the one block with no label
+            check and its columns have shifted. Income and cap rates reconcile exactly and are what
+            the valuation uses; the pack-level WALE and occupancy in section 4 are the trustworthy ones.
+          </div>
+        </div>
+
+        <div id="pane-dcf" style="display:none">
+          <div class="sl">Levered DCF — free cash flow to equity, discounted</div>
+          <div style="overflow-x:auto"><table id="stk-dcf"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+          <div class="caveat">
+            <strong>FCFE, not distributions.</strong> This discounts all cash available to equity —
+            AFFO plus the debt drawn as the book revalues — where the DDM discounts only what is paid
+            out. The gap between the two is the value of what management retains and of gearing into
+            a revaluing book. The terminal is the exit-cap equity value, so the DCF is anchored to a
+            property valuation at exit rather than to a perpetuity of its own cash flows.
+          </div>
+        </div>
+
+        <div class="caveat">
+          <strong>The statements articulate.</strong> Balance sheet balances, cash flow ties to the
+          cash movement, and equity rolls with profit less distributions — checked every rebuild, with
+          the result shown next to the hedging toggle in section 2. If it ever reads
+          <em>does not articulate</em>, these numbers are not trustworthy and the failing check is listed.
+        </div>
+      </div>
     </div>
   </div>
 
@@ -967,49 +1230,9 @@ td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
     </div>
   </div>
 
-  <!-- ASSET MODELS — bottom-up, asset by asset -->
-  <div id="pg-assets" class="page">
-    <div class="ph"><h1>Asset Models</h1><p>Bottom-up valuation, asset by asset · every property at its own cap rate · edit and revalue against the live price</p></div>
-
-    <div class="tab-row" id="asset-ticker-tabs"></div>
-
-    <div class="kb">
-      <div class="kc dk"><div class="kl">Portfolio value</div><div class="kv" id="as-portfolio">--</div><div class="kn" id="as-portfolio-note">sum of assets at their own cap rates</div></div>
-      <div class="kc"><div class="kl">Implied blended cap</div><div class="kv teal" id="as-blended">--</div><div class="kn" id="as-blended-note">derived, not assumed</div></div>
-      <div class="kc"><div class="kl">NAV per unit</div><div class="kv" id="as-nav">--</div><div class="kn" id="as-nav-note">less net debt</div></div>
-      <div class="kc"><div class="kl">vs price</div><div class="kv" id="as-disc">--</div><div class="kn" id="as-disc-note">live</div></div>
-    </div>
-
-    <div id="as-warn"></div>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-      <div class="sl" style="flex:1">Assets — edit a cap rate or income and the NAV revalues immediately</div>
-      <button class="btn btn-secondary" onclick="saveAssetEdits()" style="font-size:11px" id="as-save-btn">Save overrides</button>
-    </div>
-    <table>
-      <thead><tr>
-        <th>Asset</th><th>Sector</th><th>State</th><th>Major tenant</th>
-        <th class="r">Income $m</th><th class="r">Cap rate %</th>
-        <th class="r">Value $m</th><th class="r">% of book</th><th class="r">Use</th>
-      </tr></thead>
-      <tbody id="as-tbody"><tr><td colspan="9" class="empty">Pick a REIT above.</td></tr></tbody>
-      <tfoot id="as-tfoot"></tfoot>
-    </table>
-    <div id="as-save-status" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
-
-    <div class="caveat" style="border-left-color:var(--red)">
-      <strong>WALE and occupancy are not shown, because they are wrong in the source.</strong>
-      The asset-register scrape in <code>export-model.js</code> is the one block with no label
-      check, and its columns have shifted: <code>wale_years</code> holds values from 0 to 2051
-      (impossible as years) and <code>occupancy</code> holds 3.0 to 12.0 — impossible as a
-      percentage or a fraction, but exactly right for WALE in years. Rather than guess the
-      mapping, both fields are suppressed until the workbook columns are confirmed.
-      <br><br>
-      <strong>Income and cap rates are trustworthy</strong> and are what the valuation uses:
-      per-REIT asset income sums reconcile to the modelled portfolio NOI exactly, to the cent,
-      for all five names. Your overrides are stored separately and survive a workbook re-export.
-    </div>
-  </div>
+  <!-- ASSET MODELS folded into the Stock page, section 5 "Property Book"
+       (IA rebuild 2026-08-18). The as- element ids live there now, so
+       loadAssets() and renderAssets() are unchanged. -->
 
   <!-- FUNDAMENTALS CAPTURE -->
   <div id="pg-fundamentals" class="page">
@@ -1404,87 +1627,16 @@ td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
   </div>
 
   <!-- STOCK DETAIL PAGE -->
-  <div id="pg-stock-detail" class="page">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid var(--ink)">
-      <button onclick="closeStockDetail()" style="background:var(--cream);border:1px solid var(--rule);border-radius:3px;padding:6px 12px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif">← Back</button>
-      <div style="flex:1">
-        <h1 id="sd-title" style="font-family:'Playfair Display',serif;font-size:24px;font-weight:700"></h1>
-        <p id="sd-subtitle" style="font-size:12px;color:var(--muted);margin-top:2px"></p>
-      </div>
-      <div id="sd-price-block" style="text-align:right">
-        <button onclick="refreshLivePrice(currentTicker)" 
-          style="display:block;margin-bottom:6px;background:none;border:1px solid var(--rule);border-radius:3px;padding:4px 10px;font-size:10px;font-family:'DM Mono',monospace;cursor:pointer;color:var(--muted)">
-          ↻ Live price
-        </button>
-      </div>
-    </div>
-
-    <!-- REIT view toggle (Value model ↔ Trading) — shown only for A-REITs we model -->
-    <div id="sd-tabs" class="tab-row" style="display:none;margin-bottom:16px">
-      <button class="tab" onclick="window.location.href='/value-layer.html#stock='+currentTicker">📊 Our Value Model</button>
-      <button class="tab active">📈 Trading &amp; History</button>
-    </div>
-
-    <!-- Key metrics row -->
-    <div id="sd-metrics" class="kb" style="margin-bottom:18px"></div>
-
-    <!-- TSR (only when held) -->
-    <div id="sd-tsr-wrap" style="display:none;margin-bottom:18px">
-      <div class="sl">Your Position — Total Shareholder Return</div>
-      <div id="sd-tsr" class="kb"></div>
-    </div>
-
-    <!-- Chart -->
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
-      <div class="sl" style="margin:0">Price Chart</div>
-      <div id="sd-range" class="rangebar"></div>
-      <div id="sd-chart-perf" style="font-size:12px;font-family:'DM Mono',monospace;color:var(--muted)"></div>
-    </div>
-    <div id="sd-chart" style="background:var(--cream);border-radius:4px;padding:8px;margin-bottom:18px;overflow:hidden"></div>
-
-    <!-- Research library for this ticker — everything filed against the name -->
-    <div style="margin-bottom:18px">
-      <div class="sl">Research &amp; Documents</div>
-      <div id="sd-research"><div class="empty" style="font-size:11px">Loading…</div></div>
-    </div>
-
-    <!-- REIT fundamentals (full field set; every field always shown, blank = awaiting data) -->
-    <div id="sd-reit-wrap" style="display:none;margin-bottom:18px">
-      <div class="sl">REIT Fundamentals <span id="sd-reit-asof" style="font-weight:400;color:var(--muted);font-size:10px"></span></div>
-      <div id="sd-reit" class="kb"></div>
-    </div>
-
-    <!-- Two column layout -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
-
-      <!-- Left: 7-layer breakdown -->
-      <div>
-        <div class="sl">7-Layer Signal Breakdown</div>
-        <div id="sd-layers"></div>
-      </div>
-
-      <!-- Right: Signal reasons + trade levels -->
-      <div>
-        <div class="sl">Why this signal fired</div>
-        <div id="sd-reasons" style="background:var(--cream);border-radius:3px;padding:14px;font-size:13px;line-height:1.9;margin-bottom:14px"></div>
-        <div class="sl">Trade Levels</div>
-        <div id="sd-levels"></div>
-      </div>
-    </div>
-
-    <!-- Technical indicators -->
-    <div class="sl">Technical Indicators</div>
-    <div id="sd-technicals" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin-bottom:18px"></div>
-
-    <!-- Price history table -->
-    <div class="sl">Recent Price History</div>
-    <table id="sd-history" style="margin-bottom:18px">
-      <thead><tr>
-        <th>Date</th><th class="r">Open</th><th class="r">High</th><th class="r">Low</th>
-        <th class="r">Close</th><th class="r">Volume</th><th class="r">Change</th>
-      </tr></thead>
-      <tbody id="sd-history-tbody"></tbody>
-    </table>
+  <!-- STOCK DETAIL folded into the Stock page, sections 1 and 3 (IA rebuild
+       2026-08-18). The sd- element ids live there now, so openStock()
+       still populates them; it no longer switches pages, openStock() does.
+       These two remain because openSignalDrawer writes to them and they have
+       no home on the new page: the REIT fundamentals block is superseded by
+       section 4, and the value-model toggle by the sections themselves. -->
+  <div id="pg-stock-legacy" class="page" style="display:none">
+    <div id="sd-tabs" style="display:none"></div>
+    <div id="sd-reit-wrap" style="display:none"><span id="sd-reit-asof"></span><div id="sd-reit"></div></div>
+    <h1 id="sd-title"></h1><p id="sd-subtitle"></p><div id="sd-price-block"></div>
   </div>
 
 </div>
@@ -1497,6 +1649,10 @@ td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
 <!-- pdf.js: bulk-upload text extraction happens in the browser so raw documents
      never leave for a server round trip before you've reviewed the parse. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- SheetJS: the statements download as a real multi-sheet .xlsx rather than a
+     CSV per tab. Client-side, so the workbook is built from the model already in
+     memory and no server ever sees the assumptions. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const BOND = 0.0507;
 let db = null;
@@ -1633,7 +1789,7 @@ async function loadDashboard() {
 
       <div class="sl">Current holdings</div>
       <table><thead><tr><th>Ticker</th><th class="r">Units</th><th class="r">Last</th><th class="r">Value</th><th class="r">Weight</th></tr></thead>
-        <tbody>${held.length ? held.map(h=>`<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${h.tk}')">
+        <tbody>${held.length ? held.map(h=>`<tr class="clickable" title="Click for full stock detail" onclick="openStock('${h.tk}')">
           <td><span class="tkr">${h.tk}</span></td><td class="r">${h.u.toLocaleString()}</td>
           <td class="r">${h.px?('$'+h.px.toFixed(2)):'--'}</td><td class="r">${money(h.val)}</td>
           <td class="r">${portVal?((h.val/portVal*100).toFixed(1)+'%'):'--'}</td></tr>`).join('')
@@ -1642,7 +1798,7 @@ async function loadDashboard() {
 
       <div class="sl">Model portfolio — open positions</div>
       <table><thead><tr><th>Ticker</th><th class="r">Entry</th><th class="r">Target</th><th>Score</th></tr></thead>
-        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${t.ticker}')">
+        <tbody>${model.filter(t=>String(t.status||'').toLowerCase()!=='closed'&&!t.exit_price).slice(0,8).map(t=>`<tr class="clickable" title="Click for full stock detail" onclick="openStock('${t.ticker}')">
           <td><span class="tkr">${t.ticker}</span></td><td class="r">${t.entry_price?'$'+parseFloat(t.entry_price).toFixed(2):'--'}</td>
           <td class="r">${t.target_price?'$'+parseFloat(t.target_price).toFixed(2):'--'}</td>
           <td>${t.total_score!=null?t.total_score+'/7':(t.score!=null?t.score:'')}</td></tr>`).join('')
@@ -1733,7 +1889,8 @@ function go(page, el) {
     'credit-holdings': loadCreditHoldings, 'bond-holdings': loadBondHoldings,
     income: loadIncome, property: loadProperty, valuation: loadValuation, manage: loadManage,
     fundamentals: loadFundamentals, assets: loadAssets, analysts: loadAnalysts,
-    reitmodel: loadReitModel, evidence: loadEvidence, research: loadResearch,
+    stock: () => openStock(), reitmodel: () => go('stock', null),
+    evidence: loadEvidence, research: loadResearch,
     performance: loadPerformance, morning: loadMorning, bond: loadBond,
     'enter-trade': initTradeForm, documents: loadDocuments, settings: loadSettings, alerts: loadAlerts
   };
@@ -1850,7 +2007,7 @@ function renderValueRows() {
     const pbCell = !r.price_book ? '<td class="r">--</td>'
       : r.assetHeavy ? `<td class="r">${r.price_book.toFixed(2)}</td>`
       : `<td class="r" style="color:var(--muted)" title="P/B ignored — capital-light (${r.industry||'—'})">${r.price_book.toFixed(2)}*</td>`;
-    return `<tr class="clickable" title="Click for full stock detail" onclick="openSignalDrawer('${r.ticker}')">
+    return `<tr class="clickable" title="Click for full stock detail" onclick="openStock('${r.ticker}')">
       <td><span class="tkr">${r.ticker}</span></td>
       <td style="font-size:11px;color:var(--muted)">${(r.name||'').slice(0,26)}</td>
       <td style="font-size:11px">${r.sector||'—'}</td>
@@ -2092,7 +2249,7 @@ async function loadModel() {
     const tr     = document.createElement('tr');
     tr.className = 'clickable';
     tr.title = 'Click to see full signal breakdown';
-    tr.addEventListener('click', () => openSignalDrawer(t.ticker));
+    tr.addEventListener('click', () => openStock(t.ticker));
     tr.innerHTML = `
       <td style="font-size:10px;color:var(--muted)">${t.trade_date}</td>
       <td><span class="tkr">${t.ticker}</span></td>
@@ -2190,7 +2347,7 @@ async function loadReal() {
     const tr = document.createElement('tr');
     tr.className = 'clickable';
     tr.title = 'Click for full stock detail · TSR is position-level (capital + income)';
-    tr.addEventListener('click', () => openSignalDrawer(t.ticker));
+    tr.addEventListener('click', () => openStock(t.ticker));
     tr.innerHTML = `
       <td style="font-size:10px;color:var(--muted)">${t.trade_date}</td>
       <td><span class="tkr">${t.ticker}</span></td>
@@ -2264,7 +2421,7 @@ async function loadAssetHoldings(opts) {
     const tr = document.createElement('tr');
     tr.className = 'clickable';
     tr.title = 'Click for full stock detail · TSR = capital + income received';
-    tr.addEventListener('click', () => openSignalDrawer(tk));
+    tr.addEventListener('click', () => openStock(tk));
     tr.innerHTML = `
       <td><span class="tkr">${tk}</span></td>
       <td style="font-size:11px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name||''}</td>
@@ -2322,7 +2479,7 @@ async function loadStrategies() {
     if (a.total_score>=6) tr.style.background='#f0f7f8';
     if (a.total_score===5) tr.style.background='#f5fff5';
     tr.title = 'Click to see full signal breakdown';
-    tr.addEventListener('click', () => openSignalDrawer(a.ticker));
+    tr.addEventListener('click', () => openStock(a.ticker));
     tr.innerHTML = `
       <td><span class="tkr">${a.ticker}</span></td>
       <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.stocks?.name||''}</td>
@@ -2392,7 +2549,7 @@ async function screenStock() {
           <button class="btn ${inWL?'btn-danger':'btn-green'}" onclick="${inWL?'removeFromWatchlist':'addToWatchlist'}('${ticker}','${stock?.name||ticker}')" style="white-space:nowrap">
             ${inWL?'− Remove':'+ Watchlist'}
           </button>
-          ${data ? `<button class="btn btn-primary" onclick="openSignalDrawer('${ticker}')">Full Detail →</button>` : ''}
+          ${data ? `<button class="btn btn-primary" onclick="openStock('${ticker}')">Full Detail →</button>` : ''}
         </div>
       </div>
 
@@ -2493,7 +2650,7 @@ async function loadWatchlist() {
         ${wl.map(w => {
           const a = analysisMap[w.ticker];
           const sc = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod'}[a?.conviction]||'b-hold';
-          return `<tr class="clickable" onclick="openSignalDrawer('${w.ticker}')">
+          return `<tr class="clickable" onclick="openStock('${w.ticker}')">
             <td><span class="tkr">${w.ticker}</span></td>
             <td style="font-size:11px">${w.name||''}</td>
             <td class="r">${a?.close?f.$(a.close,3):'--'}</td>
@@ -2579,7 +2736,7 @@ async function loadSortedStocks() {
           const sc = {EXCEPTIONAL:'b-exc',STRONG:'b-str',MODERATE:'b-mod'}[a.conviction]||'b-hold';
           const mcap = s.market_cap ? (s.market_cap >= 1e9 ? `$${(s.market_cap/1e9).toFixed(1)}B` : `$${(s.market_cap/1e6).toFixed(0)}M`) : '--';
           const reitType = s.is_manager ? 'Mgr' : s.is_developer ? 'Dev' : s.is_reit ? 'REIT' : '';
-          return `<tr class="clickable" onclick="openSignalDrawer('${a.ticker}')">
+          return `<tr class="clickable" onclick="openStock('${a.ticker}')">
             <td><span class="tkr">${a.ticker}</span>${reitType?`<span class="badge b-reit" style="margin-left:4px;font-size:9px">${reitType}</span>`:''}</td>
             <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name||''}</td>
             <td class="r">${(livePriceCache[a.ticker]?.price||a.close)?f.$(livePriceCache[a.ticker]?.price||a.close,3):'--'} ${livePriceCache[a.ticker]?'<span style="font-size:9px;color:'+(livePriceCache[a.ticker].changePct>=0?'var(--green)':'var(--red)')+'">'+(livePriceCache[a.ticker].changePct>=0?'+':'')+((livePriceCache[a.ticker].changePct||0)*100).toFixed(1)+'%</span>':''}</td>
@@ -2628,7 +2785,7 @@ async function loadREIT() {
     const tr = document.createElement('tr');
     tr.className = 'clickable';
     tr.title = 'Click for full stock detail · TSR = capital + income received';
-    tr.addEventListener('click', () => openSignalDrawer(h.ticker));
+    tr.addEventListener('click', () => openStock(h.ticker));
     tr.innerHTML = `
       <td><span class="tkr">${h.ticker}</span></td>
       <td style="font-size:11px">${h.name}</td>
@@ -2760,7 +2917,7 @@ async function loadREITSignals() {
   reitList.forEach(({ s, a, p, y, eps_y, t8, disc, disc_nav, disc_ga, fired, close }) => {
     const tr = document.createElement('tr');
     tr.className = 'clickable';
-    tr.addEventListener('click', () => openSignalDrawer(s.ticker));
+    tr.addEventListener('click', () => openStock(s.ticker));
     if (fired) tr.style.background = '#f0f8f0';
     if (close) tr.style.background = '#fffbf0';
     const fmt_mc  = v => v ? (v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`) : '--';
@@ -2866,7 +3023,7 @@ async function loadIncome() {
     const hdr = document.createElement('tr');
     hdr.className = 'clickable';
     hdr.title = 'Click for full stock detail';
-    hdr.addEventListener('click', () => openSignalDrawer(tk));
+    hdr.addEventListener('click', () => openStock(tk));
     hdr.style.background = 'var(--cream)';
     hdr.innerHTML = `
       <td colspan="6" style="font-weight:600"><span class="tkr">${tk}</span>
@@ -3167,7 +3324,7 @@ function renderIncomeHoldings() {
              : gyc >= INCOME_TARGET_YIELD ? '<span class="hz pass">✓ 7%</span>'
              : `<span class="hz fail">${Math.round((INCOME_TARGET_YIELD-gyc)*10000)}bps</span>`;
     const est = r.is_estimate ? '<span class="est" title="Tax components assumed from asset class — no annual tax statement loaded">EST</span>' : '';
-    return `<tr class="${isProp?'':'clickable'}" ${isProp?'':`onclick="openSignalDrawer('${r.ticker}')"`}>
+    return `<tr class="${isProp?'':'clickable'}" ${isProp?'':`onclick="openStock('${r.ticker}')"`}>
       <td style="font-weight:600">${isProp ? (r.name||'Property') : `<span class="tkr">${r.ticker}</span>`}</td>
       <td><span class="cls-tag">${r.asset_class||'—'}</span></td>
       <td class="r">${r.units!=null?Math.round(r.units).toLocaleString():'—'}</td>
@@ -3387,7 +3544,7 @@ async function loadValuation() {
       : single ? `<span class="hz fail" title="No assumptions row for this REIT, so cap-rate NAV, DDM and FFO multiple all skipped. This is book NTA, not a blended valuation.">${used[0].toUpperCase()} only</span>`
       : `<span class="hz pass" title="${used.map(k=>`${k} ${(w[k]*100).toFixed(0)}%`).join(' · ')}">${used.length} methods</span>`;
 
-    return `<tr class="clickable" onclick="openSignalDrawer('${r.ticker}')">
+    return `<tr class="clickable" onclick="openStock('${r.ticker}')">
       <td style="font-weight:600"><span class="tkr">${r.ticker}</span></td>
       <td class="r">${price != null ? f.$(price) : '—'}</td>
       <td class="r" style="font-weight:600${single?';color:var(--muted)':''}">${r.fair_value != null ? f.$(r.fair_value) : '—'}</td>
@@ -3576,6 +3733,9 @@ async function loadEvidence() {
 let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl',
     rmScenarios = [], rmRollup = null, rmCalibration = null, rmFundamentals = null,
     rmActuals = [], rmOpenSections = new Set();
+/* The last successfully built model. The methods table, the DCF tab and every
+ * Excel export read this rather than rebuilding — one build per edit, not four. */
+let rmModel = null;
 
 function rmToggleAcc(i, group) {
   const el = document.getElementById('acc-' + i);
@@ -3634,19 +3794,30 @@ async function loadReitModel(ticker) {
       '<div class="caveat" style="border-left-color:var(--red)">Model engine failed to load (/reit-model.js).</div>';
     return;
   }
-  // Landlords only — the engine refuses anything else, so don't offer it.
-  const { data: reits } = await db.from('stocks').select('ticker,name,reit_subclass')
-    .eq('asset_class','reit').eq('reit_subclass','landlord').order('ticker');
-  const withModels = new Set();
-  const { data: mv } = await db.from('reit_model_assumptions').select('ticker');
-  (mv||[]).forEach(r => withModels.add(r.ticker));
-  const list = (reits||[]).sort((a,b) => (withModels.has(b.ticker)?1:0)-(withModels.has(a.ticker)?1:0) || a.ticker.localeCompare(b.ticker));
-  if (!list.length) { document.getElementById('rm-ticker-tabs').innerHTML = '<span class="empty">No landlord REITs classified.</span>'; return; }
+  /* The ticker comes from the Stock page header now. The model still refuses
+   * anything that is not a landlord — capitalising NPI at a cap rate describes
+   * a rent collector and nothing else — but the refusal is a message on the
+   * page rather than a name missing from a tab strip. */
+  rmTicker = ticker || stkTicker || rmTicker;
+  if (!rmTicker) return;
 
-  rmTicker = ticker || rmTicker || list[0].ticker;
-  document.getElementById('rm-ticker-tabs').innerHTML = list.map(r =>
-    `<button class="tab ${r.ticker===rmTicker?'active':''}" onclick="loadReitModel('${r.ticker}')"
-      title="${(r.name||'').replace(/"/g,'&quot;')}${withModels.has(r.ticker)?'':' — no workbook assumptions, seeded from defaults'}">${r.ticker}${withModels.has(r.ticker)?'':'<span class="est">new</span>'}</button>`).join('');
+  const { data: sub } = await db.from('stocks').select('ticker,asset_class,reit_subclass')
+    .eq('ticker', rmTicker).limit(1);
+  const s = sub?.[0];
+  if (!s || s.asset_class !== 'reit' || s.reit_subclass !== 'landlord') {
+    document.getElementById('rm-errors').innerHTML = `<div class="caveat" style="border-left-color:var(--red)">
+      <strong>No three-statement model for ${rmTicker}.</strong> The engine capitalises NPI at a cap
+      rate, gears against the result and distributes AFFO — that describes a landlord REIT.
+      ${s ? `${rmTicker} is classified <strong>${s.asset_class||'unclassified'}${s.reit_subclass?' / '+s.reit_subclass:''}</strong>.` : ''}
+      A fund manager's value is a fee annuity on FUM and a developer's is inventory converting to
+      profit, so the engine refuses both rather than producing a confident wrong number.</div>`;
+    ['rm-value','rm-disc','rm-dpu','rm-cover'].forEach(id => { const e = document.getElementById(id); if (e) e.textContent = '--'; });
+    document.getElementById('rm-assumptions').innerHTML = '';
+    document.getElementById('rm-statement').innerHTML = '<tbody><tr><td class="empty">Not modelled.</td></tr></tbody>';
+    document.getElementById('stk-methods').innerHTML = '<tbody><tr><td class="empty">Not modelled — no valuation methods available for this class.</td></tr></tbody>';
+    rmModel = null;
+    return;
+  }
 
   await seedAssumptions();
   await loadScenarioList();
@@ -3774,13 +3945,17 @@ function rmEdit(field, value) {
   renderReitModel();
 }
 
+/* Switching statement tabs re-renders ONE table off the model already in
+ * memory. It used to call renderReitModel(), which rebuilt the whole model,
+ * the assumption editor and the sensitivity grid to change which six rows were
+ * on screen — and made the full-workbook export rebuild the model six times. */
 function rmStatement(tab, el) {
   rmStatementTab = tab;
-  document.querySelectorAll('#pg-reitmodel .tab-row:nth-of-type(2) .tab, #pg-reitmodel .tab-row .tab').forEach(t => {
-    if (t.textContent.match(/Profit|Balance|Cash Flow|Per Security/)) t.classList.remove('active');
-  });
-  if (el) el.classList.add('active');
-  renderReitModel();
+  if (el) {
+    document.querySelectorAll('#stk-stmt-tabs .tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+  }
+  if (rmModel?.ok) renderRmStatement(rmModel);
 }
 
 function renderReitModel() {
@@ -3851,8 +4026,12 @@ function renderReitModel() {
     document.getElementById('rm-statement').innerHTML = '<tbody><tr><td class="empty">Fix the assumptions above.</td></tr></tbody>';
     document.getElementById('rm-sens').innerHTML = '<tbody><tr><td class="empty">—</td></tr></tbody>';
     ['rm-value','rm-disc','rm-dpu','rm-cover'].forEach(id => document.getElementById(id).textContent = '--');
+    rmModel = null;
+    stkRenderMethods();
+    stkRenderVerdict();
     return;
   }
+  rmModel = m;
   /* Say what the model is built FROM, and where it is bottom-up, show the
    * roll-up: the value-weighted cap rate, the spread it conceals, and the
    * concentration that only appears at asset level. */
@@ -3896,7 +4075,7 @@ function renderReitModel() {
       Cap rates run ${f.pct0(i.cap_rate_range[0])}–${f.pct0(i.cap_rate_range[1])}, a <strong>${i.cap_spread_bps}bps spread</strong> a single blended rate would hide.
       ${con.top_tenant_share != null ? `<br><br><strong>Concentration:</strong> ${con.by_tenant[0].key} is <strong>${f.pct0(con.top_tenant_share)}</strong> of passing income; the largest single asset is ${f.pct0(con.top_asset_share)} of value.` : ''}
       ${i.assets_unpriced ? `<br><br><strong style="color:var(--red)">${i.assets_unpriced} asset(s) carry no usable income or cap rate</strong> and are excluded — the portfolio figure is understated. ${i.unpriced_names.slice(0,4).join(', ')}` : ''}
-      <br><br>Edit any asset on <a href="#" onclick="go('assets',null);return false" style="color:var(--teal)">Asset Models</a> and it flows through these statements.
+      <br><br>Edit any asset in the <a href="#" onclick="stkOpenPropertyBook();return false" style="color:var(--teal)">Property Book</a> below and it flows through these statements.
     </div>`;
   }
   errBox.innerHTML = banner;
@@ -3923,6 +4102,10 @@ function renderReitModel() {
   renderRmSensitivity(m);
   renderRmAnalysts(m);
   renderRmActuals();
+  stkRenderMethods();
+  stkRenderDcf();
+  stkRenderVerdict();
+  stkSummaries();
 }
 
 /* Reported actuals and the source workbook — the two things value-layer.html and
@@ -4390,7 +4573,7 @@ async function loadAnalysts() {
         : r.gap_pct > 0.10 ? '<span class="hz pass">we are above the street</span>'
         : r.gap_pct < -0.10 ? '<span class="hz fail">we are below the street</span>'
         : '<span class="hz">broadly aligned</span>';
-      return `<tr class="clickable" onclick="openSignalDrawer('${r.ticker}')">
+      return `<tr class="clickable" onclick="openStock('${r.ticker}')">
         <td style="font-weight:600"><span class="tkr">${r.ticker}</span></td>
         <td class="r">${r.price!=null?f.$(r.price):'—'}</td>
         <td class="r" style="font-weight:600">${r.our_fair_value!=null?f.$(r.our_fair_value):'—'}</td>
@@ -4418,7 +4601,7 @@ async function loadAnalysts() {
     const ourFv = fvByTicker[r.ticker];
     const diff = (ourFv != null && r.valuation) ? (ourFv - r.valuation)/r.valuation : null;
     return `<tr>
-      <td style="font-weight:600"><span class="tkr" style="cursor:pointer" onclick="openSignalDrawer('${r.ticker}')">${r.ticker}</span></td>
+      <td style="font-weight:600"><span class="tkr" style="cursor:pointer" onclick="openStock('${r.ticker}')">${r.ticker}</span></td>
       <td style="font-size:11px">${r.broker_name||'—'}</td>
       <td style="font-size:11px;color:var(--muted)">${r.note_date||'—'}</td>
       <td>${r.rating?`<span class="hz">${r.rating}</span>`:'—'}</td>
@@ -4466,19 +4649,503 @@ async function saveAnalystForecast() {
  *
  * Edits are held client-side until you save, so you can move several cap rates
  * and watch the NAV move before committing anything. */
+/* ══ STOCK PAGE ══════════════════════════════════════════════════════════════
+ * One page per name. Everything that was spread across REIT Model, Asset
+ * Models, Stock Detail, Analyst Coverage and Fundamentals is a section here,
+ * driven by ONE ticker in the header rather than five independent tab strips.
+ *
+ * This file owns navigation and composition only. Every number still comes from
+ * the engine that already produced it — reit-model.js for the statements and
+ * the methods, openStock() for price and technicals, loadAssets() for
+ * the property book. Nothing was re-derived for the sake of a new layout. */
+let stkTicker = null, stkList = [], stkSignal = null, stkTabName = 'pl',
+    stkFundRows = [], stkBrokerRows = [], stkVal = null;
+
+async function openStock(ticker) {
+  if (!db) return;
+
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('pg-stock').classList.add('active');
+  const navEl = document.querySelector('.nav a[data-page="stock"]');
+  if (navEl) navEl.classList.add('active');
+
+  if (!stkList.length) await stkBuildPicker();
+  stkTicker = ticker || stkTicker || stkList[0]?.ticker;
+  if (!stkTicker) return;
+
+  const sel = document.getElementById('stk-select');
+  if (sel) sel.value = stkTicker;
+  const meta = stkList.find(s => s.ticker === stkTicker);
+  document.getElementById('stk-ticker').textContent = stkTicker;
+  document.getElementById('stk-name').textContent = meta?.name || '';
+  document.getElementById('stk-price').textContent = '--';
+  document.getElementById('stk-chg').textContent = '';
+  stkHeaderTags(meta);
+
+  // Reset the sections that belong to the previous name rather than leaving
+  // last name's numbers on screen while this one loads.
+  stkSignal = null; stkVal = null; stkFundRows = []; stkBrokerRows = [];
+  document.getElementById('stk-verdict').innerHTML =
+    '<div class="verdict na"><div class="vd-call">…</div><div class="vd-why">Loading.</div></div>';
+
+  /* Each section loads independently. A slow documents query must never hold up
+   * the valuation, and a REIT with no model must still show its price. */
+  stkLoadTrading(stkTicker);
+  stkLoadContext(stkTicker);
+  loadReitModel(stkTicker);
+  loadAssets(stkTicker);
+}
+
+/* The picker is grouped by what the platform can actually say about a name:
+ * a landlord with a workbook gets the full five sections, everything else gets
+ * price, fundamentals and documents. Saying so in the list beats letting you
+ * pick a fund manager and find four empty sections. */
+async function stkBuildPicker() {
+  const [{ data: stocks }, { data: asm }] = await Promise.all([
+    db.from('stocks').select('ticker,name,asset_class,reit_subclass,sector').order('ticker'),
+    db.from('reit_model_assumptions').select('ticker'),
+  ]);
+  const modelled = new Set((asm||[]).map(r => r.ticker));
+  stkList = (stocks||[]).map(s => ({ ...s, modelled: modelled.has(s.ticker) }));
+  if (!stkList.length) return;
+
+  const groups = [
+    ['Landlord REITs — fully modelled', s => s.asset_class==='reit' && s.reit_subclass==='landlord' && s.modelled],
+    ['Landlord REITs — no workbook yet', s => s.asset_class==='reit' && s.reit_subclass==='landlord' && !s.modelled],
+    ['Other REITs — managers and developers', s => s.asset_class==='reit' && s.reit_subclass!=='landlord'],
+    ['Everything else', s => s.asset_class!=='reit'],
+  ];
+  const used = new Set();
+  document.getElementById('stk-select').innerHTML = groups.map(([label, test]) => {
+    const rows = stkList.filter(s => !used.has(s.ticker) && test(s));
+    rows.forEach(s => used.add(s.ticker));
+    if (!rows.length) return '';
+    return `<optgroup label="${label}">${rows.map(s =>
+      `<option value="${s.ticker}">${s.ticker} — ${(s.name||'').slice(0,42)}</option>`).join('')}</optgroup>`;
+  }).join('');
+}
+
+function stkHeaderTags(meta) {
+  const el = document.getElementById('stk-tags');
+  if (!el) return;
+  const tags = [];
+  if (meta?.asset_class) tags.push(meta.asset_class);
+  if (meta?.reit_subclass) tags.push(meta.reit_subclass);
+  if (meta?.sector) tags.push(meta.sector);
+  if (meta && meta.asset_class === 'reit' && meta.reit_subclass === 'landlord')
+    tags.push(meta.modelled ? 'workbook' : 'no workbook');
+  el.innerHTML = tags.map(t => `<span class="stk-tag">${t}</span>`).join('');
+}
+
+/* Fundamentals, brokers and the latest valuation run — the three per-ticker
+ * slices that used to require visiting three cross-sectional pages and finding
+ * your row in each. */
+async function stkLoadContext(ticker) {
+  const [{ data: funds }, { data: brokers }, { data: runs }] = await Promise.all([
+    db.from('reit_fundamentals').select('*').eq('ticker', ticker).order('release_date', { ascending:false }),
+    db.from('reit_broker_forecasts').select('*').eq('ticker', ticker).order('note_date', { ascending:false }),
+    db.from('valuation_runs').select('*').eq('ticker', ticker).order('as_of', { ascending:false }).limit(1),
+  ]);
+  if (ticker !== stkTicker) return;   // a faster click won the race
+  stkFundRows = funds || [];
+  stkBrokerRows = brokers || [];
+  stkVal = runs?.[0] || null;
+  stkRenderFundamentals();
+  stkRenderBrokers();
+  stkRenderVerdict();
+  stkSummaries();
+}
+
+// ── Section chrome ───────────────────────────────────────────────────────────
+function stkToggle(key) { document.getElementById('sec-' + key)?.classList.toggle('open'); }
+
+function stkOpenPropertyBook() {
+  document.getElementById('sec-stmt').classList.add('open');
+  const btn = [...document.querySelectorAll('#stk-stmt-tabs .tab')].find(t => t.textContent.includes('Property'));
+  stkTab('prop', btn);
+  document.getElementById('sec-stmt').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function stkTab(name, el) {
+  stkTabName = name;
+  document.querySelectorAll('#stk-stmt-tabs .tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const panes = { stmt:'pane-stmt', prop:'pane-prop', dcf:'pane-dcf' };
+  const which = name === 'prop' ? 'prop' : name === 'dcf' ? 'dcf' : 'stmt';
+  Object.entries(panes).forEach(([k,id]) => document.getElementById(id).style.display = k===which?'block':'none');
+  if (which === 'stmt') rmStatement(name, null);
+}
+
+/* One-line summaries on the collapsed headers, so the page answers the obvious
+ * questions without being opened. A closed section that tells you nothing is
+ * just a thing to click. */
+function stkSummaries() {
+  const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt || ''; };
+  const v = rmModel?.valuation, price = rmContext.price;
+  const disc = (v?.blended_value != null && price) ? (v.blended_value - price)/price : null;
+  set('sum-snap', [price != null ? f.$(price) : null,
+                   stkSignal ? `${stkSignal.conv} ${stkSignal.score}/7` : null].filter(Boolean).join(' · '));
+  set('sum-val', v ? `${f.$(v.blended_value)} blended${disc!=null?` · ${f.pct(disc,1)} vs price`:''}` : 'not modelled');
+  set('sum-px', stkSignal ? `signal ${stkSignal.score}/7` : '');
+  const lf = stkFundRows[0];
+  set('sum-fund', lf ? [lf.nta!=null?`NTA ${f.$(lf.nta)}`:null, lf.wale!=null?`WALE ${Number(lf.wale).toFixed(1)}y`:null,
+                        lf.occupancy!=null?`${f.pct0(lf.occupancy,1)} occ`:null].filter(Boolean).join(' · ')
+                    : 'no pack captured');
+  const last = rmModel?.years?.[rmModel.years.length-1];
+  set('sum-stmt', last ? `${rmModel.years.length}yr forecast · cover ${last.affo_cover!=null?last.affo_cover.toFixed(2)+'x':'—'}` : '');
+}
+
+// ── 1 · Verdict ──────────────────────────────────────────────────────────────
+/* The hurdle is a JOINT test and it is measured GROSS (SPEC.md): 12% IRR on a
+ * 3% yield is a growth stock, 7% yield on a 4% IRR is capital erosion. Tax is
+ * an overlay applied after — it depends on the holder, not on the asset — so it
+ * is reported beside the test and never inside it. */
+function stkRenderVerdict() {
+  const el = document.getElementById('stk-verdict');
+  if (!el) return;
+  const v = rmModel?.valuation, price = rmContext.price;
+  const disc  = (v?.blended_value != null && price) ? (v.blended_value - price)/price : null;
+  const yr1   = rmModel?.years?.[0];
+  const gYield = (yr1?.dpu != null && price) ? yr1.dpu / price : null;   // forward, gross
+  const irr    = stkVal?.irr_pre_tax ?? null;
+
+  const yieldPass = gYield != null ? gYield >= INCOME_TARGET_YIELD : null;
+  const irrPass   = irr    != null ? irr    >= INCOME_TARGET_IRR   : null;
+
+  let cls = 'na', call = 'NO CALL', why;
+  if (yieldPass == null && irrPass == null) {
+    why = rmModel
+      ? 'No valuation run for this name yet — press <strong>Run engine</strong> on the Screen to get an IRR, and the hurdle test will fill in.'
+      : 'Not modelled, so there is no fair value and no hurdle test. Price, fundamentals and documents below are still live.';
+  } else if (yieldPass && irrPass) {
+    cls = 'buy'; call = 'CLEARS BOTH';
+    why = `Forward gross yield of <strong>${f.pct0(gYield)}</strong> and an IRR of <strong>${f.pct0(irr)}</strong> both clear the hurdle` +
+          (disc != null ? `, and it trades <strong>${f.pct(disc,1)}</strong> against our blended value.` : '.');
+  } else if (yieldPass || irrPass) {
+    cls = 'watch'; call = 'HALF';
+    why = yieldPass
+      ? `The income is there — <strong>${f.pct0(gYield)}</strong> gross — but the IRR of <strong>${irr!=null?f.pct0(irr):'—'}</strong> is short of 12%. Yield without total return is capital erosion dressed as income.`
+      : `The return is there — <strong>${f.pct0(irr)}</strong> IRR — but the <strong>${gYield!=null?f.pct0(gYield):'—'}</strong> yield is short of 7%. That is a growth stock, not passive income.`;
+  } else {
+    cls = 'avoid'; call = 'BELOW';
+    why = `Neither test clears: <strong>${gYield!=null?f.pct0(gYield):'—'}</strong> yield against 7% and <strong>${irr!=null?f.pct0(irr):'—'}</strong> IRR against 12%.`;
+  }
+
+  const postTax = stkVal?.irr_post_tax != null || stkVal?.yield_post_tax != null
+    ? `<div class="vm-note" style="margin-top:6px">Post-tax overlay for your circumstances:
+        ${stkVal.yield_post_tax!=null?`yield ${f.pct0(stkVal.yield_post_tax)}`:''}
+        ${stkVal.irr_post_tax!=null?` · IRR ${f.pct0(stkVal.irr_post_tax)}`:''}
+        — the tax says which of two names that both clear is better, never whether one clears.</div>` : '';
+
+  const t = (label, val, pass) => `<div class="vd-test ${pass===true?'pass':pass===false?'fail':''}">${label}<b>${val}</b></div>`;
+  el.innerHTML = `<div class="verdict ${cls}">
+    <div class="vd-call">${call}</div>
+    <div class="vd-why">${why}${postTax}</div>
+    <div class="vd-tests">
+      ${t('yield ≥7%', gYield!=null?f.pct0(gYield):'—', yieldPass)}
+      ${t('IRR ≥12%', irr!=null?f.pct0(irr):'—', irrPass)}
+      ${t('vs value', disc!=null?f.pct(disc,1):'—', disc==null?null:disc>0)}
+      ${t('signal', stkSignal?`${stkSignal.score}/7`:'—', stkSignal?stkSignal.score>=5:null)}
+    </div>
+  </div>`;
+}
+
+// ── 2 · Valuation methods ────────────────────────────────────────────────────
+const STK_METHOD_NOTES = {
+  cap_rate_nav:  'Today’s book: properties plus cash less net debt. Assumes the directors’ cap rates are the market’s.',
+  dcf:           'Free cash flow to equity, discounted. Counts retained earnings and debt drawn against a revaluing book.',
+  ddm:           'Only what is paid out, discounted in perpetuity. Blind to anything management keeps back.',
+  exit_cap_nav:  'Terminal book revalued at the exit cap, discounted home. The gap to current NAV is the cap-rate risk.',
+  ffo_multiple:  'Terminal FFO per security on a multiple. A market-comparison, not an intrinsic value.',
+  sotp:          'Sum of the parts: every property at its own cap rate, less net debt. The only method that does not take a blended cap rate on faith.',
+  book_nta:      'What the last results pack reported. Evidence, not a valuation — it never feeds the blend.',
+  consensus:     'Average broker price target. Records what the market is being told; deliberately weighted zero.',
+};
+
+function stkRenderMethods() {
+  const el = document.getElementById('stk-methods');
+  if (!el) return;
+  const v = rmModel?.valuation;
+  const price = rmContext.price;
+  if (!v) { el.innerHTML = '<tbody><tr><td class="empty">No model for this name — nothing to value.</td></tr></tbody>'; return; }
+
+  const rows = [
+    { key:'cap_rate_nav', label:'Cap-rate NAV',        value:v.cap_rate_nav,        weight:v.weights?.cap_rate_nav },
+    { key:'dcf',          label:'Levered DCF (FCFE)',  value:v.dcf,                 weight:v.weights?.dcf },
+    { key:'ddm',          label:'Dividend discount',   value:v.ddm,                 weight:v.weights?.ddm },
+    { key:'exit_cap_nav', label:'Exit-cap NAV',        value:v.exit_cap_nav,        weight:v.weights?.exit_cap_nav },
+    { key:'ffo_multiple', label:'FFO multiple',        value:v.ffo_multiple_value,  weight:v.weights?.ffo_multiple },
+    { key:'sotp',         label:'SOTP — asset roll-up',value:stkSotp(),             weight:null },
+    { key:'book_nta',     label:'Book NTA (reported)', value:stkFundRows[0]?.nta ?? null, weight:null },
+    { key:'consensus',    label:'Broker consensus',    value:stkConsensus(),        weight:null },
+  ];
+  const vals = rows.map(r => r.value).filter(x => x != null && Number.isFinite(x));
+  const hi = Math.max(...vals, price || 0);
+
+  el.innerHTML = `
+    <thead><tr><th>Method</th><th class="r">Value</th><th class="r">vs price</th>
+      <th style="width:110px">Spread</th><th class="r">Weight</th><th>What it assumes</th></tr></thead>
+    <tbody>${rows.map(r => {
+      const d = (r.value != null && price) ? (r.value - price)/price : null;
+      const w = r.weight != null && r.weight > 0;
+      const has = rmModel.valuation.workings?.[r.key];
+      return `<tr class="vm-row"${has?` onclick="stkShowMethod('${r.key}','${r.label.replace(/'/g,'')}')"`:''}>
+        <td>${r.label}${has?'<span class="est" title="Click for the formula and inputs">ƒ</span>':''}</td>
+        <td class="r" style="font-weight:600${w?'':';color:var(--muted)'}">${r.value!=null?f.$(r.value):'—'}</td>
+        <td class="r" style="color:${d==null?'var(--muted)':d>0?'var(--green)':'var(--red)'}">${d!=null?f.pct(d,1):'—'}</td>
+        <td><div class="vm-bar"><span style="width:${r.value!=null&&hi?Math.max(2,Math.min(100,r.value/hi*100)):0}%"></span></div></td>
+        <td class="r" style="font-family:'DM Mono',monospace;font-size:11px">${w?f.pct0(r.weight,0):'<span title="Evidence, not an input — deliberately excluded from the blend">0%</span>'}</td>
+        <td class="vm-note">${STK_METHOD_NOTES[r.key]||''}</td>
+      </tr>`;
+    }).join('')}
+    <tr class="vm-blend">
+      <td>Blended value</td>
+      <td class="r">${v.blended_value!=null?f.$(v.blended_value):'—'}</td>
+      <td class="r" style="color:${(()=>{const d=(v.blended_value!=null&&price)?(v.blended_value-price)/price:null;return d==null?'var(--muted)':d>0?'var(--green)':'var(--red)';})()}">${(()=>{const d=(v.blended_value!=null&&price)?(v.blended_value-price)/price:null;return d!=null?f.pct(d,1):'—';})()}</td>
+      <td><div class="vm-bar"><span style="width:${v.blended_value!=null&&hi?Math.min(100,v.blended_value/hi*100):0}%;background:var(--ink)"></span></div></td>
+      <td class="r" style="font-family:'DM Mono',monospace;font-size:11px">100%</td>
+      <td class="vm-note">Weights renormalised over the methods that produced a value. Price is ${price!=null?f.$(price):'—'}.</td>
+    </tr></tbody>`;
+}
+
+/* SOTP per security from the asset register: every property capitalised at its
+ * own rate, plus cash, less net debt. Null unless a register exists — an
+ * invented sum of the parts is worse than an empty cell. */
+function stkSotp() {
+  if (!rmRollup?.working?.inputs?.portfolio_value_m) return null;
+  const secs = Number(rmAssumptions.securities_m);
+  if (!secs) return null;
+  const gav = rmRollup.working.inputs.portfolio_value_m;
+  const cash = Number(rmAssumptions.opening_cash_m || 0);
+  const debt = Number(rmAssumptions.opening_net_debt_m || 0);
+  return (gav + cash - debt) / secs;
+}
+
+function stkConsensus() {
+  const t = stkBrokerRows.map(r => r.price_target).filter(x => x != null).map(Number);
+  return t.length ? t.reduce((a,c)=>a+c,0)/t.length : null;
+}
+
+/* The methods drawer reuses the workings panel, but reads valuation workings
+ * rather than per-year statement workings — they are different objects. */
+function stkShowMethod(key, label) {
+  const wk = rmModel?.valuation?.workings?.[key];
+  if (!wk) return;
+  document.getElementById('rm-working-title').textContent = label;
+  document.getElementById('rm-working-formula').textContent = wk.formula || '';
+  document.getElementById('rm-working-note').innerHTML =
+    wk.value != null ? `<div class="vm-note" style="margin-top:6px">Result: <strong>${f.$(wk.value)}</strong> per security.</div>` : '';
+  const rowsOf = obj => Object.entries(obj||{}).map(([k,val]) => `<tr>
+      <td style="font-size:11px;color:var(--muted)">${k.replace(/_/g,' ')}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px">${
+        Array.isArray(val) ? val.join('<br>') : (typeof val === 'number' ? val : String(val))}</td></tr>`).join('');
+  document.getElementById('rm-working-body').innerHTML = `<table>${rowsOf(wk.inputs)}</table>`;
+  const d = document.getElementById('rm-working');
+  d.style.display = 'block';
+  d.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ── 4 · Fundamentals ─────────────────────────────────────────────────────────
+const STK_FUND_FIELDS = [
+  ['nta','NTA $/unit',        v => f.$(v)],
+  ['wacr','WACR',             v => f.pct0(v)],
+  ['npi','NPI (period)',      v => f.$k(v)],
+  ['gearing','Gearing',       v => f.pct0(v,1)],
+  ['icr','ICR',               v => Number(v).toFixed(1)+'x'],
+  ['hedge_pct','Hedged',      v => f.pct0(v,0)],
+  ['hedge_maturity','Hedge maturity', v => Number(v).toFixed(1)+'y'],
+  ['wale','WALE',             v => Number(v).toFixed(1)+'y'],
+  ['occupancy','Occupancy',   v => f.pct0(v,1)],
+  ['ffo','FFO (period)',      v => f.$k(v)],
+  ['affo','AFFO (period)',    v => f.$k(v)],
+  ['dps','DPS (period)',      v => f.$(v,4)],
+];
+
+function stkRenderFundamentals() {
+  const grid = document.getElementById('stk-fund');
+  const hist = document.getElementById('stk-fund-hist');
+  const asof = document.getElementById('stk-fund-asof');
+  if (!grid) return;
+
+  const latest = stkFundRows[0];
+  if (!latest) {
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1">No results pack captured for this name. Capture one under Admin.</div>';
+    hist.innerHTML = '<tbody><tr><td class="empty">—</td></tr></tbody>';
+    asof.textContent = '';
+    return;
+  }
+  asof.textContent = `${latest.period_end} · released ${latest.release_date}`;
+
+  /* Implied cap rate is the one number here the pack does not print, and it is
+   * the whole point of capturing NPI: NPI over enterprise value says what the
+   * MARKET is paying for the same book the directors carry at WACR. */
+  const price = rmContext.price, secs = Number(rmAssumptions.securities_m);
+  let implied = null;
+  if (latest.npi != null && price && secs && latest.period_months) {
+    const annualNpi = Number(latest.npi) * (12 / latest.period_months);
+    const netDebt = Number(rmAssumptions.opening_net_debt_m || 0) * 1e6;
+    const ev = price * secs * 1e6 + netDebt;
+    if (ev > 0) implied = annualNpi / ev;
+  }
+  const gap = (implied != null && latest.wacr != null) ? implied - Number(latest.wacr) : null;
+
+  const cells = STK_FUND_FIELDS
+    .map(([k,label,fmt]) => [label, latest[k] != null ? fmt(latest[k]) : '—'])
+    .concat([['Implied cap', implied != null ? f.pct0(implied) : '—'],
+             ['Implied vs book', gap != null ? f.bps(gap) : '—']]);
+
+  grid.innerHTML = cells.map(([l,v]) =>
+    `<div class="mg"><div class="mg-l">${l}</div><div class="mg-v">${v}</div></div>`).join('');
+
+  hist.innerHTML = `
+    <thead><tr><th>Period</th><th>Released</th><th class="r">Mths</th>
+      ${STK_FUND_FIELDS.map(([,l]) => `<th class="r">${l.replace(/ \(period\)| \$\/unit/,'')}</th>`).join('')}
+      <th>Source</th></tr></thead>
+    <tbody>${stkFundRows.map(r => `<tr>
+      <td style="font-size:11px">${r.period_end||'—'}</td>
+      <td style="font-size:11px">${r.release_date||'—'}</td>
+      <td class="r">${r.period_months||'—'}</td>
+      ${STK_FUND_FIELDS.map(([k,,fmt]) => `<td class="r">${r[k]!=null?fmt(r[k]):'—'}</td>`).join('')}
+      <td style="font-size:10px;color:var(--muted)">${r.source||'—'}${r.is_estimate?'<span class="est">EST</span>':''}</td>
+    </tr>`).join('')}</tbody>`;
+}
+
+function stkRenderBrokers() {
+  const el = document.getElementById('stk-brokers');
+  if (!el) return;
+  if (!stkBrokerRows.length) { el.innerHTML = '<tbody><tr><td class="empty">No broker notes filed against this name.</td></tr></tbody>'; return; }
+  const fv = rmModel?.valuation?.blended_value ?? null;
+  el.innerHTML = `
+    <thead><tr><th>Broker</th><th>Note date</th><th>Rating</th><th class="r">Target</th>
+      <th class="r">EPS FY26</th><th class="r">FY27</th><th class="r">FY28</th>
+      <th class="r">DPU FY27</th><th class="r">vs our FV</th></tr></thead>
+    <tbody>${stkBrokerRows.map(r => {
+      const g = (fv != null && r.price_target != null) ? (fv - r.price_target)/r.price_target : null;
+      const c = x => x != null ? Number(x).toFixed(1)+'c' : '—';   // per-security figures are CENTS
+      return `<tr>
+        <td>${r.broker||'—'}</td>
+        <td style="font-size:11px">${r.note_date||'—'}</td>
+        <td><span class="cls-tag">${r.rating||'—'}</span></td>
+        <td class="r">${r.price_target!=null?f.$(r.price_target):'—'}</td>
+        <td class="r">${c(r.eps_fy26)}</td><td class="r">${c(r.eps_fy27)}</td><td class="r">${c(r.eps_fy28)}</td>
+        <td class="r">${c(r.dpu_fy27)}</td>
+        <td class="r" style="color:${g==null?'var(--muted)':g>0?'var(--green)':'var(--red)'}">${g!=null?f.pct(g,1):'—'}</td>
+      </tr>`;
+    }).join('')}</tbody>`;
+}
+
+// ── 5 · DCF schedule ─────────────────────────────────────────────────────────
+/* The DCF tab shows the cash flows the engine actually discounted, not a
+ * restatement of them. Every line is read from the model that produced the
+ * number in section 2, so the tab can never disagree with the valuation. */
+function stkRenderDcf() {
+  const el = document.getElementById('stk-dcf');
+  if (!el) return;
+  const wk = rmModel?.valuation?.workings?.dcf;
+  if (!rmModel?.ok || !wk) { el.innerHTML = '<tbody><tr><td class="empty">No DCF — the model did not build.</td></tr></tbody>'; return; }
+
+  const r = Number(rmAssumptions.required_return);
+  const secs = Number(rmAssumptions.securities_m);
+  const years = rmModel.years;
+  const disc = i => 1 / Math.pow(1 + r, i + 1);
+
+  const line = (label, vals, bold) => `<tr${bold?' style="font-weight:600;background:var(--cream)"':''}>
+    <td>${label}</td>${vals.map(v => `<td class="r">${v}</td>`).join('')}<td class="r">—</td></tr>`;
+
+  const pvs = years.map((y,i) => ((y.affo_m ?? 0) + (y.debt_drawn_m ?? 0)) * disc(i));
+  el.innerHTML = `
+    <thead><tr><th>$m unless stated</th>${years.map(y=>`<th class="r">Yr ${y.year}</th>`).join('')}<th class="r">Total</th></tr></thead>
+    <tbody>
+      ${line('AFFO', years.map(y => rmFmt(y.affo_m,'m')))}
+      ${line('Net debt drawn', years.map(y => rmFmt(y.debt_drawn_m,'m')))}
+      ${line('FCFE', years.map(y => rmFmt((y.affo_m??0)+(y.debt_drawn_m??0),'m')), true)}
+      ${line('Discount factor @ ' + f.pct0(r), years.map((y,i) => disc(i).toFixed(4)))}
+      <tr style="font-weight:600"><td>PV of FCFE</td>
+        ${pvs.map(v => `<td class="r">${rmFmt(v,'m')}</td>`).join('')}
+        <td class="r">${rmFmt(pvs.reduce((a,c)=>a+c,0),'m')}</td></tr>
+      <tr><td colspan="${years.length+2}" style="height:6px;border:none"></td></tr>
+      <tr><td>Terminal equity value (exit cap ${f.pct0(rmModel.valuation.exit_cap_rate)})</td>
+        <td class="r" colspan="${years.length}">${rmFmt(wk.inputs.terminal_equity_m,'m')}</td>
+        <td class="r">—</td></tr>
+      <tr><td>PV of terminal</td>
+        <td class="r" colspan="${years.length}">${rmFmt(wk.inputs.pv_of_terminal_m,'m')}</td>
+        <td class="r">${rmFmt(wk.inputs.pv_of_terminal_m,'m')}</td></tr>
+      <tr style="font-weight:600;background:var(--cream)"><td>Equity value</td>
+        <td class="r" colspan="${years.length}">—</td>
+        <td class="r">${rmFmt((wk.inputs.pv_explicit_m||0)+(wk.inputs.pv_of_terminal_m||0),'m')}</td></tr>
+      <tr style="font-weight:600"><td>Securities on issue (m)</td>
+        <td class="r" colspan="${years.length}">—</td><td class="r">${secs?secs.toFixed(1):'—'}</td></tr>
+      <tr class="vm-blend"><td>DCF value per security</td>
+        <td class="r" colspan="${years.length}">—</td>
+        <td class="r">${rmModel.valuation.dcf!=null?f.$(rmModel.valuation.dcf):'—'}</td></tr>
+    </tbody>`;
+}
+
+// ── Excel export ─────────────────────────────────────────────────────────────
+/* Real .xlsx, built client-side from the tables already on the page, so what
+ * downloads is exactly what you were looking at. The full workbook puts every
+ * statement on its own sheet — which is the form this actually gets used in. */
+function stkSheetFromTable(id) {
+  const t = document.getElementById(id);
+  if (!t || !t.rows.length) return null;
+  return XLSX.utils.table_to_sheet(t, { raw:false });
+}
+
+function stkExport(what) {
+  if (typeof XLSX === 'undefined') { alert('Spreadsheet library did not load.'); return; }
+  if (!stkTicker) return;
+  const wb = XLSX.utils.book_new();
+  const add = (name, sheet) => { if (sheet) XLSX.utils.book_append_sheet(wb, sheet, name.slice(0,31)); };
+  const stamp = new Date().toISOString().slice(0,10);
+  let fname;
+
+  if (what === 'history')      { add('Price history', stkSheetFromTable('sd-history')); fname = `${stkTicker}_price_history_${stamp}.xlsx`; }
+  else if (what === 'fundamentals') { add('Fundamentals', stkSheetFromTable('stk-fund-hist')); fname = `${stkTicker}_fundamentals_${stamp}.xlsx`; }
+  else if (what === 'tab') {
+    const id = stkTabName === 'prop' ? 'as-table' : stkTabName === 'dcf' ? 'stk-dcf' : 'rm-statement';
+    add(stkTabName.toUpperCase(), stkSheetFromTable(id));
+    fname = `${stkTicker}_${stkTabName}_${stamp}.xlsx`;
+  } else {
+    /* Full workbook: switch through each statement so the shared table is
+     * rendered for that tab, then snapshot it. Cheaper and less error-prone
+     * than maintaining a second, export-only renderer that could drift. */
+    const active = stkTabName;
+    [['pl','Profit and Loss'],['bs','Balance Sheet'],['cf','Cash Flow'],
+     ['ps','Per Security'],['debt','Debt Book'],['bridge','FFO Bridge']].forEach(([tab,name]) => {
+      rmStatement(tab, null);
+      add(name, stkSheetFromTable('rm-statement'));
+    });
+    add('Property Book', stkSheetFromTable('as-table'));
+    add('DCF', stkSheetFromTable('stk-dcf'));
+    add('Valuation methods', stkSheetFromTable('stk-methods'));
+    add('Fundamentals', stkSheetFromTable('stk-fund-hist'));
+    add('Sensitivity', stkSheetFromTable('rm-sens'));
+    // Assumptions as a flat key/value sheet — a model without them is unreadable.
+    const rows = [['Assumption','Value']].concat(
+      RM_FIELDS.flatMap(([group, fields]) => [[group, '']].concat(
+        fields.map(([k,label,type]) => {
+          const v = rmAssumptions[k];
+          return [label, v == null ? '' : (type === 'pct' ? (v*100).toFixed(3) + '%' : v)];
+        }))));
+    add('Assumptions', XLSX.utils.aoa_to_sheet(rows));
+    rmStatement(active === 'prop' || active === 'dcf' ? 'pl' : active, null);
+    fname = `${stkTicker}_model_${stamp}.xlsx`;
+  }
+
+  if (!wb.SheetNames.length) { alert('Nothing to export on this tab yet.'); return; }
+  XLSX.writeFile(wb, fname);
+}
+
 let assetTicker = null, assetRows = [], assetCtx = {};
 
+/* The ticker now comes from the page, not from a tab strip of its own — that
+ * strip was one of six competing ticker selectors and is what made the app feel
+ * like six applications. */
 async function loadAssets(ticker) {
   if (!db) return;
-  const tabs = document.getElementById('asset-ticker-tabs');
-
-  if (!assetTicker || ticker) {
-    const { data: tks } = await db.from('reit_assets').select('ticker');
-    const list = [...new Set((tks||[]).map(t => t.ticker))].sort();
-    if (!list.length) { document.getElementById('as-tbody').innerHTML = '<tr><td colspan="9" class="empty">No asset register loaded. Run scripts/export-model.js for a REIT with an Asset Register sheet.</td></tr>'; return; }
-    assetTicker = ticker || assetTicker || list[0];
-    tabs.innerHTML = list.map(t => `<button class="tab ${t===assetTicker?'active':''}" onclick="loadAssets('${t}')">${t}</button>`).join('');
-  }
+  assetTicker = ticker || stkTicker || assetTicker;
+  if (!assetTicker) return;
 
   const [{ data: rows }, { data: asm }, { data: mdl }, { data: px }] = await Promise.all([
     db.from('reit_assets').select('*').eq('ticker', assetTicker).order('passing_income_m', { ascending:false, nullsFirst:false }),
@@ -4499,7 +5166,18 @@ async function loadAssets(ticker) {
 function renderAssets() {
   const tbody = document.getElementById('as-tbody');
   const tfoot = document.getElementById('as-tfoot');
-  if (!assetRows.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty">No assets for this REIT.</td></tr>'; return; }
+  if (!assetRows.length) {
+    // Clear the tiles too — leaving the previous name's portfolio value above an
+    // empty table is how you end up reading CIP's book against COF's price.
+    tbody.innerHTML = `<tr><td colspan="9" class="empty">No asset register for ${assetTicker||'this name'}.<br>
+      <span style="font-size:10px">Run <code>scripts/ingest-compendium.js</code> against a property compendium,
+      or <code>scripts/export-model.js</code> where the workbook has an Asset Register sheet.</span></td></tr>`;
+    tfoot.innerHTML = '';
+    ['as-portfolio','as-blended','as-nav','as-disc'].forEach(id => { const e=document.getElementById(id); if (e) e.textContent='--'; });
+    ['as-portfolio-note','as-blended-note','as-nav-note','as-disc-note'].forEach(id => { const e=document.getElementById(id); if (e) e.textContent='—'; });
+    document.getElementById('as-warn').innerHTML = '';
+    return;
+  }
 
   const priced = assetRows.filter(r => !r.is_excluded && r._cap > 0 && r._inc > 0);
   const portfolioM = priced.reduce((s,r) => s + (r._inc / r._cap) * (r.ownership_pct ?? 1), 0);
@@ -4938,9 +5616,9 @@ async function loadMorning() {
       ${mg('Yield crv',data.yield_curve_us,'bps')} ${mg('Real yld',data.real_yield,'pct0')}
     </div>
     <div class="sl">Today's equity candidates</div>
-    <div class="info">${data.equities_long?.length?'Longs: '+data.equities_long.map(t=>`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${t}')">${t}</span>`).join(' '):'No equity trades today.'}</div>
+    <div class="info">${data.equities_long?.length?'Longs: '+data.equities_long.map(t=>`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openStock('${t}')">${t}</span>`).join(' '):'No equity trades today.'}</div>
     <div class="sl">REIT triggers</div>
-    <div class="info">${data.reit_triggers?.length?'🟢 Yield triggers: '+data.reit_triggers.map(t=>`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${t}')">${t}</span>`).join(' '):'No REIT yield triggers today.'}</div>
+    <div class="info">${data.reit_triggers?.length?'🟢 Yield triggers: '+data.reit_triggers.map(t=>`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openStock('${t}')">${t}</span>`).join(' '):'No REIT yield triggers today.'}</div>
   `;
 }
 
@@ -5141,28 +5819,18 @@ async function loadAlerts() {
   `).join('');
 }
 
-// ── STOCK DETAIL FULL PAGE ────────────────────────────────────────────────────
-let previousPage  = 'model';
+// ── STOCK PAGE · PRICE, SIGNAL AND TECHNICALS (section 1 and 3) ───────────────
 let currentTicker = null;
 let reitValueOrigin = null; // set when arriving from the value layer, so Back returns there (symmetric nav)
 
-async function openSignalDrawer(ticker) {
+/* Populates the price/signal half of the Stock page. It no longer navigates —
+ * openStock() owns that, because the trading data is one section of a page
+ * rather than a page of its own. Every call site that used to open a drawer now
+ * calls openStock(), which calls this. */
+async function stkLoadTrading(ticker) {
   if (!db) return;
   reitValueOrigin = null; // default: a normal open clears any prior value-layer origin
   currentTicker = ticker;
-
-  // Remember which page we came from
-  const activePage = document.querySelector('.page.active');
-  if (activePage) previousPage = activePage.id.replace('pg-', '');
-
-  // Navigate to stock detail page
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
-  document.getElementById('pg-stock-detail').classList.add('active');
-
-  // Show nav item
-  const navItem = document.getElementById('nav-stock-detail');
-  if (navItem) { navItem.style.display = 'block'; navItem.classList.add('active'); navItem.textContent = `◉ ${ticker}`; }
 
   // Research travels with the name — fire and forget, it must never block the
   // price/signal render if the documents query is slow or fails.
@@ -5245,22 +5913,22 @@ async function openSignalDrawer(ticker) {
 
   // ── POPULATE FULL PAGE ──────────────────────────────────────────────────────
 
-  // Header
-  document.getElementById('sd-title').textContent = `${ticker} — ${stock?.name || trade?.company_name || ''}`;
-  document.getElementById('sd-subtitle').textContent = `${stock?.sector || ''} · ${analysis?.analysis_date || trade?.trade_date || 'Today'}`;
-
-  // Price block
+  // Identity and price live in the sticky Stock page header.
   const convBg   = conv==='EXCEPTIONAL'?'var(--teal)':conv==='STRONG'?'#eef6ee':'#fdf8ee';
   const convFg   = conv==='EXCEPTIONAL'?'#fff':conv==='STRONG'?'var(--green)':'var(--amber)';
   const chgColor = liveChange >= 0 ? 'var(--green)' : 'var(--red)';
   const chgSign  = liveChange >= 0 ? '+' : '';
-  document.getElementById('sd-price-block').innerHTML = `
-    <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700">${livePrice?'$'+parseFloat(livePrice).toFixed(3):'--'}
-      ${live ? `<span style="font-size:14px;font-family:'DM Mono',monospace;color:${chgColor};margin-left:8px">${chgSign}${(liveChange*100).toFixed(2)}%</span>` : ''}
-    </div>
-    ${live ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:'DM Mono',monospace">O $${live.open?.toFixed(3)||'--'} · H $${live.high?.toFixed(3)||'--'} · L $${live.low?.toFixed(3)||'--'} · Vol ${(live.volume/1000).toFixed(0)}K <span style="color:var(--teal)">● Live</span></div>` : ''}
-    <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:12px;font-weight:700;font-family:'DM Mono',monospace;margin-top:4px;background:${convBg};color:${convFg}">${conv} ${score}/7</span>
-  `;
+  document.getElementById('stk-name').textContent =
+    `${stock?.name || trade?.company_name || ''}${stock?.sector ? ' · ' + stock.sector : ''}`;
+  document.getElementById('stk-price').textContent = livePrice ? '$'+parseFloat(livePrice).toFixed(3) : '--';
+  document.getElementById('stk-chg').innerHTML = `
+    ${live ? `<span style="color:${chgColor}">${chgSign}${(liveChange*100).toFixed(2)}%</span>` : '<span style="color:var(--muted)">at last close</span>'}
+    ${live ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">O $${live.open?.toFixed(3)||'--'} · H $${live.high?.toFixed(3)||'--'} · L $${live.low?.toFixed(3)||'--'} · Vol ${(live.volume/1000).toFixed(0)}K <span style="color:var(--teal)">● Live</span></div>` : ''}`;
+  stkSignal = { conv, score, convBg, convFg, date: analysis?.analysis_date || trade?.trade_date || null };
+  if (livePrice) rmContext.price = parseFloat(livePrice);
+  stkHeaderTags(stock);
+  stkRenderVerdict();
+  stkSummaries();
 
   // Key metrics grid
   const metrics = [
@@ -5454,7 +6122,7 @@ async function openSignalDrawer(ticker) {
 // ── LIVE PRICE REFRESH ────────────────────────────────────────────────────────
 async function refreshLivePrice(ticker) {
   if (!ticker) return;
-  const btn = document.querySelector('#sd-price-block button');
+  const btn = document.querySelector('.stk-px button');
   if (btn) btn.textContent = '↻ Fetching...';
 
   try {
@@ -5463,39 +6131,24 @@ async function refreshLivePrice(ticker) {
     const data = await res.json();
 
     if (data.price) {
-      const priceBlock = document.getElementById('sd-price-block');
+      // The price lives in the Stock page header now, not in a block of its own.
       const chg  = data.change || 0;
       const chgP = data.changePct || 0;
-      priceBlock.innerHTML = `
-        <button onclick="refreshLivePrice('${ticker}')"
-          style="display:block;margin-bottom:6px;background:none;border:1px solid var(--rule);border-radius:3px;padding:4px 10px;font-size:10px;font-family:'DM Mono',monospace;cursor:pointer;color:var(--muted)">
-          ↻ Live price
-        </button>
-        <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700">$${parseFloat(data.price).toFixed(3)}</div>
-        <div style="font-size:12px;color:${chg>=0?'var(--green)':'var(--red)'};font-family:'DM Mono',monospace">
-          ${chg>=0?'+':''}${chg.toFixed(3)} (${chgP>=0?'+':''}${chgP.toFixed(2)}%)
-        </div>
-        <div style="font-size:10px;color:var(--muted)">15-min delayed · EODHD</div>
-      `;
+      const pv = document.getElementById('stk-price');
+      const pd = document.getElementById('stk-chg');
+      if (pv) pv.textContent = '$' + parseFloat(data.price).toFixed(3);
+      if (pd) {
+        pd.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)';
+        pd.innerHTML = `${chg>=0?'+':''}${chg.toFixed(3)} (${chgP>=0?'+':''}${chgP.toFixed(2)}%)
+          <div style="font-size:10px;color:var(--muted)">15-min delayed · EODHD</div>`;
+      }
+      rmContext.price = parseFloat(data.price);
+      if (rmModel) renderReitModel();
     }
   } catch(e) {
     if (btn) btn.textContent = '↻ Live price';
     console.error('Live price error:', e.message);
   }
-}
-
-
-function closeStockDetail() {
-  // If we came from the value layer, go back the same way we came (to that REIT's value view).
-  if (reitValueOrigin) { const u = reitValueOrigin; reitValueOrigin = null; window.location.href = u; return; }
-  document.getElementById('pg-stock-detail').classList.remove('active');
-  const navItem = document.getElementById('nav-stock-detail');
-  if (navItem) { navItem.style.display = 'none'; navItem.classList.remove('active'); }
-  // Return to previous page
-  const pg = document.getElementById('pg-' + previousPage);
-  if (pg) pg.classList.add('active');
-  const navEl = document.querySelector(`.nav a[data-page="${previousPage}"]`);
-  if (navEl) navEl.classList.add('active');
 }
 
 // ── CHART RANGE TOGGLE ────────────────────────────────────────────────────────
@@ -5535,6 +6188,17 @@ function renderStockChart() {
   }
   const win = windowByRange(sdChartPrices, sdChartRange);
   el.innerHTML = buildFullChart(win, sdChartTrade);
+
+  /* Section 1 gets a compact twelve-month line off the same series — enough to
+   * see the shape without scrolling, with the candles and the range toggle
+   * kept where you go to actually read them. */
+  const spark = document.getElementById('stk-spark');
+  if (spark) {
+    const yr = windowByRange(sdChartPrices, '1Y');
+    spark.innerHTML = `<div style="display:flex">${miniIndexChart(yr, stkTicker + ' · 12 months',
+      yr.length ? `${yr[0].market_date} → ${yr[yr.length-1].market_date}` : '')}</div>`;
+  }
+
   // windowed performance: first close → last close over the selected range
   if (perfEl && win.length >= 2) {
     const a = parseFloat(win[0].close), b = parseFloat(win[win.length-1].close);
@@ -6015,7 +6679,7 @@ async function loadDocuments() {
     const title = d.title || d.file_name || '';
     return `<tr>
       <td style="font-size:11px;color:var(--muted)">${(d.doc_date || d.created_at || '').slice(0,10)}</td>
-      <td>${d.ticker?`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openSignalDrawer('${d.ticker}')">${d.ticker}</span>`:'—'}</td>
+      <td>${d.ticker?`<span class="tkr" style="cursor:pointer" title="Open stock detail" onclick="openStock('${d.ticker}')">${d.ticker}</span>`:'—'}</td>
       <td style="font-size:11px">${DOC_TYPE_LABEL[d.doc_type]||d.doc_type}${d.period_label?` <span class="est">${d.period_label}</span>`:''}</td>
       <td style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(d.summary||parsedTxt||title).replace(/"/g,'&quot;')}">${title}</td>
       <td style="font-size:11px;color:var(--muted)">${d.author||'—'}${d.rating?` <span class="hz">${d.rating}</span>`:''}</td>
@@ -6067,8 +6731,8 @@ function handleDeepLink(){
   if(!m)return;
   const tk=m[1].toUpperCase().replace(/\.(AX|AU)$/,'');
   (function go(n){
-    if(typeof db!=='undefined'&&db&&typeof openSignalDrawer==='function'){
-      openSignalDrawer(tk);
+    if(typeof db!=='undefined'&&db&&typeof openStock==='function'){
+      openStock(tk);
       reitValueOrigin='/value-layer.html#stock='+tk; // arrived from value layer -> Back returns there
     }
     else if(n<150){ setTimeout(()=>go(n+1),100); }
