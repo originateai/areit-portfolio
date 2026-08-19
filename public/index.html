@@ -4673,6 +4673,7 @@ async function openStock(ticker) {
   if (!stkList.length) await stkBuildPicker();
   stkTicker = ticker || stkTicker || stkList[0]?.ticker;
   if (!stkTicker) return;
+  await stkEnsureOption(stkTicker);
 
   const sel = document.getElementById('stk-select');
   if (sel) sel.value = stkTicker;
@@ -4697,13 +4698,22 @@ async function openStock(ticker) {
   loadAssets(stkTicker);
 }
 
-/* The picker is grouped by what the platform can actually say about a name:
- * a landlord with a workbook gets the full five sections, everything else gets
- * price, fundamentals and documents. Saying so in the list beats letting you
- * pick a fund manager and find four empty sections. */
+/* REITs ONLY in the picker. The stocks table carries the whole ASX500 universe
+ * and a 500-entry dropdown is its own kind of cumbersome — this is an income
+ * platform and the names you research here are REITs.
+ *
+ * Grouped by what the platform can actually say about a name: a landlord with a
+ * workbook gets the full five sections, a manager or developer gets price,
+ * fundamentals and documents (the model refuses to value it). Saying so in the
+ * list beats letting you pick a fund manager and find four empty sections.
+ *
+ * The equity screens still click through to this page — see stkEnsureOption(),
+ * which keeps a non-REIT arrival selectable rather than leaving the header
+ * showing one name and the dropdown another. */
 async function stkBuildPicker() {
   const [{ data: stocks }, { data: asm }] = await Promise.all([
-    db.from('stocks').select('ticker,name,asset_class,reit_subclass,sector').order('ticker'),
+    db.from('stocks').select('ticker,name,asset_class,reit_subclass,sector')
+      .eq('asset_class','reit').order('ticker'),
     db.from('reit_model_assumptions').select('ticker'),
   ]);
   const modelled = new Set((asm||[]).map(r => r.ticker));
@@ -4711,10 +4721,9 @@ async function stkBuildPicker() {
   if (!stkList.length) return;
 
   const groups = [
-    ['Landlord REITs — fully modelled', s => s.asset_class==='reit' && s.reit_subclass==='landlord' && s.modelled],
-    ['Landlord REITs — no workbook yet', s => s.asset_class==='reit' && s.reit_subclass==='landlord' && !s.modelled],
-    ['Other REITs — managers and developers', s => s.asset_class==='reit' && s.reit_subclass!=='landlord'],
-    ['Everything else', s => s.asset_class!=='reit'],
+    ['Landlord REITs — fully modelled', s => s.reit_subclass==='landlord' && s.modelled],
+    ['Landlord REITs — no workbook yet', s => s.reit_subclass==='landlord' && !s.modelled],
+    ['Managers and developers — not modelled', s => s.reit_subclass!=='landlord'],
   ];
   const used = new Set();
   document.getElementById('stk-select').innerHTML = groups.map(([label, test]) => {
@@ -4724,6 +4733,24 @@ async function stkBuildPicker() {
     return `<optgroup label="${label}">${rows.map(s =>
       `<option value="${s.ticker}">${s.ticker} — ${(s.name||'').slice(0,42)}</option>`).join('')}</optgroup>`;
   }).join('');
+}
+
+/* A click through from the equity screener, the positions list or a morning
+ * scan can land on a name that is not a REIT. Rather than silently failing to
+ * select it — which leaves the dropdown pointing at a different name than the
+ * header — it gets its own group at the top, labelled for what it is. */
+async function stkEnsureOption(ticker) {
+  if (stkList.some(s => s.ticker === ticker)) return;
+  const { data } = await db.from('stocks')
+    .select('ticker,name,asset_class,reit_subclass,sector').eq('ticker', ticker).limit(1);
+  const s = { ticker, name: '', asset_class: null, reit_subclass: null, sector: null,
+              ...(data?.[0] || {}), modelled: false };
+  stkList.push(s);
+  const sel = document.getElementById('stk-select');
+  const label = s.asset_class && s.asset_class !== 'reit'
+    ? `Not a REIT — ${s.asset_class}` : 'Not in the REIT universe';
+  sel.insertAdjacentHTML('afterbegin',
+    `<optgroup label="${label}"><option value="${s.ticker}">${s.ticker} — ${(s.name||'').slice(0,42)}</option></optgroup>`);
 }
 
 function stkHeaderTags(meta) {
