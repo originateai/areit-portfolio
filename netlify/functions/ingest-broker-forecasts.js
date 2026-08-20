@@ -17,8 +17,15 @@ function getDB() {
   );
 }
 
-const TEXT = ['ticker', 'broker_name'];
-const NUM  = ['eps_fy26', 'eps_fy27', 'eps_fy28', 'eps_fy29', 'eps_fy30', 'valuation', 'target_return'];
+/* The whitelist IS the contract. Any column missing from these lists is dropped
+ * without a word, which is how dpu_fy26..28, rating and price_at_note used to
+ * disappear between the reader and the table — the import reported success and
+ * the distribution forecasts, the reason for reading the note at all, were never
+ * written. Add the column here whenever the table gains one. */
+const TEXT = ['ticker', 'broker_name', 'rating'];
+const NUM  = ['eps_fy26', 'eps_fy27', 'eps_fy28', 'eps_fy29', 'eps_fy30',
+              'dpu_fy26', 'dpu_fy27', 'dpu_fy28',
+              'price_at_note', 'valuation', 'target_return'];
 
 function cleanRow(raw) {
   const out = {};
@@ -30,6 +37,10 @@ function cleanRow(raw) {
     }
   });
   if (out.ticker) out.ticker = out.ticker.toUpperCase().replace(/\.(AX|AU)$/i, '');
+  if (out.rating) out.rating = out.rating.toUpperCase();
+  // Link back to the filed PDF so a forecast on screen can be traced to the note.
+  const docId = parseInt(raw.document_id, 10);
+  if (!isNaN(docId)) out.document_id = docId;
   // note_date: use supplied (YYYY-MM-DD) or let the column default to current_date.
   if (raw.note_date != null && String(raw.note_date).trim() !== '') out.note_date = String(raw.note_date).trim();
   return out;

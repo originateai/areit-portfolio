@@ -1190,6 +1190,75 @@ tr.vm-blend td{border-top:2px solid var(--ink);font-weight:600;background:var(--
         </div>
       </div>
     </div>
+
+    <!-- ── 6 · TAX ───────────────────────────────────────────────────────────
+         The components of a distribution are a fact about a named security in a
+         named year, printed on its annual tax statement. Until they are entered,
+         every post-tax figure on the platform for this name runs on a class-level
+         default (30% tax-deferred / 70% unfranked) that was never a statement
+         about this REIT. This is where that gets fixed, one name at a time. -->
+    <div class="sec" id="sec-tax">
+      <div class="sec-head" onclick="stkToggle('tax')">
+        <span class="chev">▶</span><span class="sec-n">6</span>
+        <span class="sec-title">Tax — what you actually keep</span>
+        <span class="sec-sum" id="sum-tax"></span>
+      </div>
+      <div class="sec-body">
+        <div id="tx-verdict"></div>
+
+        <div class="kb">
+          <div class="kc dk"><div class="kl">Gross yield</div><div class="kv" id="tx-gross">--</div><div class="kn" id="tx-gross-note">on cost</div></div>
+          <div class="kc"><div class="kl">Post-tax yield</div><div class="kv teal" id="tx-post">--</div><div class="kn" id="tx-post-note">after the overlay</div></div>
+          <div class="kc"><div class="kl">Tax drag</div><div class="kv" id="tx-drag">--</div><div class="kn" id="tx-drag-note">gross less post-tax</div></div>
+          <div class="kc"><div class="kl">Effective rate</div><div class="kv" id="tx-eff">--</div><div class="kn" id="tx-eff-note">tax paid ÷ cash received</div></div>
+        </div>
+
+        <div class="sl" style="margin-top:18px">Distribution mix in force</div>
+        <div id="tx-profile"></div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:22px">
+          <div class="sl" style="flex:1;margin:0">Components from your annual tax statement</div>
+          <button class="btn btn-secondary" style="font-size:11px" onclick="txToggleForm()">+ Add a year</button>
+        </div>
+        <div style="overflow-x:auto"><table id="tx-rows"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+        <div id="tx-form" style="display:none;margin-top:14px;padding:16px;border:1px solid var(--rule);background:var(--cream)">
+          <div class="sl">Add components</div>
+          <div class="caveat" style="margin-bottom:12px">
+            Enter the figures exactly as the AMIT / AMMA statement prints them, and set the basis to
+            match: <strong>per unit</strong> if the statement is per security, <strong>total</strong> if
+            it is your holding's dollars. The mix is what matters — the platform takes the proportions
+            from here and applies them to the forward income it already forecasts, so a statement for a
+            past year still improves this year's number.
+            <strong>Tax-deferred is deferred, never exempt</strong>: it reduces your cost base and comes
+            back as a discounted capital gain on sale.
+          </div>
+          <div class="form-grid">
+            <div class="form-group"><label>Financial year</label><input id="tx-fy" type="number" placeholder="2026"></div>
+            <div class="form-group"><label>Basis</label><select id="tx-basis">
+              <option value="per_unit">Per unit</option><option value="total">Total $</option></select></div>
+            <div class="form-group"><label>Ex date</label><input id="tx-exdate" type="date"></div>
+            <div class="form-group"><label>Franked amount</label><input id="tx-franked" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Franking credit</label><input id="tx-credit" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Unfranked</label><input id="tx-unfranked" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Interest income</label><input id="tx-interest" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Tax-deferred</label><input id="tx-deferred" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>CGT concession</label><input id="tx-cgt" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Foreign income</label><input id="tx-foreign" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Foreign credit</label><input id="tx-fcredit" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>AMIT cost base net</label><input id="tx-amit" type="number" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Source</label><select id="tx-source">
+              <option value="statement">Annual tax statement</option>
+              <option value="distribution_advice">Distribution advice</option>
+              <option value="estimate">My estimate</option></select></div>
+          </div>
+          <div id="tx-preview" style="font-size:11px;color:var(--muted);margin-bottom:10px"></div>
+          <button class="btn btn-primary" onclick="txSaveComponents()">Save components</button>
+          <button class="btn btn-secondary" style="margin-left:8px" onclick="txToggleForm()">Cancel</button>
+          <div id="tx-status" style="font-size:11px;margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ANALYST COVERAGE -->
@@ -1611,8 +1680,12 @@ tr.vm-blend td{border-top:2px solid var(--ink);font-weight:600;background:var(--
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
         Analyst reports, results presentations, annual reports and your own notes. Anything filed here
         appears on that stock's detail page, so the research travels with the name.
-        <strong>A broker price target is the analyst's number, not this platform's fair value</strong> —
-        it is stored for reference and never feeds the value engine.
+        With <em>Read the forecasts out of it</em> ticked, an analyst report is also parsed for each
+        broker's EPS/FFO and distribution forecasts, rating and price target. Nothing is written from
+        that until you approve the rows.
+        <strong>A broker target is the analyst's number, not this platform's fair value</strong> — it
+        shows on the stock page as Broker consensus at a deliberate 0% weight, evidence sitting beside
+        the methods rather than inside the blend.
       </div>
       <div class="form-grid">
         <div class="form-group"><label>Ticker</label><input id="rs-ticker" type="text" placeholder="DXI" style="text-transform:uppercase"></div>
@@ -1633,7 +1706,11 @@ tr.vm-blend td{border-top:2px solid var(--ink);font-weight:600;background:var(--
         <input id="rs-summary" type="text" placeholder="What this changes in your view — searchable, shown on the stock page"></div>
       <input type="file" id="up-research" accept=".pdf,.txt,.csv,.xlsx,.pptx,.docx" style="font-size:11px">
       <button class="btn btn-primary" style="margin-left:8px" onclick="uploadResearch()">Upload to library</button>
+      <label style="font-size:11px;margin-left:12px;display:inline-flex;align-items:center;gap:5px">
+        <input type="checkbox" id="rs-extract-on" checked> Read the forecasts out of it
+      </label>
       <div id="rs-status" style="font-size:11px;margin-top:8px"></div>
+      <div id="rs-extract" style="margin-top:12px"></div>
     </div>
 
     <div id="doc-status" style="font-size:12px;margin-bottom:10px"></div>
@@ -4950,6 +5027,187 @@ async function openStock(ticker) {
   stkLoadContext(stkTicker);
   loadReitModel(stkTicker);
   loadAssets(stkTicker);
+  stkLoadTax(stkTicker);
+}
+
+/* ── 6 · TAX ──────────────────────────────────────────────────────────────────
+ * The mix comes from distribution_components; the arithmetic comes from
+ * tax-rollup, which already runs tax-engine.js server-side over the same rows.
+ * Nothing about the tax calculation is reimplemented here — this section enters
+ * the components and reports what the engine did with them, so the number on
+ * this page and the number on the Income page can never drift apart.
+ *
+ * SPEC.md §0: the hurdles are measured GROSS. Tax is an overlay, reported beside
+ * the test and never inside it, because it is a fact about the holder rather
+ * than about the asset. That is why this is section 6 and not part of the verdict. */
+let txRows = [], txHolding = null;
+
+async function stkLoadTax(ticker) {
+  txRows = []; txHolding = null;
+  const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  ['tx-gross','tx-post','tx-drag','tx-eff'].forEach(id => set(id, '--'));
+  document.getElementById('tx-profile').innerHTML = '<div class="empty" style="font-size:11px">Loading…</div>';
+
+  const [{ data: comps }, roll] = await Promise.all([
+    db.from('distribution_components').select('*').eq('ticker', ticker)
+      .order('financial_year', { ascending:false }),
+    fetch('/.netlify/functions/tax-rollup').then(r => r.ok ? r.json() : null).catch(() => null),
+  ]);
+  txRows = comps || [];
+  txHolding = (roll?.holdings || []).find(h => h.ticker === ticker) || null;
+
+  renderTaxRows();
+  renderTaxProfile(roll);
+  stkSummaries();
+}
+
+function renderTaxRows() {
+  const el = document.getElementById('tx-rows');
+  if (!txRows.length) {
+    el.innerHTML = `<tbody><tr><td class="empty">No components entered for ${stkTicker}.
+      Every post-tax figure for this name is running on the class default until one year is loaded.</td></tr></tbody>`;
+    return;
+  }
+  const n = v => v == null || Number(v) === 0 ? '—' : Number(v).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+  el.innerHTML = `
+    <thead><tr><th>FY</th><th>Basis</th><th class="r">Franked</th><th class="r">Credit</th>
+      <th class="r">Unfranked</th><th class="r">Interest</th><th class="r">Deferred</th>
+      <th class="r">CGT conc.</th><th class="r">Foreign</th><th>Source</th><th></th></tr></thead>
+    <tbody>${txRows.map(r => `<tr>
+      <td>${r.financial_year ?? '—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${r.basis === 'total' ? 'total $' : 'per unit'}</td>
+      <td class="r">${n(r.franked_amount)}</td><td class="r">${n(r.franking_credit)}</td>
+      <td class="r">${n(r.unfranked_amount)}</td><td class="r">${n(r.interest_income)}</td>
+      <td class="r">${n(r.tax_deferred)}</td><td class="r">${n(r.cgt_concession)}</td>
+      <td class="r">${n(r.foreign_income)}</td>
+      <td style="font-size:11px">${r.source || '—'}${r.is_estimate ? ' <span class="est">EST</span>' : ''}</td>
+      <td><a href="#" style="font-size:11px;color:var(--red)" onclick="txDelete(${r.id});return false">Remove</a></td>
+    </tr>`).join('')}</tbody>`;
+}
+
+function renderTaxProfile(roll) {
+  const box = document.getElementById('tx-profile');
+  const vd  = document.getElementById('tx-verdict');
+  const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+
+  if (!txHolding) {
+    box.innerHTML = `<div class="empty" style="font-size:11px">${
+      roll ? `You hold no ${stkTicker}, so there is no income for the overlay to act on. Components entered above still apply the moment you buy.`
+           : 'Tax rollup unavailable — the components above are saved either way.'}</div>`;
+    vd.innerHTML = '';
+    return;
+  }
+
+  const p = txHolding.tax_profile || {}, d = txHolding.tax_detail || {};
+  const gross = txHolding.gross_yield_on_cost ?? txHolding.cash_yield_on_cost ?? null;
+  const post  = txHolding.post_tax_yield_on_cost ?? null;
+  set('tx-gross', gross != null ? f.pct0(gross) : '--');
+  set('tx-post',  post  != null ? f.pct0(post)  : '--');
+  set('tx-drag',  (gross != null && post != null) ? Math.round((gross - post) * 10000) + 'bps' : '--');
+  set('tx-eff',   d.effective_tax_rate_on_cash != null ? f.pct0(d.effective_tax_rate_on_cash) : '--');
+
+  /* An assumed mix and a mix read off your own tax statement produce numbers that
+   * look identical. Saying which one is in force is the whole point of the section. */
+  vd.innerHTML = p.is_assumption
+    ? `<div class="verdict watch"><div class="vd-call">EST</div><div class="vd-why">
+         <strong>These post-tax figures are an assumption, not your position.</strong>
+         ${p.note || `The mix is the class-level default for ${txHolding.asset_class || 'this asset class'}, never a figure for ${stkTicker}.`}
+         Load a year from your annual tax statement below and every post-tax number for this name stops being an estimate.
+       </div></div>`
+    : `<div class="verdict buy"><div class="vd-call">ACTUAL</div><div class="vd-why">
+         Mix taken from your own components (<code>${p.source || 'components'}</code>). ${txHolding.tax_basis || ''}
+       </div></div>`;
+
+  const slice = (label, v, note) => v == null || v === 0 ? '' : `<tr>
+    <td>${label}</td><td class="r" style="font-weight:600">${f.pct0(v)}</td>
+    <td class="vm-note">${note}</td></tr>`;
+  box.innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Component</th><th class="r">Share of cash</th><th>How it is taxed</th></tr></thead>
+    <tbody>
+      ${slice('Franked', p.franked, `Taxed at your marginal rate on the grossed-up amount, less the franking credit. Franking level ${p.franking_level!=null?f.pct0(p.franking_level):'—'}.`)}
+      ${slice('Unfranked', p.unfranked, 'Taxed in full at your marginal rate. No credit attaches.')}
+      ${slice('Interest', p.interest, 'Ordinary income at your marginal rate — the worst outcome per dollar.')}
+      ${slice('Tax-deferred', p.tax_deferred, 'Not taxed now. Reduces your cost base, so it returns as a capital gain on sale — deferred, and discounted if held over 12 months, but never exempt.')}
+      ${slice('CGT concession', p.cgt_concession, 'The discounted half of a trust capital gain. Tax-free in your hands.')}
+      ${slice('Foreign', p.foreign, 'Taxed at your marginal rate with a credit for withholding already paid.')}
+      ${!(p.franked||p.unfranked||p.interest||p.tax_deferred||p.cgt_concession||p.foreign)
+        ? '<tr><td colspan="3" class="empty">No mix resolved.</td></tr>' : ''}
+    </tbody></table></div>
+    ${d.deferral_note ? `<div class="caveat" style="margin-top:10px">${d.deferral_note}</div>` : ''}`;
+}
+
+function txToggleForm() {
+  const el = document.getElementById('tx-form');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (el.style.display === 'block' && !document.getElementById('tx-fy').value) {
+    /* Australian financial year ending 30 June: a July date already belongs to
+     * the next FY, so the year is the calendar year plus one after June. */
+    const now = new Date();
+    document.getElementById('tx-fy').value = now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear();
+  }
+}
+
+async function txSaveComponents() {
+  const st = document.getElementById('tx-status');
+  const num = id => { const v = (document.getElementById(id).value || '').trim(); if (!v) return null; const n = parseFloat(v); return isNaN(n) ? null : n; };
+  const fy = num('tx-fy');
+  if (!fy) { st.style.color = 'var(--red)'; st.textContent = 'Financial year is required — components are a fact about one year.'; return; }
+
+  const row = {
+    ticker: stkTicker, financial_year: fy,
+    ex_date: document.getElementById('tx-exdate').value || null,
+    basis: document.getElementById('tx-basis').value,
+    franked_amount: num('tx-franked'), franking_credit: num('tx-credit'),
+    unfranked_amount: num('tx-unfranked'), interest_income: num('tx-interest'),
+    tax_deferred: num('tx-deferred'), cgt_concession: num('tx-cgt'),
+    foreign_income: num('tx-foreign'), foreign_credit: num('tx-fcredit'),
+    amit_cost_base_net: num('tx-amit'),
+    source: document.getElementById('tx-source').value,
+    is_estimate: document.getElementById('tx-source').value === 'estimate',
+  };
+
+  const cash = ['franked_amount','unfranked_amount','interest_income','tax_deferred','cgt_concession','foreign_income']
+    .reduce((s,k) => s + (row[k] || 0), 0);
+  if (!(cash > 0)) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Every cash component is blank — there is no mix to derive. The franking credit is not cash; it sits on top of the franked amount.';
+    return;
+  }
+
+  st.style.color = 'var(--muted)'; st.textContent = 'Saving…';
+
+  /* NOT an upsert. The table's unique key is an EXPRESSION index — it coalesces
+   * a null financial_year and a null ex_date — and PostgREST's on_conflict can
+   * only name plain columns, so an upsert here fails outright. Re-entering a
+   * year has to replace the row rather than add a second one: profileFromComponents
+   * SUMS every row for the ticker, so a duplicate would double-count that year and
+   * quietly halve the weight of every other year in the mix.
+   *
+   * ex_date is matched null-safely for the same reason the index coalesces it —
+   * an annual statement row carries no ex date. */
+  let q = db.from('distribution_components').select('id')
+            .eq('ticker', stkTicker).eq('financial_year', fy).eq('basis', row.basis);
+  q = row.ex_date ? q.eq('ex_date', row.ex_date) : q.is('ex_date', null);
+  const { data: existing } = await q.maybeSingle();
+
+  const { error } = existing
+    ? await db.from('distribution_components').update(row).eq('id', existing.id)
+    : await db.from('distribution_components').insert(row);
+  if (error) { st.style.color = 'var(--red)'; st.textContent = 'Save failed: ' + error.message; return; }
+  st.style.color = 'var(--green)';
+  st.textContent = `Saved FY${fy}. Recalculating the overlay…`;
+  ['tx-franked','tx-credit','tx-unfranked','tx-interest','tx-deferred','tx-cgt','tx-foreign','tx-fcredit','tx-amit','tx-exdate']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  await stkLoadTax(stkTicker);
+  st.style.color = 'var(--green)';
+  st.textContent = `Saved FY${fy}. Post-tax figures for ${stkTicker} now come from your statement.`;
+}
+
+async function txDelete(id) {
+  if (!confirm('Remove this year of components? Post-tax figures for this name fall back to the class-level default.')) return;
+  const { error } = await db.from('distribution_components').delete().eq('id', id);
+  if (error) { alert('Delete failed: ' + error.message); return; }
+  await stkLoadTax(stkTicker);
 }
 
 /* REITs ONLY in the picker. The stocks table carries the whole ASX500 universe
@@ -5075,6 +5333,10 @@ function stkSummaries() {
                     : 'no pack captured');
   const last = rmModel?.years?.[rmModel.years.length-1];
   set('sum-stmt', last ? `${rmModel.years.length}yr forecast · cover ${last.affo_cover!=null?last.affo_cover.toFixed(2)+'x':'—'}` : '');
+  const pt = txHolding?.post_tax_yield_on_cost;
+  set('sum-tax', txRows.length
+    ? (pt != null ? `${f.pct0(pt)} post-tax · from your statement` : `${txRows.length} year(s) loaded`)
+    : (pt != null ? `${f.pct0(pt)} post-tax · ESTIMATED mix` : 'no components entered'));
 }
 
 // ── 1 · Verdict ──────────────────────────────────────────────────────────────
@@ -6914,7 +7176,7 @@ async function uploadResearch() {
     if (upErr) throw upErr;
 
     const pt = v('rs-pt');
-    const { error } = await db.from('document_uploads').insert({
+    const { data: row, error } = await db.from('document_uploads').insert({
       doc_type: docType, ticker,
       title: v('rs-title') || file.name,
       doc_date: v('rs-date'),
@@ -6925,17 +7187,147 @@ async function uploadResearch() {
       summary: v('rs-summary'),
       file_path: path, file_name: file.name, file_size: file.size,
       status: 'stored'
-    });
+    }).select().maybeSingle();
     if (error) throw error;
 
     st.style.color = 'var(--green)';
     st.textContent = `Filed against ${ticker}. It now appears on that stock's detail page.`;
-    fileEl.value = '';
     ['rs-title','rs-summary','rs-pt','rs-rating','rs-period'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
     loadDocuments();
+
+    /* FILING IS NOT READING. Until now the file went into the bucket, the fields
+     * you typed went into document_uploads, and the forecasts inside the PDF —
+     * the reason for keeping the note at all — were never opened. Three analyst
+     * reports were filed against one broker forecast row in the whole database. */
+    const wantsRead = document.getElementById('rs-extract-on')?.checked;
+    if (wantsRead && /^(analyst_report|research_note)$/.test(docType) && /\.(pdf|txt)$/i.test(file.name)) {
+      await readForecastsFromNote(file, ticker, row?.id ?? null);
+    }
+    fileEl.value = '';
   } catch (e) {
     st.style.color = 'var(--red)';
     st.textContent = 'Upload failed: ' + e.message;
+  }
+}
+
+/* ── BROKER NOTE → FORECAST ROWS ──────────────────────────────────────────────
+ * Text is extracted in the BROWSER and only the text is sent on, the same path
+ * the bulk classifier uses. Everything comes back as a PROPOSAL: the rows are
+ * shown, wrong ones can be dropped, and nothing reaches reit_broker_forecasts
+ * until Import is pressed. A broker forecast is an input to a real-money view,
+ * so it gets the same parse-and-approve treatment as a contract note.
+ *
+ * One note routinely covers a dozen REITs, so rows for OTHER tickers are kept
+ * rather than filtered to the one the document was filed against — throwing away
+ * eleven forecasts because the file was tagged DXI would be its own bug. */
+let noteRows = [];
+
+async function readForecastsFromNote(file, ticker, documentId) {
+  const st  = document.getElementById('rs-status');
+  const box = document.getElementById('rs-extract');
+  noteRows = []; box.innerHTML = '';
+  const say = (msg, colour) => { st.style.color = colour || 'var(--muted)'; st.textContent = msg; };
+
+  try {
+    say(`Reading ${file.name}…`);
+    const text = await extractText(file);
+    if ((text || '').trim().length < 30) {
+      say('Filed, but no text could be extracted — a scanned-image PDF has no text layer. Enter the forecasts by hand under Analyst Coverage.', 'var(--amber)');
+      return;
+    }
+
+    say('Reading the forecasts out of it…');
+    const res = await fetch('/.netlify/functions/parse-broker-note', {
+      method: 'POST', headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ text, source: file.name }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+
+    const today = new Date().toISOString().slice(0,10);
+    noteRows = (j.forecasts || []).filter(x => x.ticker).map(x => ({
+      broker_name: j.broker_name || '',
+      note_date:   j.note_date || today,
+      ticker:      String(x.ticker).toUpperCase().replace(/\.(AX|AU)$/,''),
+      eps_fy26:x.eps_fy26, eps_fy27:x.eps_fy27, eps_fy28:x.eps_fy28,
+      eps_fy29:x.eps_fy29, eps_fy30:x.eps_fy30,
+      dpu_fy26:x.dpu_fy26, dpu_fy27:x.dpu_fy27, dpu_fy28:x.dpu_fy28,
+      rating:x.rating, price_at_note:x.price_at_note,
+      valuation:x.valuation, target_return:x.target_return,
+      document_id: documentId, _note: x._dropped || null,
+    }));
+
+    if (!noteRows.length) {
+      say(`Filed, but no broker forecasts were found in ${file.name}. If it is a results pack rather than a broker note, that is expected.`, 'var(--amber)');
+      return;
+    }
+    say(`Filed. ${noteRows.length} forecast row(s) proposed by ${j.broker_name || 'the note'} — check them and import.`, 'var(--green)');
+    renderNoteReview(ticker);
+  } catch (e) {
+    say('Filed, but reading the forecasts failed: ' + e.message, 'var(--red)');
+  }
+}
+
+function renderNoteReview(filedAgainst) {
+  const box = document.getElementById('rs-extract');
+  if (!noteRows.length) { box.innerHTML = ''; return; }
+  const c  = x => x == null || x === '' ? '—' : Number(x).toFixed(1);
+  const d2 = x => x == null || x === '' ? '—' : f.$(x);
+  const pc = x => x == null || x === '' ? '—' : (Number(x)*100).toFixed(1)+'%';
+
+  box.innerHTML = `
+    <div class="sl">Proposed — nothing is saved until you import</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th></th><th>Broker</th><th>Ticker</th><th>Rating</th><th class="r">Target</th>
+        <th class="r">EPS 26</th><th class="r">27</th><th class="r">28</th>
+        <th class="r">DPU 26</th><th class="r">27</th><th class="r">28</th>
+        <th class="r">Payout 27</th><th>Date</th></tr></thead>
+      <tbody>${noteRows.map((r,i) => {
+        // A payout ratio the note implies is the fastest read on whether the two
+        // rows were picked up as two rows: 100% flat, or 40%, means they were not.
+        const payout = (r.dpu_fy27 != null && r.eps_fy27) ? r.dpu_fy27/r.eps_fy27 : null;
+        const odd = payout != null && (payout > 1.15 || payout < 0.5);
+        return `<tr${r.ticker === filedAgainst ? ' style="background:var(--cream)"' : ''}>
+          <td><input type="checkbox" checked onchange="noteRows[${i}]._skip=!this.checked"></td>
+          <td style="font-size:11px">${r.broker_name || '<em>unnamed</em>'}</td>
+          <td><span class="tkr">${r.ticker}</span></td>
+          <td>${r.rating ? `<span class="hz">${r.rating}</span>` : '—'}</td>
+          <td class="r">${d2(r.valuation)}</td>
+          <td class="r">${c(r.eps_fy26)}</td><td class="r">${c(r.eps_fy27)}</td><td class="r">${c(r.eps_fy28)}</td>
+          <td class="r">${c(r.dpu_fy26)}</td><td class="r">${c(r.dpu_fy27)}</td><td class="r">${c(r.dpu_fy28)}</td>
+          <td class="r" style="color:${odd ? 'var(--red)' : 'var(--muted)'}"
+              title="${odd ? 'Outside the range an A-REIT normally pays — check the note before importing, the earnings and distribution rows may have been read as one' : ''}">${pc(payout)}</td>
+          <td style="font-size:11px;color:var(--muted)">${r.note_date}</td>
+        </tr>${r._note ? `<tr><td></td><td colspan="12" style="font-size:10px;color:var(--amber)">${r.ticker}: ${r._note}</td></tr>` : ''}`;
+      }).join('')}</tbody></table></div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" style="font-size:11px" onclick="importNoteForecasts()">Import to platform</button>
+      <button class="btn btn-secondary" style="font-size:11px" onclick="noteRows=[];document.getElementById('rs-extract').innerHTML=''">Discard</button>
+      <span style="font-size:10px;color:var(--muted)">Per-security figures in cents. Rows for other tickers are kept — one note usually covers a dozen names.</span>
+    </div>`;
+}
+
+async function importNoteForecasts() {
+  const st = document.getElementById('rs-status');
+  const rows = noteRows.filter(r => !r._skip).map(({ _skip, _note, ...r }) => r);
+  if (!rows.length) { st.style.color = 'var(--red)'; st.textContent = 'Nothing ticked to import.'; return; }
+  st.style.color = 'var(--muted)'; st.textContent = 'Importing…';
+  try {
+    const res = await fetch('/.netlify/functions/ingest-broker-forecasts', {
+      method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ rows }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+    st.style.color = j.errors?.length ? 'var(--amber)' : 'var(--green)';
+    st.textContent = `Imported ${j.upserted} forecast(s).` +
+      (j.errors?.length ? ` ${j.errors.length} skipped: ${j.errors.slice(0,2).join('; ')}` : '') +
+      ' They now show on each stock page as Broker consensus.';
+    noteRows = [];
+    document.getElementById('rs-extract').innerHTML = '';
+    if (typeof loadAnalysts === 'function') loadAnalysts();
+  } catch (e) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Import failed: ' + e.message;
   }
 }
 
