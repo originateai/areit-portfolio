@@ -296,23 +296,38 @@ function calibrateFromActuals(f, opts = {}) {
   // build-up from assumed escalation and reversion, so it overrides them.
   take('like_for_like_growth', f.lfl_noi_growth, 'reported like-for-like NOI growth');
 
-  // Payout implied by what was actually distributed against what was earned.
-  if (f.dps != null && f.ffo != null && f.period_months) {
-    // ffo is a dollar total; dps is per security. Need securities to compare, so
-    // this is only computed where the caller supplies them.
-    if (opts.securities_m) {
-      const ffoPerUnit = Number(f.ffo) / (opts.securities_m * 1e6);
-      if (ffoPerUnit > 0) {
-        take('payout_ratio', Number(f.dps) / ffoPerUnit, 'reported DPS / FFO per security');
-        // The ratio is measured against FFO, so it must be APPLIED to FFO.
-        // Deriving it off FFO and then paying it out of AFFO understates the
-        // distribution by exactly the maintenance capex and incentive load —
-        // which is what made the modelled DPU miss guidance by 11%.
-        a.payout_basis = 'ffo';
-        sourced.payout_basis = 'set to FFO to match the basis the ratio was derived on';
-      }
-    }
-  }
+  /* PAYOUT RATIO. Two sources, and the forward one wins.
+   *
+   * Guidance is a statement ABOUT THE FORECAST YEAR — the company publishing
+   * both its expected FFO and the distribution it intends to pay out of it. The
+   * trailing ratio is a statement about a year that has already happened, and a
+   * REIT that is deliberately retaining more will not repeat it.
+   *
+   * CIP FY26 paid 16.8c on 17.97c of FFO = 93.5%. For FY27 it guides 17.3c on
+   * 18.8–19.2c = 91.1%. Using the trailing 93.5% against a correct FFO forecast
+   * overpays the distribution by 1.1c and misses guidance by 6.3% — a miss that
+   * is entirely manufactured by using last year's payout for next year's.
+   *
+   * Both are applied to FFO, because both are derived against FFO. Deriving a
+   * ratio off FFO and then paying it out of AFFO understates the distribution by
+   * exactly the maintenance capex and incentive load. */
+  const ffoPerUnit = (f.ffo != null && opts.securities_m)
+    ? Number(f.ffo) / (opts.securities_m * 1e6) : null;
+
+  const gLo = f.guidance_ffo_low != null ? Number(f.guidance_ffo_low) : null;
+  const gHi = f.guidance_ffo_high != null ? Number(f.guidance_ffo_high) : gLo;
+  const gMid = gLo != null ? (gLo + gHi) / 2 : null;
+
+  if (f.guidance_dps != null && gMid) {
+    take('payout_ratio', Number(f.guidance_dps) / gMid,
+         `guided DPS ${(Number(f.guidance_dps)*100).toFixed(1)}c ÷ guided FFO ${(gMid*100).toFixed(1)}c — the forecast year's own intention`);
+    a.payout_basis = 'ffo';
+    sourced.payout_basis = 'set to FFO to match the basis the ratio was derived on';
+  } else if (f.dps != null && ffoPerUnit > 0) {
+    take('payout_ratio', Number(f.dps) / ffoPerUnit, 'reported DPS / FFO per security (trailing — no guidance published)');
+    a.payout_basis = 'ffo';
+    sourced.payout_basis = 'set to FFO to match the basis the ratio was derived on';
+  } else missing.push('payout_ratio');
 
   if (f.wale != null) a._reported_wale = Number(f.wale);
 

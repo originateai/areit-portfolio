@@ -156,20 +156,50 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
 .cm li{margin-bottom:4px}
 .cm-src{font-size:10px;color:var(--muted);border-top:1px solid var(--rule);margin-top:12px;padding-top:8px}
 
-/* Accordion — the assumption editor was a wall of 30 inputs */
-.acc{border:1px solid var(--rule);margin-bottom:6px;background:var(--paper)}
-.acc-head{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
-          background:var(--cream);user-select:none}
-.acc-head:hover{background:rgba(75,151,178,0.08)}
-.acc-head .chev{font-size:10px;color:var(--muted);transition:transform .15s;width:10px}
-.acc.open .acc-head .chev{transform:rotate(90deg)}
-.acc-title{font-weight:600;font-size:12px;flex:1}
-.acc-sum{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)}
-.acc-body{display:none;padding:14px}
-.acc.open .acc-body{display:block}
-.calib{font-family:'DM Mono',monospace;font-size:8px;padding:1px 4px;border-radius:2px;
-       background:rgba(31,138,76,0.14);color:var(--green);margin-left:5px}
-.calib.def{background:var(--rule);color:var(--muted)}
+
+/* ── ASSUMPTION EDITOR ────────────────────────────────────────────────────────
+   Thirty-three number boxes in six accordions told you nothing about which one
+   mattered. The drivers — the handful whose movement actually changes the answer
+   — are pinned at the top with their measured swing beside them, and everything
+   else drops into a ledger below. The swing is not a label, it is the model
+   rebuilt at value ± one meaningful step. */
+.drv-hd{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.drv-hd .sl{margin:0}
+.drv-hd .note{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace}
+.drv{display:grid;grid-template-columns:150px 96px 46px 1fr 128px;gap:10px;align-items:center;
+     padding:7px 10px;border-bottom:1px solid var(--rule)}
+.drv:last-child{border-bottom:none}
+.drv:hover{background:rgba(75,151,178,0.05)}
+.drv-l{font-size:11.5px;line-height:1.25}
+.drv-l small{display:block;font-size:9px;color:var(--muted);font-family:'DM Mono',monospace}
+.drv-v{display:flex;align-items:center;gap:3px}
+.drv-v input{width:100%;padding:5px 6px;border:1px solid var(--rule);border-radius:3px;
+             background:var(--paper);color:var(--ink);font-size:12px;font-family:'DM Mono',monospace;
+             text-align:right}
+.drv-v span{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);width:12px}
+.drv input[type=range]{width:100%;accent-color:var(--teal);height:16px}
+.drv-out{font-family:'DM Mono',monospace;font-size:11px;text-align:right;line-height:1.3}
+.drv-out b{font-weight:600}
+.drv-out small{display:block;font-size:9px;color:var(--muted)}
+.drv-src{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.04em;text-align:center;
+         padding:1px 3px;border-radius:2px;background:var(--rule);color:var(--muted)}
+.drv-src.cal{background:rgba(31,138,76,0.14);color:var(--green)}
+.drv-src.wb{background:rgba(75,151,178,0.16);color:var(--teal)}
+.drv-src.you{background:rgba(160,90,0,0.14);color:var(--amber)}
+
+/* The long tail. A table, not a form — you read down a column of numbers. */
+.led{width:100%;border-collapse:collapse}
+.led th{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;
+        color:var(--muted);text-align:left;padding:5px 8px;border-bottom:1px solid var(--rule);font-weight:400}
+.led td{padding:3px 8px;font-size:11.5px;border-bottom:1px solid rgba(0,0,0,0.04)}
+.led tr:hover td{background:rgba(75,151,178,0.05)}
+.led .grp td{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+             color:var(--muted);padding-top:12px;border-bottom:1px solid var(--rule)}
+.led input,.led select{width:88px;padding:4px 6px;border:1px solid var(--rule);border-radius:3px;
+        background:var(--paper);color:var(--ink);font-size:11.5px;font-family:'DM Mono',monospace;text-align:right}
+.led select{text-align:left;width:96px}
+.led .u{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);width:24px}
+.led .from{font-size:10px;color:var(--muted)}
 th.act{background:rgba(0,0,0,0.04)}
 td.act{background:rgba(0,0,0,0.03);color:var(--muted)}
 
@@ -3732,16 +3762,15 @@ async function loadEvidence() {
  * sensitising unusable. */
 let rmTicker = null, rmAssumptions = {}, rmContext = {}, rmStatementTab = 'pl',
     rmScenarios = [], rmRollup = null, rmCalibration = null, rmFundamentals = null,
-    rmActuals = [], rmOpenSections = new Set();
+    rmActuals = [];
+/* Where each assumption came from — see seedAssumptions(). Keyed by field. */
+let rmSource = {};
+/* The editor DOM is rebuilt only when the underlying seed changes, never on an
+ * edit. Rebuilding it mid-drag replaces the slider you are holding. */
+let rmInputsStale = true, rmLedgerOpen = false;
 /* The last successfully built model. The methods table, the DCF tab and every
  * Excel export read this rather than rebuilding — one build per edit, not four. */
 let rmModel = null;
-
-function rmToggleAcc(i, group) {
-  const el = document.getElementById('acc-' + i);
-  const open = el.classList.toggle('open');
-  if (open) rmOpenSections.add(group); else rmOpenSections.delete(group);
-}
 
 /* Field groups drive the editor layout. `pct` fields are stored as decimals and
  * shown as percentages — the form converts on the way in and out, because typing
@@ -3863,37 +3892,69 @@ async function seedAssumptions() {
 
   // Precedence: defaults < asset roll-up < reported actuals < your saved scenario.
   // Each layer is closer to the truth than the one before, and your own view wins.
-  if (sc?.[0]) {
-    rmAssumptions = { ...D, ...(rmRollup?.assumptions || {}), ...(rmCalibration?.assumptions || {}), ...sc[0].assumptions };
+  const a = asm?.[0] || {}, m = mdl?.[0] || {};
+
+  /* Each layer is spread WHOLE over the one before, so a layer can never be
+   * partially applied. The previous version rebuilt the object field by field
+   * and named only some of the calibrated keys — which silently DROPPED
+   * admin_cost_m (the corporate cost solved so year 0 ties to reported FFO),
+   * base_noi_m, opening_investment_properties_m, payout_ratio and payout_basis.
+   * The whole calibration layer was therefore inert on every REIT without a
+   * saved scenario, which is the common case. Measured: DXI moved from
+   * MISCALIBRATED (DPS 18.6% below guidance) to CALIBRATED (2.0%), CIP from
+   * LOOSE (8.1%) to CALIBRATED (3.6%). See scripts/reconcile.js. */
+  const fromWorkbook = {
+    base_noi_m: a.base_noi_m, cap_rate: a.cap_rate, escalation: a.escalation,
+    reversion: a.reversion, occupancy: a.occupancy, base_occupancy: a.occupancy,
+    gearing_target: a.gearing_current, cost_of_debt: a.cost_of_debt,
+    hedge_ratio: a.hedge_ratio, mgmt_fee_pct_gav: a.fee_rate_gav,
+    payout_ratio: a.payout_ratio, required_return: a.req_return,
+    exit_cap_rate: a.exit_cap, ffo_multiple: a.base_pe,
+  };
+  Object.keys(fromWorkbook).forEach(k => { if (fromWorkbook[k] == null) delete fromWorkbook[k]; });
+
+  rmAssumptions = {
+    ...D, ...fromWorkbook, ...(rmRollup?.assumptions || {}),
+    ...(rmCalibration?.assumptions || {}),
+    securities_m: m.securities_m ?? null,
+    ...(sc?.[0]?.assumptions || {}),          // your own view wins over all of it
+  };
+  delete rmAssumptions._derived_interest_m;   // a working, not an assumption
+
+  /* PROVENANCE. Walk the same layers in the same order and record which one
+   * supplied the value that survived. Where a number came from is not decoration
+   * — a cap rate the REIT disclosed and a cap rate the engine defaulted to look
+   * identical on screen and are worth completely different amounts of trust. */
+  rmSource = {};
+  const layer = (obj, tag, note) => {
+    Object.keys(obj || {}).forEach(k => {
+      if (obj[k] != null) rmSource[k] = { tag, note: typeof note === 'function' ? note(k) : note };
+    });
+  };
+  layer(D, 'def', 'engine default — nothing reported, nothing entered');
+  layer(fromWorkbook, 'wb', 'workbook (reit_model_assumptions)');
+  layer(rmRollup?.assumptions, 'roll', `asset register roll-up · ${rmRollup?.working?.inputs?.assets_priced || 0} assets`);
+  layer(rmCalibration?.assumptions, 'cal',
+        k => rmCalibration?.sourced?.[k] || `${rmFundamentals?.period_end || ''} results pack`);
+  layer(sc?.[0]?.assumptions, 'you', `saved scenario “${sc?.[0]?.scenario_name || 'base'}”`);
+
+  /* THE OPENING BALANCE SHEET MUST COME FROM THE SAME PACK AS EVERYTHING ELSE.
+   * Equity is NTA x securities; net debt is what the reported gearing implies
+   * against it. Left null the model starts from an invented balance sheet and
+   * every interest charge after it is wrong — which is a silent error, because
+   * the statements still articulate perfectly around the wrong number. */
+  if (!sc?.[0]?.assumptions?.opening_net_debt_m &&
+      rmFundamentals?.nta != null && rmFundamentals?.gearing != null && m.securities_m) {
+    const equity = Number(rmFundamentals.nta) * Number(m.securities_m);
+    const totalAssets = equity / (1 - Number(rmFundamentals.gearing));
+    rmAssumptions.opening_net_debt_m = totalAssets - equity;
   }
-  else {
-    const a = asm?.[0] || {}, m = mdl?.[0] || {};
-    rmAssumptions = {
-      ...D,
-      // Asset roll-up wins over the workbook's blended figures where it exists.
-      base_noi_m:      rmRollup?.assumptions.base_noi_m ?? a.base_noi_m ?? null,
-      cap_rate:        rmRollup?.assumptions.cap_rate ?? a.cap_rate ?? null,
-      opening_investment_properties_m: rmRollup?.assumptions.opening_investment_properties_m ?? null,
-      escalation:      a.escalation ?? D.escalation,
-      reversion:       a.reversion ?? D.reversion,
-      occupancy:       a.occupancy ?? D.occupancy,
-      base_occupancy:  a.occupancy ?? D.base_occupancy,
-      gearing_target:  rmCalibration?.assumptions.gearing_target ?? a.gearing_current ?? D.gearing_target,
-      cost_of_debt:    rmCalibration?.assumptions.cost_of_debt ?? a.cost_of_debt ?? D.cost_of_debt,
-      hedge_ratio:     rmCalibration?.assumptions.hedge_ratio ?? a.hedge_ratio ?? D.hedge_ratio,
-      occupancy:       rmCalibration?.assumptions.occupancy ?? a.occupancy ?? D.occupancy,
-      base_occupancy:  rmCalibration?.assumptions.base_occupancy ?? a.occupancy ?? D.base_occupancy,
-      like_for_like_growth: rmCalibration?.assumptions.like_for_like_growth ?? null,
-      mgmt_fee_pct_gav: a.fee_rate_gav ?? D.mgmt_fee_pct_gav,
-      payout_ratio:    a.payout_ratio ?? D.payout_ratio,
-      required_return: a.req_return ?? D.required_return,
-      exit_cap_rate:   a.exit_cap ?? null,
-      ffo_multiple:    a.base_pe ?? D.ffo_multiple,
-      securities_m:    m.securities_m ?? null,
-    };
-  }
+
   rmContext = { price: px?.[0]?.last_price != null ? Number(px[0].last_price) : null,
-                seeded_from: sc?.[0] ? 'scenario' : (rmRollup ? 'asset register (bottom-up)' : (asm?.[0] ? 'workbook' : 'defaults')) };
+                seeded_from: sc?.[0] ? 'scenario'
+                  : (rmCalibration?.ok ? 'results pack (calibrated)'
+                  : (rmRollup ? 'asset register (bottom-up)' : (asm?.[0] ? 'workbook' : 'defaults'))) };
+  rmInputsStale = true;   // a new seed means a new editor, not a patched one
 }
 
 async function loadScenarioList() {
@@ -3910,6 +3971,12 @@ async function loadScenario() {
   const s = rmScenarios.find(x => String(x.id) === String(id));
   if (s) {
     rmAssumptions = { ...window.ReitModel.DEFAULTS, ...s.assumptions };
+    rmSource = {};
+    Object.keys(window.ReitModel.DEFAULTS).forEach(k => { rmSource[k] = { tag:'def', note:'engine default' }; });
+    Object.keys(s.assumptions || {}).forEach(k => {
+      if (s.assumptions[k] != null) rmSource[k] = { tag:'you', note:`scenario “${s.scenario_name}”` };
+    });
+    rmInputsStale = true;
     document.getElementById('rm-scenario-name').value = s.scenario_name;
     renderReitModel();
   }
@@ -3936,13 +4003,247 @@ async function saveScenario() {
 }
 
 function rmEdit(field, value) {
-  const def = RM_FIELDS.flatMap(g => g[1]).find(f => f[0] === field);
+  const def = RM_DEF[field];
   if (field === 'hedging_enabled') rmAssumptions.hedging_enabled = value;
   else if (!def) rmAssumptions[field] = value;
   else if (def[2] === 'pct') rmAssumptions[field] = value === '' ? null : parseFloat(value)/100;
   else if (def[2] === 'num') rmAssumptions[field] = value === '' ? null : parseFloat(value);
   else rmAssumptions[field] = value;
+  if (field !== 'hedging_enabled') { rmSource[field] = { tag:'you', note:'you typed it' }; rmSyncField(field); }
   renderReitModel();
+}
+
+/* ── ASSUMPTION EDITOR ────────────────────────────────────────────────────────
+ * Drivers first. A driver is an assumption whose movement changes the answer,
+ * and the only honest way to know that is to move it — so each row's swing is
+ * the model REBUILT at value ± one meaningful step, not a label someone typed.
+ * The rows are ranked by that measured swing, which is why the ranking changes
+ * between names: reversion is the top lever on a REIT with half its income
+ * re-leasing inside five years and nearly inert on one with a ten-year WALE.
+ *
+ * Everything else lives in the ledger underneath, complete and editable — a
+ * model you cannot see all of is a model you cannot check.
+ *
+ * probe is in DISPLAY units, so 0.25 on a cap rate is 25 basis points. */
+const RM_DRIVERS = [
+  // key,             min,  max,  slider step, probe, probe label
+  ['cap_rate',          3,   12,  0.05, 0.25, '25bps'],
+  ['required_return',   5,   20,  0.25, 0.50, '50bps'],
+  ['exit_cap_rate',     3,   12,  0.05, 0.25, '25bps'],
+  ['cost_of_debt',      1,   12,  0.05, 0.50, '50bps'],
+  ['escalation',        0,    8,  0.05, 0.25, '25bps'],
+  ['reversion',       -30,   40,  0.5,  5.0,  '5pp'],
+  ['payout_ratio',     50,  120,  0.5,  5.0,  '5pp'],
+  ['gearing_target',    0,   60,  0.5,  5.0,  '5pp'],
+];
+
+/* A driver that measures zero is usually not unimportant — it is SWITCHED OFF by
+ * another assumption, and a blank $0.000 hides that. Each entry says which field
+ * disables this one and why, and the panel prints it in place of the swing.
+ *
+ * Both of these are the engine working as designed, and both matter:
+ *  · reversion is inert once a reported LFL growth is calibrated in, because the
+ *    LFL branch replaces the escalation × expiry build-up outright. On a REIT
+ *    where re-leasing is the whole story that is a real modelling choice, not a
+ *    detail — clear like_for_like_growth to model reversion explicitly.
+ *  · cap_rate stops driving NAV once the opening book comes from the pack, since
+ *    cap-rate NAV is then the reported book rolled forward rather than NPI ÷ cap. */
+const RM_INERT_WHEN = {
+  reversion: ['like_for_like_growth', 'overridden by LFL',
+    'A reported like-for-like growth rate replaces the escalation × expiry build-up outright, and reversion only enters through that build-up. Clear LFL growth to model reversion explicitly.'],
+  default_expiry_rate: ['like_for_like_growth', 'overridden by LFL',
+    'The expiry profile only bites through the escalation × reversion build-up, which a reported LFL growth rate replaces.'],
+  cap_rate: ['opening_investment_properties_m', 'book sets NAV',
+    'With the opening book taken from the results pack, cap-rate NAV is that book rolled forward rather than NPI ÷ cap rate. The cap rate still drives the asset roll-up and the implied-vs-book comparison.'],
+};
+
+/* key -> [key, label, type], so nothing has to scan RM_FIELDS per field. */
+const RM_DEF = {};
+RM_FIELDS.forEach(([, fields]) => fields.forEach(d => { RM_DEF[d[0]] = d; }));
+
+const RM_SRC_LABEL = { cal:['CAL','cal'], roll:['REG','wb'], wb:['WB','wb'], you:['YOU','you'], def:['DEF',''] };
+
+/* The unit belongs beside the box, not inside the label. Strips the unit token
+ * out of the label so "Passing NPI $m" reads "Passing NPI" with $m in its own
+ * column and the numbers stay aligned down the page. */
+function rmLabelUnit(key) {
+  const d = RM_DEF[key];
+  if (!d) return [key, ''];
+  let label = d[1], unit = '';
+  if (d[2] === 'pct') unit = '%';
+  else if (/\$m\b/.test(label)) { unit = '$m'; label = label.replace(/\s*\$m\b/, ''); }
+  else if (/\(m\)/.test(label)) { unit = 'm';  label = label.replace(/\s*\(m\)/, ''); }
+  else if (/\bx$/.test(label))  { unit = 'x';  label = label.replace(/\s*\bx$/, ''); }
+  return [label, unit];
+}
+
+/* Display value: pct fields are stored as decimals and shown as percentages.
+ * toFixed(6) then strip trailing zeros — 0.058 must show as 5.8, not 5.800000,
+ * and 5.7999999 (what 0.058*100 actually is in binary floating point) must not
+ * show as 5.7999999. */
+function rmShow(key) {
+  const d = RM_DEF[key], v = rmAssumptions[key];
+  if (v == null || v === '') return '';
+  if (d && d[2] === 'pct') return String(+(Number(v) * 100).toFixed(6));
+  if (typeof v === 'number') return String(+v.toFixed(6));
+  return v;
+}
+
+/* Push the current value back into every control bound to this field — the
+ * driver's number box and its slider are two views of one number, and the same
+ * field also appears in the ledger. */
+function rmSyncField(key, except) {
+  document.querySelectorAll(`[data-k="${key}"]`).forEach(el => {
+    if (el === except) return;
+    const v = rmShow(key);
+    if (el.tagName === 'SELECT') el.value = rmAssumptions[key] ?? '';
+    else el.value = v;
+  });
+  const badge = document.getElementById('drvsrc-' + key);
+  if (badge) {
+    const s = rmSource[key] || { tag:'def' }, [txt, cls] = RM_SRC_LABEL[s.tag] || ['—',''];
+    badge.className = 'drv-src ' + cls;
+    badge.textContent = txt;
+    badge.title = s.note || '';
+  }
+}
+
+/* Dragging a slider must not rebuild the editor DOM — that replaces the slider
+ * under the cursor and the drag dies. oninput does the cheap update (one model
+ * build, headline figures only); onchange, once you let go, does the full
+ * render including the swings and the sensitivity grid. */
+function rmSlide(key, value, final) {
+  const d = RM_DEF[key];
+  rmAssumptions[key] = value === '' ? null : (d && d[2] === 'pct' ? parseFloat(value)/100 : parseFloat(value));
+  rmSource[key] = { tag:'you', note:'you moved it' };
+  rmSyncField(key, document.querySelector(`[data-k="${key}"][data-role="rng"]`));
+  if (final) { renderReitModel(); return; }
+  const m = window.ReitModel.buildModel(rmAssumptions, { subclass:'landlord' });
+  rmHeadline(m);
+}
+
+/* The four figures at the top of the panel, updated live during a drag. */
+function rmHeadline(m) {
+  const hd = document.getElementById('drv-head');
+  if (!hd) return;
+  if (!m || !m.ok) { hd.innerHTML = '<span style="color:var(--red)">model will not build at this setting</span>'; return; }
+  const v = m.valuation?.blended_value, price = rmContext.price;
+  const disc = (v != null && price) ? (v - price)/price : null;
+  hd.innerHTML = `fair value <b style="font-size:13px">${f.$(v)}</b>` +
+    (price ? ` · price ${f.$(price)} · <b style="color:${disc>0?'var(--green)':'var(--red)'}">${f.pct(disc,1)}</b>` : ' · no price') +
+    ` · DPU ${m.years[m.years.length-1]?.dpu != null ? f.$(m.years[m.years.length-1].dpu,4) : '—'}`;
+}
+
+/* Build the editor DOM. Called only when the seed changes — a new ticker, a
+ * loaded scenario, a reset — never on an edit. */
+function rmRenderInputs() {
+  const box = document.getElementById('rm-assumptions');
+  if (!box) return;
+
+  const drivers = RM_DRIVERS.map(([key, min, max, step]) => {
+    const [label, unit] = rmLabelUnit(key);
+    const s = rmSource[key] || { tag:'def' }, [txt, cls] = RM_SRC_LABEL[s.tag] || ['—',''];
+    const shown = rmShow(key);
+    return `<div class="drv">
+      <div class="drv-l">${label}<small>${RM_DEF[key] ? RM_DEF[key][1] : key}</small></div>
+      <div class="drv-v">
+        <input type="number" step="any" data-k="${key}" data-role="num" value="${shown}"
+               onchange="rmEdit('${key}',this.value)">
+        <span>${unit}</span>
+      </div>
+      <div class="drv-src ${cls}" id="drvsrc-${key}" title="${(s.note||'').replace(/"/g,'&quot;')}">${txt}</div>
+      <input type="range" data-k="${key}" data-role="rng" min="${min}" max="${max}" step="${step}"
+             value="${shown === '' ? (min+max)/2 : shown}"
+             oninput="rmSlide('${key}',this.value,false)" onchange="rmSlide('${key}',this.value,true)">
+      <div class="drv-out" id="drvout-${key}"><b>—</b></div>
+    </div>`;
+  }).join('');
+
+  const nFields = RM_FIELDS.reduce((n, g) => n + g[1].length, 0);
+  const ledger = RM_FIELDS.map(([group, fields]) => `
+    <tr class="grp"><td colspan="4">${group}</td></tr>
+    ${fields.map(([key,, type]) => {
+      const [label, unit] = rmLabelUnit(key);
+      const s = rmSource[key] || { tag:'def' };
+      const v = rmAssumptions[key];
+      const control = type.startsWith('sel:')
+        ? `<select data-k="${key}" onchange="rmEdit('${key}',this.value)">${
+            type.slice(4).split('|').map(o => `<option value="${o}" ${v===o?'selected':''}>${o.toUpperCase()}</option>`).join('')}</select>`
+        : `<input type="number" step="any" data-k="${key}" value="${rmShow(key)}" onchange="rmEdit('${key}',this.value)">`;
+      return `<tr>
+        <td>${label}</td>
+        <td class="r">${control}</td>
+        <td class="u">${unit}</td>
+        <td class="from">${(s.note || 'engine default').replace(/</g,'&lt;')}</td>
+      </tr>`;
+    }).join('')}`).join('');
+
+  box.innerHTML = `
+    <div class="drv-hd">
+      <div class="sl" style="flex:1">What moves the answer</div>
+      <div class="note" id="drv-head">—</div>
+    </div>
+    <div style="border:1px solid var(--rule);background:var(--paper);margin-bottom:10px">${drivers}</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="btn btn-secondary" style="font-size:11px" onclick="rmToggleLedger()">
+        <span id="led-chev">▶</span> All inputs (${nFields})</button>
+      <button class="btn btn-secondary" style="font-size:11px" onclick="rmResetToSeed()">Reset to source</button>
+      <div class="note" style="flex:1;text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">
+        CAL results pack · REG asset register · WB workbook · YOU your edit · DEF engine default
+      </div>
+    </div>
+    <div id="rm-ledger" style="display:${rmLedgerOpen ? 'block' : 'none'};margin-top:10px;border:1px solid var(--rule);background:var(--paper);padding:4px 6px">
+      <table class="led"><thead><tr><th>Assumption</th><th class="r">Value</th><th></th><th>Where it came from</th></tr></thead>
+      <tbody>${ledger}</tbody></table>
+    </div>`;
+}
+
+function rmToggleLedger() {
+  rmLedgerOpen = !rmLedgerOpen;
+  document.getElementById('rm-ledger').style.display = rmLedgerOpen ? 'block' : 'none';
+  document.getElementById('led-chev').textContent = rmLedgerOpen ? '▼' : '▶';
+}
+
+/* Throw away every edit and re-seed from the pack / register / workbook. */
+async function rmResetToSeed() {
+  await seedAssumptions();
+  rmInputsStale = true;
+  renderReitModel();
+}
+
+/* Measure each driver by rebuilding the model at value ± probe. The swing is
+ * half the spread between the two, i.e. the fair-value move per one step —
+ * reported as a dollar amount because that is the unit the decision is in. */
+function rmSyncDrivers(m) {
+  rmHeadline(m);
+  if (!m || !m.ok) {
+    RM_DRIVERS.forEach(([k]) => { const el = document.getElementById('drvout-'+k); if (el) el.innerHTML = '<b>—</b>'; });
+    return;
+  }
+  const probes = RM_DRIVERS.map(([key,,,, probe, plabel]) => {
+    const d = RM_DEF[key], base = rmAssumptions[key];
+    if (base == null || !d) return { key, plabel, swing:null };
+    const step = d[2] === 'pct' ? probe/100 : probe;
+    const up = window.ReitModel.buildModel({ ...rmAssumptions, [key]: base + step }, { subclass:'landlord' });
+    const dn = window.ReitModel.buildModel({ ...rmAssumptions, [key]: base - step }, { subclass:'landlord' });
+    const uv = up.ok ? up.valuation?.blended_value : null;
+    const dv = dn.ok ? dn.valuation?.blended_value : null;
+    return { key, plabel, uv, dv, swing: (uv != null && dv != null) ? Math.abs(uv - dv)/2 : null };
+  });
+  const ranked = probes.filter(p => p.swing != null).sort((a,b) => b.swing - a.swing).map(p => p.key);
+  probes.forEach(p => {
+    const el = document.getElementById('drvout-' + p.key);
+    if (!el) return;
+    if (p.swing == null) { el.innerHTML = '<b>—</b><small>not set</small>'; return; }
+    const inert = RM_INERT_WHEN[p.key];
+    if (p.swing < 0.0005 && inert && rmAssumptions[inert[0]] != null) {
+      el.innerHTML = `<b style="color:var(--muted)">inert</b><small title="${inert[2].replace(/"/g,'&quot;')}">${inert[1]} ⓘ</small>`;
+      return;
+    }
+    const rank = ranked.indexOf(p.key) + 1;
+    const dir = p.uv > p.dv ? '↑ raises' : p.uv < p.dv ? '↓ lowers' : 'flat';
+    el.innerHTML = `<b>±${f.$(p.swing)}</b><small>#${rank} lever · ${dir} per ${p.plabel}</small>`;
+  });
 }
 
 /* Switching statement tabs re-renders ONE table off the model already in
@@ -3962,56 +4263,7 @@ function renderReitModel() {
   const M = window.ReitModel;
   if (!M || !rmTicker) return;
 
-  /* Accordion, not a wall of thirty inputs. Collapsed by default except the
-   * first, with a one-line summary of the key figures so you can see what a
-   * section holds without opening it. Fields sourced from the results pack are
-   * badged CAL; the rest are defaults and say so — the distinction between a
-   * reported number and something I made up is the most important thing on this
-   * screen. */
-  const box = document.getElementById('rm-assumptions');
-  const calSrc = rmCalibration?.sourced || {};
-  const summary = {
-    'Reported opening balance sheet — from the last results pack':
-      [rmAssumptions.opening_investment_properties_m ? '$'+Number(rmAssumptions.opening_investment_properties_m).toFixed(0)+'m book' : null,
-       rmAssumptions.securities_m ? Number(rmAssumptions.securities_m).toFixed(0)+'m units' : null].filter(Boolean).join(' · '),
-    'Portfolio income':
-      [rmAssumptions.base_noi_m ? '$'+Number(rmAssumptions.base_noi_m).toFixed(1)+'m NPI' : null,
-       rmAssumptions.cap_rate ? f.pct0(rmAssumptions.cap_rate)+' cap' : null,
-       rmAssumptions.like_for_like_growth != null ? f.pct0(rmAssumptions.like_for_like_growth)+' LFL' : null].filter(Boolean).join(' · '),
-    'Debt':
-      [rmAssumptions.gearing_target != null ? f.pct0(rmAssumptions.gearing_target)+' gearing' : null,
-       rmAssumptions.cost_of_debt != null ? f.pct0(rmAssumptions.cost_of_debt)+' cost' : null,
-       rmAssumptions.hedging_enabled === false ? 'UNHEDGED' : (rmAssumptions.hedge_ratio != null ? f.pct0(rmAssumptions.hedge_ratio)+' hedged' : null)].filter(Boolean).join(' · '),
-    'Costs': rmAssumptions.mgmt_fee_pct_gav != null ? f.pct0(rmAssumptions.mgmt_fee_pct_gav)+' mgmt fee' : '',
-    'Distribution': rmAssumptions.payout_ratio != null ? f.pct0(rmAssumptions.payout_ratio)+' payout of '+String(rmAssumptions.payout_basis||'affo').toUpperCase() : '',
-    'Valuation': [rmAssumptions.required_return != null ? f.pct0(rmAssumptions.required_return)+' required' : null,
-                  rmAssumptions.terminal_growth != null ? f.pct0(rmAssumptions.terminal_growth)+' terminal g' : null].filter(Boolean).join(' · '),
-  };
-
-  box.innerHTML = RM_FIELDS.map(([group, fields], gi) => {
-    const nCal = fields.filter(([k]) => calSrc[k]).length;
-    return `<div class="acc ${gi === 0 || rmOpenSections.has(group) ? 'open' : ''}" id="acc-${gi}">
-      <div class="acc-head" onclick="rmToggleAcc(${gi},'${group.replace(/'/g,"")}')">
-        <span class="chev">▶</span>
-        <span class="acc-title">${group}</span>
-        ${nCal ? `<span class="calib">${nCal} from results pack</span>` : ''}
-        <span class="acc-sum">${summary[group] || ''}</span>
-      </div>
-      <div class="acc-body"><div class="form-grid">${fields.map(([key,label,type]) => {
-        const v = rmAssumptions[key];
-        const badge = calSrc[key] ? `<span class="calib" title="${calSrc[key]}">CAL</span>` : '';
-        if (type.startsWith('sel:')) {
-          const opts = type.slice(4).split('|');
-          return `<div class="form-group"><label>${label}${badge}</label>
-            <select onchange="rmEdit('${key}',this.value)">${opts.map(o=>`<option value="${o}" ${v===o?'selected':''}>${o.toUpperCase()}</option>`).join('')}</select></div>`;
-        }
-        const shown = v == null ? '' : (type==='pct' ? (v*100).toFixed(3).replace(/\.?0+$/,'') : v);
-        return `<div class="form-group"><label>${label}${type==='pct'?' %':''}${badge}</label>
-          <input type="number" step="any" value="${shown}" onchange="rmEdit('${key}',this.value)"></div>`;
-      }).join('')}</div></div>
-    </div>`;
-  }).join('');
-
+  if (rmInputsStale) { rmRenderInputs(); rmInputsStale = false; }
   document.getElementById('rm-hedging').checked = rmAssumptions.hedging_enabled !== false;
 
   // Build
@@ -4027,6 +4279,7 @@ function renderReitModel() {
     document.getElementById('rm-sens').innerHTML = '<tbody><tr><td class="empty">—</td></tr></tbody>';
     ['rm-value','rm-disc','rm-dpu','rm-cover'].forEach(id => document.getElementById(id).textContent = '--');
     rmModel = null;
+    rmSyncDrivers(null);
     stkRenderMethods();
     stkRenderVerdict();
     return;
@@ -4098,6 +4351,7 @@ function renderReitModel() {
   document.getElementById('rm-cover').textContent = last.affo_cover != null ? last.affo_cover.toFixed(2)+'x' : '--';
   document.getElementById('rm-cover-note').textContent = `ICR ${last.icr!=null?last.icr.toFixed(2)+'x':'—'} · gearing ${last.gearing!=null?f.pct0(last.gearing):'—'}`;
 
+  rmSyncDrivers(m);
   renderRmStatement(m);
   renderRmSensitivity(m);
   renderRmAnalysts(m);
