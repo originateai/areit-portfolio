@@ -235,6 +235,18 @@ exports.handler = async (event) => {
         weights: v.weights,
         asset_detail: v.method_detail.asset_nav ? v.method_detail.asset_nav.inputs : null,
         implied_cap_rate: v.implied_cap_rate,
+        /* THE TWO RATES, stored side by side (SPEC §5.2.2). A stored fair value
+         * whose discount rate is not recorded cannot be audited or reproduced —
+         * and since the hurdle looks like a discount rate, omitting these is how
+         * the two silently get read as one again.
+         *
+         * NOTE — this object is ANOTHER WHITELIST. It is the fourth in this
+         * codebase to quietly drop a field the layer beneath it had computed:
+         * add every new engine output here at the same time as the engine gains
+         * it, or the number exists everywhere except where it is read. */
+        discount_rate: v.discount_rate ?? null,
+        hurdle_rate: v.hurdle_rate ?? null,
+        buy_price_at_hurdle: v.buy_price_at_hurdle ?? null,
         irr_pre_tax: v.irr_pre_tax,
         irr_post_tax: v.irr_post_tax,
         yield_pre_tax: v.yield_pre_tax,
