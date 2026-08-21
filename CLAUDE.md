@@ -87,10 +87,21 @@ Two-level structure. Each asset class scored on **its own inputs** — no single
 - **Value is cross-cohort:** equities & earnings-driven REITs (developers/managers) screen on low P/E + earnings yield; landlord REITs screen on NTA discount + implied-vs-book cap gap + yield (with NTA discount + coverage as the value-trap filter).
 
 ## Implied cap rate (landlords only)
-`implied cap rate = NPI / (price × shares on issue + net debt)`.
-- Price → `prices`; shares & net debt → EODHD fundamentals; **NPI → results pack (manual/doc-reader, point-in-time)**.
+`implied cap rate = capitalised passing income / (price × shares on issue + net debt)`
+where **passing income = portfolio value × WACR** (SPEC §5.2.1).
+- Portfolio value & WACR → results pack, front page. Price → `prices`; shares & net debt → EODHD / `stocks.net_debt`.
+- **Do NOT use reported NPI as the numerator** unless nothing else is available. A valuer
+  capitalises PASSING income, so `portfolio value × WACR` recovers the income the book was
+  struck on; statutory NPI carries straight-lining, part-year acquisitions, and excludes
+  equity-accounted income that IS inside the portfolio value. HDN reconciles at 0.4%, CLW at
+  15.1% — the CLW gap is its equity-accounted book. Reported NPI is the labelled fallback.
+- Prefer the **disclosed WACR** over the workbook cap rate for capitalising and for the gap,
+  or part of the signal is our own assumption rather than the market's view.
 - Landlords ONLY — meaningless for developers/managers (EV captures non-property earnings).
-- Signal is the **implied-vs-book (WACR) gap**. Renders as placeholder `—` until NPI captured.
+- Signal is the **implied-vs-book (WACR) gap**. Inverted against price it gives the cap rate the
+  market is paying — a better "is it cheap" than a discount to NTA, which is an accounting number.
+- The same identity drives the cap-rate ladder in stock-page section 5: hold the capitalised
+  income still, move the rate ±25bp, and NTA falls out as a levered residual.
 
 ## Schema notes (for the rebuild)
 - Add `asset_class` and `landlord_sector` columns to `stocks` (drive separation from data, not hardcoded ticker lists). Current schema only has `universe` (ASX500/REIT) + `is_manager`/`is_developer`.

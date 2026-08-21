@@ -369,7 +369,7 @@ Cap rates are only comparable **within a sector** — never blend across.
 | Method | Applies to | Core |
 |---|---|---|
 | **NTA / cap-rate** | landlord REITs | `NPI / cap_rate` → asset value → less net debt → per unit |
-| **Implied cap rate** | landlords only | `NPI / (price × shares + net debt)`; signal is the **implied-vs-book (WACR) gap** |
+| **Implied cap rate** | landlords only | `capitalised passing income / (price × shares + net debt)` where **passing income = portfolio value × WACR**; signal is the **implied-vs-book (WACR) gap** |
 | **DDM** | all income assets | forecast DPU discounted at required return |
 | **FFO/AFFO multiple** | REITs | sector multiple × per-unit FFO |
 | **Levered equity DCF** | all REITs | free cash to equity, terminal on exit cap |
@@ -377,6 +377,37 @@ Cap rates are only comparable **within a sector** — never blend across.
 
 Blend to a single `fair_value` with **explicit, stored weights**. A blend whose
 weights are buried in code is not a methodology.
+
+#### 5.2.1 Why the implied cap rate capitalises rather than using reported NPI
+A valuer sets a WACR by capitalising **passing** income, so `portfolio value ×
+WACR` recovers the exact income the book was struck on. Statutory NPI is a
+different quantity: it carries straight-lining, it includes acquisitions only for
+the part-year they were held, and where a REIT holds assets through JVs or
+equity-accounted stakes it **excludes income from assets that are inside the
+portfolio value**. Dividing statutory NPI by enterprise value and comparing the
+answer to a valuer's WACR compares two definitions of income and reports the
+difference as a market signal.
+
+Measured on the two names carrying both figures: **HDN** capitalises to $280.1m
+against $279.0m reported — 0.4% apart. **CLW** capitalises to $330.1m against
+$286.7m reported — 15.1% apart, which is CLW's equity-accounted portfolio and
+precisely the case where statutory NPI understates the income behind the book.
+
+It is also the difference between having the measure and not. Reported NPI is on
+file for 2 of the 11 REITs with a results pack, because no vendor feed carries it
+and it must be read out of a PDF. Portfolio value and WACR are on file for 6 and
+are printed on the front page of every pack.
+
+Reported NPI (annualised) remains the fallback. The basis actually used is stored
+on every run as `implied_cap_basis`, so the two are never silently mixed across
+names. The **disclosed WACR** is preferred over the workbook cap rate for both
+capitalising and comparing — otherwise part of the reported gap is an artefact of
+our own assumption rather than the market's view.
+
+Inverting the same identity against the market price gives the cap rate the
+market is applying to the book, which is the better form of the "is it cheap"
+question: a discount to NTA is a statement about an accounting number, an implied
+cap rate is a statement about the assets.
 
 ### 5.3 IRR — the 12% test
 ```

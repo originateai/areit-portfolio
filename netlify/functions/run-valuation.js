@@ -111,6 +111,27 @@ exports.handler = async (event) => {
         }
       }
 
+      /* PORTFOLIO VALUE AND DISCLOSED WACR — the preferred inputs to the implied
+       * cap rate, because portfolio value x WACR recovers the passing income the
+       * book was actually struck on, which is the same quantity the WACR it gets
+       * compared against was set from. Reported NPI is a different measure and is
+       * only the fallback (SPEC §5.2).
+       *
+       * These are STOCKS, not flows, so unlike NPI they need no annualisation —
+       * a half-year pack states the portfolio value at that balance date and it
+       * is already the full figure. Taken from the LATEST pack carrying them,
+       * which is not necessarily the same row that carries NPI.
+       *
+       * nMap is ordered release_date DESC, so the first hit is the most recent. */
+      const pvRow   = (nMap[tk] || []).find(r => r.portfolio_value != null);
+      const wacrRow = (nMap[tk] || []).find(r => r.wacr != null);
+      const portfolioValue = pvRow ? Number(pvRow.portfolio_value) : null;
+      const wacr = wacrRow ? Number(wacrRow.wacr) : null;
+      if (portfolioValue != null && wacr != null && pvRow !== wacrRow) {
+        warnings.push(`${tk}: portfolio value is from the ${pvRow.period_end} pack but the WACR is from ${wacrRow.period_end} — ` +
+          `the capitalised income mixes two balance dates. Capture both in one pack to remove the mismatch.`);
+      }
+
       // Net debt: `stocks.net_debt` where captured, else let the engine imply it
       // from gearing. Recorded either way in the stored inputs.
       const netDebt = s && s.net_debt != null ? Number(s.net_debt) : null;
@@ -127,6 +148,8 @@ exports.handler = async (event) => {
         assets: asMap[tk] || [],      // bottom-up NAV input; supersedes the top-down cap-rate lens
         net_debt: netDebt,
         npi,
+        portfolio_value: portfolioValue,
+        wacr,
       }, taxFns);
 
       const h = ENGINE.hurdleTest(v, HURDLES);
@@ -157,6 +180,9 @@ exports.handler = async (event) => {
           ...v.inputs,
           net_debt_source: netDebt != null ? 'stocks.net_debt' : 'implied from gearing',
           npi_source: fund ? `reit_fundamentals ${fund.period_end} released ${fund.release_date}, annualised x${fund.period_months ? (12 / fund.period_months) : 'n/a'}` : null,
+          portfolio_value_source: pvRow ? `reit_fundamentals ${pvRow.period_end} released ${pvRow.release_date}` : null,
+          wacr_source: wacrRow ? `reit_fundamentals ${wacrRow.period_end} released ${wacrRow.release_date}` : null,
+          implied_cap_basis: v.implied_cap_detail?.inputs?.income_basis ?? null,
           tax_profile: taxFns ? taxFns.profile.source : null,
           method_reasons: Object.fromEntries(
             Object.entries(v.method_detail).map(([k, m]) => [k, m.reason])

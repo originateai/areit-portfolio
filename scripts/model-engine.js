@@ -284,36 +284,91 @@ function ffoMultipleValue(i) {
 }
 
 /* ── Implied cap rate (SPEC §5.2, landlords ONLY) ─────────────────────────────
- *   implied = NPI / (price x securities + net debt)
+ *   implied = capitalised passing income / (price x securities + net debt)
+ *
  * The signal is the GAP to the book (WACR) cap rate: the market pricing the
  * portfolio above or below where the directors carry it.
  *
+ * THE NUMERATOR IS CAPITALISED PASSING INCOME, NOT REPORTED NPI — and this is a
+ * correctness point, not a convenience one.
+ *
+ *   passing income = portfolio value x WACR
+ *
+ * A valuer sets WACR by capitalising PASSING income, so portfolio value x WACR
+ * recovers exactly the income the book was struck on. Statutory NPI is a
+ * different quantity: it carries straight-lining, it includes acquisitions for
+ * the part-year they were owned, and on a REIT with equity-accounted holdings it
+ * excludes income from assets that ARE in the portfolio value. Dividing statutory
+ * NPI by enterprise value and comparing the answer to a valuer's WACR compares
+ * two different definitions of income and calls the difference a market signal.
+ *
+ * Measured on the two names carrying both figures: HDN capitalises to $280.1m
+ * against $279.0m reported, 0.4% apart. CLW capitalises to $330.1m against
+ * $286.7m reported, 15.1% apart — that gap is CLW's equity-accounted portfolio,
+ * exactly the case where statutory NPI understates the income behind the book.
+ *
+ * It also unblocks the measure. Reported NPI exists for 2 of the 11 REITs with a
+ * results pack, because no vendor feed carries it and it has to be read out of a
+ * PDF; portfolio value and WACR exist for 6 and are on the front page of every
+ * pack. A signal that renders "—" on four fifths of the universe is not a signal.
+ *
+ * Reported NPI remains the fallback, annualised, and the basis used is always
+ * reported so the two are never silently mixed across names.
+ *
  * Meaningless for developers and fund managers — enterprise value there captures
  * earnings that have nothing to do with a property portfolio — so it refuses
- * rather than returning a number nobody should use.
- *
- * NPI must arrive ANNUALISED. reit_fundamentals.npi is a flow over
- * `period_months`; a half-year figure passed straight in halves the cap rate. */
+ * rather than returning a number nobody should use. */
 function impliedCapRate(i) {
   if (i.subclass !== 'landlord') return skip('implied cap rate is meaningless outside landlord REITs');
-  if (!ok(i.npi))        return skip('no NPI — needs a results pack, not available from a vendor feed');
   if (!ok(i.price))      return skip('no price');
   if (!ok(i.securities)) return skip('no securities on issue');
 
+  /* Preference order. Capitalised passing income first because it is definitionally
+   * consistent with the WACR it will be compared against. */
+  /* The DISCLOSED WACR is preferred over the workbook cap rate for both jobs
+   * here — capitalising the book and being the thing the result is compared
+   * against. They are usually close, but only one of them is what the directors
+   * actually struck the carrying value on, and using the workbook's number would
+   * make the gap partly an artefact of our own assumption. */
+  const bookCap = ok(i.wacr) ? i.wacr : i.cap_rate;
+
+  let income = null, basis = null, reconciliation = null;
+  if (ok(i.portfolio_value) && ok(bookCap)) {
+    income = i.portfolio_value * bookCap;
+    basis  = `capitalised passing income (portfolio value x ${ok(i.wacr) ? 'disclosed WACR' : 'workbook cap rate'})`;
+    if (ok(i.npi)) {
+      reconciliation = {
+        reported_npi: i.npi, capitalised: income,
+        gap_pct: Math.round(((income - i.npi) / i.npi) * 1000) / 10,
+        note: 'a wide gap usually means equity-accounted assets sit in the portfolio value but not in statutory NPI, or that acquisitions landed part-way through the year',
+      };
+    }
+  } else if (ok(i.npi)) {
+    income = i.npi;
+    basis  = 'reported NPI (annualised) — no portfolio value and WACR to capitalise from';
+  } else {
+    return skip('no portfolio value + WACR to capitalise, and no reported NPI to fall back to');
+  }
+
   const mktCap = i.price * i.securities;
   const netDebt = ok(i.net_debt) ? i.net_debt
-                : ok(i.gearing) && ok(i.cap_rate) ? (i.npi / i.cap_rate) * i.gearing
+                : ok(i.gearing) && ok(bookCap) ? (income / bookCap) * i.gearing
                 : null;
   if (netDebt === null) return skip('no net debt and nothing to imply it from');
 
   const ev = mktCap + netDebt;
   if (!(ev > 0)) return skip('non-positive enterprise value');
 
-  const implied = i.npi / ev;
+  const implied = income / ev;
   return val(implied, {
-    npi: i.npi, market_cap: mktCap, net_debt: netDebt, enterprise_value: ev,
-    book_cap_rate: i.cap_rate,
-    gap_bps: ok(i.cap_rate) ? Math.round((implied - i.cap_rate) * 10000) : null,
+    income, income_basis: basis, reconciliation,
+    market_cap: mktCap, net_debt: netDebt, enterprise_value: ev,
+    book_cap_rate: bookCap,
+    book_cap_source: ok(i.wacr) ? 'disclosed WACR' : 'workbook cap rate',
+    gap_bps: ok(bookCap) ? Math.round((implied - bookCap) * 10000) : null,
+    note: ok(bookCap)
+      ? 'the gap is the market repricing the same book: positive means the market wants a wider rate than the directors carry it at'
+      : null,
   });
 }
 
