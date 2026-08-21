@@ -119,8 +119,22 @@ const DEFAULTS = {
   payout_ratio:          0.950,
   payout_basis:          'affo',
 
-  // — Valuation —
-  required_return:       0.085,
+  /* — Valuation —
+   * TWO RATES, and they answer different questions. See valueModel().
+   *   required_return       the HURDLE (SPEC §0). Prices a BUY, never a value.
+   *   market_discount_rate  what fair value is discounted at. Null = build it
+   *                         from the risk-free rate plus an equity risk premium,
+   *                         so it moves with the bond instead of being frozen. */
+  required_return:       0.120,   // the 12% hurdle, not a cost of equity
+  market_discount_rate:  null,    // null -> risk_free_rate + equity_risk_premium
+  /* AUS 10-year. The default is a fallback only — pass the live figure. It was
+   * hardcoded at 5.07% in two places against a real 4.83%, which is the kind of
+   * stale constant that quietly reprices every REIT on the platform. */
+  risk_free_rate:        0.0483,
+  /* A-REIT equity over the long bond. 300bp is the conservative middle of the
+   * range the sector has historically traded; it is an assumption and is meant to
+   * be argued with, which is why it is a named input rather than buried in a sum. */
+  equity_risk_premium:   0.030,
   exit_cap_rate:         null,
   terminal_growth:       0.025,
   ffo_multiple:          15.0,
@@ -774,11 +788,52 @@ function buildModel(input = {}, opts = {}) {
 }
 
 /* ── VALUATION ────────────────────────────────────────────────────────────── */
+/* THE DISCOUNT RATE AND THE HURDLE ARE DIFFERENT NUMBERS.
+ *
+ * `required_return` is the 12% HURDLE (SPEC §0) — a pass/fail test on the asset,
+ * the return james requires to commit capital. It is not CIP's cost of equity,
+ * and using it to discount cash flows answers "what would I pay to earn 12%",
+ * which is a BUY PRICE. Blending a buy price with asset-based methods averages a
+ * personal threshold with a market valuation, and the result reconciles to
+ * neither.
+ *
+ * It showed up as the DDM being a function of the discount rate rather than of
+ * the REIT. Across a 6-12% range of required return, CIP's cap-rate NAV does not
+ * move at all, the DCF moves 22% (its terminal is anchored to an exit-cap
+ * property value), and the DDM moves 175% — $5.85 to $2.13. At 12% with 2.5%
+ * terminal growth the Gordon model demands a 9.5% spread from a portfolio
+ * capitalised at 5.80%, so it returns a number far below any market valuation and
+ * drags the blend down about $0.40.
+ *
+ * So: fair value discounts at a MARKET required return, and the hurdle is
+ * reported separately as `buy_price_at_hurdle` — the price at which the same cash
+ * flows deliver the 12%. Both questions are worth asking; they are just not the
+ * same question, and the platform now answers each in its own column.
+ *
+ * The 12% is not lost from the screen: irr_pre_tax already solves the actual
+ * expected return at the market price and is tested against 12% (SPEC §5.3). */
+function marketDiscountRate(a) {
+  if (num(a.market_discount_rate) !== null) {
+    return { rate: a.market_discount_rate, source: 'market_discount_rate, set explicitly' };
+  }
+  const bond = n0(a.risk_free_rate, DEFAULTS.risk_free_rate);
+  const erp  = n0(a.equity_risk_premium, DEFAULTS.equity_risk_premium);
+  return { rate: bond + erp,
+           source: `risk-free ${(bond*100).toFixed(2)}% + equity risk premium ${(erp*100).toFixed(2)}%`,
+           risk_free_rate: bond, equity_risk_premium: erp };
+}
+
 function valueModel(rows, a, exitCap) {
   if (!rows.length) return null;
   const last = rows[rows.length - 1];
-  const r = a.required_return, g = Math.min(n0(a.terminal_growth, 0), r - 0.005);
+  const mkt = marketDiscountRate(a);
+  const r = mkt.rate, g = Math.min(n0(a.terminal_growth, 0), r - 0.005);
+  const hurdle = n0(a.required_return, DEFAULTS.required_return);
   const workings = {};
+  workings.discount_rate = { value: r2(r),
+    formula: 'market required return — NOT the 12% hurdle',
+    inputs: { ...mkt, hurdle_for_reference: hurdle,
+      note: 'the hurdle is a pass/fail test on the asset and prices a BUY, not a value. It is reported separately as buy_price_at_hurdle.' } };
 
   /* CURRENT NAV, not terminal. Using the year-5 NTA as a valuation presents a
    * future value as though it were a present one — it embeds five years of
@@ -867,11 +922,36 @@ function valueModel(rows, a, exitCap) {
   workings.blended_value = { value: r2(blended), formula: 'weighted mean, weights renormalised over the methods that produced a value',
     inputs: Object.fromEntries(parts.map(p => [p.method, `${p.value.toFixed(3)} × ${(p.weight/totalW*100).toFixed(0)}%`])) };
 
+  /* THE BUY TRIGGER — the same cash flows, discounted at the HURDLE.
+   * This is the price at which CIP delivers 12%, i.e. what you pay rather than
+   * what it is worth. Deliberately NOT blended into fair value; it sits beside
+   * it, and the pair is the whole decision: buy below the trigger, and know the
+   * gap to fair value is the market's mispricing rather than your own threshold. */
+  let buyPrice = null;
+  const buyWorkings = {};
+  if (hurdle > n0(a.terminal_growth, 0)) {
+    const gh = Math.min(n0(a.terminal_growth, 0), hurdle - 0.005);
+    let pv = 0;
+    rows.forEach((row, i) => { pv += row.dpu / Math.pow(1 + hurdle, i + 1); });
+    const term = (last.dpu * (1 + gh)) / (hurdle - gh);
+    buyPrice = pv + term / Math.pow(1 + hurdle, rows.length);
+    buyWorkings.value = r2(buyPrice);
+    buyWorkings.formula = 'the DDM again, discounted at the HURDLE rather than the market rate';
+    buyWorkings.inputs = { hurdle_rate: hurdle, terminal_growth: gh,
+      explicit_pv: r2(pv), pv_of_terminal: r2(term / Math.pow(1 + hurdle, rows.length)),
+      note: 'pay at or below this and the distributions alone deliver the hurdle. It is a buy price, not a valuation, and is excluded from the blend.' };
+  }
+  workings.buy_price_at_hurdle = buyWorkings;
+
   return {
     cap_rate_nav: r2(capNav), ddm: r2(ddm), dcf: r2(dcf), exit_cap_nav: r2(exitNav),
     ffo_multiple_value: r2(ffoMult), exit_cap_rate: exitCap,
     blended_value: r2(blended),
     weights: Object.fromEntries(parts.map(p => [p.method, r2(p.weight / totalW)])),
+    // The two rates, always reported, so a value can never be read without knowing
+    // which question it answers.
+    discount_rate: r2(r), discount_rate_source: mkt.source,
+    hurdle_rate: r2(hurdle), buy_price_at_hurdle: r2(buyPrice),
     terminal_dpu: last.dpu, terminal_nta: last.nta,
     workings,
   };
@@ -881,12 +961,21 @@ function valueModel(rows, a, exitCap) {
 function sensitivity(baseAssumptions, spec = {}, opts = {}) {
   const {
     x_field = 'cap_rate', x_values = [-0.005, -0.0025, 0, 0.0025, 0.005],
-    y_field = 'required_return', y_values = [-0.010, -0.005, 0, 0.005, 0.010],
+    /* The MARKET discount rate, not the hurdle. Sensitising fair value against the
+     * hurdle moves nothing — the hurdle prices the buy trigger, not the value. */
+    y_field = 'market_discount_rate', y_values = [-0.010, -0.005, 0, 0.005, 0.010],
     output = 'blended_value', mode = 'delta',
   } = spec;
 
-  const baseX = n0(baseAssumptions[x_field], 0);
-  const baseY = n0(baseAssumptions[y_field], 0);
+  /* market_discount_rate is DERIVED when unset (risk-free + ERP), so reading the
+   * raw field gives null and a delta grid would centre on zero — every cell a
+   * near-zero discount rate and a nonsense valuation. Resolve the effective value
+   * first, then step around it. */
+  const effective = (field) => field === 'market_discount_rate' && num(baseAssumptions[field]) === null
+    ? marketDiscountRate(baseAssumptions).rate
+    : n0(baseAssumptions[field], 0);
+  const baseX = effective(x_field);
+  const baseY = effective(y_field);
 
   const pick = (m) => {
     if (!m.ok) return null;

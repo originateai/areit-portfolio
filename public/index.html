@@ -3972,13 +3972,22 @@ const RM_FIELDS = [
   ['Distribution', [
     ['payout_ratio','Payout ratio','pct'], ['payout_basis','Payout basis','sel:affo|ffo'],
   ]],
-  ['Valuation', [
-    ['required_return','Required return','pct'], ['exit_cap_rate','Exit cap rate','pct'],
+  /* TWO RATES, and conflating them is what made the valuation impossible to
+   * reconcile. `market_discount_rate` values the asset; `required_return` is the
+   * 12% hurdle and prices a BUY. See SPEC §5.2.2. */
+  ['Valuation — what it is worth', [
+    ['risk_free_rate','Risk-free rate (AUS 10yr)','pct'],
+    ['equity_risk_premium','Equity risk premium','pct'],
+    ['market_discount_rate','Discount rate (blank = risk-free + ERP)','pct'],
+    ['exit_cap_rate','Exit cap rate','pct'],
     ['terminal_growth','Terminal growth','pct'], ['ffo_multiple','FFO multiple x','num'],
     ['forecast_years','Forecast years','num'],
   ]],
+  ['Hurdle — what you pay', [
+    ['required_return','Required return (the hurdle)','pct'],
+  ]],
 ];
-const RM_SENS_FIELDS = ['cap_rate','required_return','cost_of_debt','escalation','terminal_growth',
+const RM_SENS_FIELDS = ['cap_rate','market_discount_rate','cost_of_debt','escalation','terminal_growth',
                         'exit_cap_rate','gearing_target','payout_ratio','occupancy','unhedged_rate_shift'];
 
 async function loadReitModel(ticker) {
@@ -4085,6 +4094,16 @@ async function seedAssumptions() {
     ...(sc?.[0]?.assumptions || {}),          // your own view wins over all of it
   };
   delete rmAssumptions._derived_interest_m;   // a working, not an assumption
+
+  /* Resolve the market discount rate to a concrete number rather than leaving it
+   * null for the engine to derive. The engine would still get it right, but a
+   * blank box in the editor and a "not set" in the driver panel would hide the
+   * single most important rate on the screen. Overwrite it and it stays. */
+  if (rmAssumptions.market_discount_rate == null) {
+    const rf  = Number(rmAssumptions.risk_free_rate ?? D.risk_free_rate);
+    const erp = Number(rmAssumptions.equity_risk_premium ?? D.equity_risk_premium);
+    rmAssumptions.market_discount_rate = rf + erp;
+  }
 
   /* PROVENANCE. Walk the same layers in the same order and record which one
    * supplied the value that survived. Where a number came from is not decoration
@@ -4193,7 +4212,8 @@ function rmEdit(field, value) {
 const RM_DRIVERS = [
   // key,             min,  max,  slider step, probe, probe label
   ['cap_rate',          3,   12,  0.05, 0.25, '25bps'],
-  ['required_return',   5,   20,  0.25, 0.50, '50bps'],
+  // The MARKET rate. The hurdle is not a driver of value — it prices the buy.
+  ['market_discount_rate', 4, 15, 0.10, 0.50, '50bps'],
   ['exit_cap_rate',     3,   12,  0.05, 0.25, '25bps'],
   ['cost_of_debt',      1,   12,  0.05, 0.50, '50bps'],
   ['escalation',        0,    8,  0.05, 0.25, '25bps'],
@@ -5317,7 +5337,47 @@ function renderStkBridge() {
       Weights are renormalised over the methods that produced a value, which is why they sum to 100%
       even when a method is missing. Broker consensus, book NTA and the SOTP roll-up appear in section 2
       at a deliberate <strong>0%</strong> — they are evidence to check the answer against, not inputs to it.
-    </div>`;
+    </div>
+
+    ${(() => {
+      /* TWO QUESTIONS, ANSWERED SEPARATELY. Fair value is what the asset is worth,
+       * discounted at a market rate. The buy trigger is what you pay for it to
+       * clear your hurdle. Blending the second into the first was what made the
+       * valuation impossible to reconcile — the DDM at a 12% hurdle returned $2.13
+       * on a REIT whose properties are capitalised at 5.80%, and dragged the blend
+       * down by about $0.40 while looking like a valuation. */
+      const v = rmModel.valuation, price = rmContext.price;
+      if (v.buy_price_at_hurdle == null) return '';
+      const clears = price != null && price <= v.buy_price_at_hurdle;
+      return `
+      <div class="sl" style="margin-top:24px">The two questions, kept apart</div>
+      <div style="overflow-x:auto"><table class="wk">
+        <tbody>
+          <tr class="wk-t"><td class="wk-l">What is it worth?</td>
+            <td class="r wk-v">${f.$(v.blended_value)}</td>
+            <td class="r wk-u">${v.discount_rate!=null?f.pct0(v.discount_rate):'—'}</td>
+            <td class="wk-n">Fair value, discounted at the <strong>market</strong> required return —
+              ${v.discount_rate_source || 'risk-free + equity risk premium'}. Moves when the bond moves.</td></tr>
+          <tr class="wk-t"><td class="wk-l">What should I pay?</td>
+            <td class="r wk-v">${f.$(v.buy_price_at_hurdle)}</td>
+            <td class="r wk-u">${v.hurdle_rate!=null?f.pct0(v.hurdle_rate):'—'}</td>
+            <td class="wk-n">The same distributions discounted at your <strong>hurdle</strong>. Pay at or
+              below this and the income alone delivers it. A buy price, not a valuation — which is why it is
+              not in the blend above.</td></tr>
+          ${price != null ? `<tr><td class="wk-l">Price today</td>
+            <td class="r wk-v">${f.$(price)}</td><td></td>
+            <td class="wk-n">
+              <strong style="color:${v.blended_value>price?'var(--green)':'var(--red)'}">${
+                f.pct((v.blended_value-price)/price,0)}</strong> to fair value ·
+              <strong style="color:${clears?'var(--green)':'var(--red)'}">${clears?'clears':'does not clear'}</strong>
+              the hurdle on income alone.
+              ${!clears && v.blended_value > price
+                ? ' Cheap against the assets, but the distribution yield by itself will not get you to the hurdle — the rest has to come from growth or from the discount closing.'
+                : ''}
+            </td></tr>` : ''}
+        </tbody>
+      </table></div>`;
+    })()}`;
 }
 
 /* ── 5 · THE PORTFOLIO ────────────────────────────────────────────────────────

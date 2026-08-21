@@ -370,13 +370,46 @@ Cap rates are only comparable **within a sector** — never blend across.
 |---|---|---|
 | **NTA / cap-rate** | landlord REITs | `NPI / cap_rate` → asset value → less net debt → per unit |
 | **Implied cap rate** | landlords only | `capitalised passing income / (price × shares + net debt)` where **passing income = portfolio value × WACR**; signal is the **implied-vs-book (WACR) gap** |
-| **DDM** | all income assets | forecast DPU discounted at required return |
+| **DDM** | all income assets | forecast DPU discounted at the **market** discount rate (§5.2.2) |
 | **FFO/AFFO multiple** | REITs | sector multiple × per-unit FFO |
 | **Levered equity DCF** | all REITs | free cash to equity, terminal on exit cap |
 | **Takeover / internalisation** | externally-managed | synergy + control premium |
 
 Blend to a single `fair_value` with **explicit, stored weights**. A blend whose
 weights are buried in code is not a methodology.
+
+#### 5.2.2 The discount rate is not the hurdle
+**Two rates, two questions, and they must never be the same number.**
+
+| | Rate | Answers |
+|---|---|---|
+| `market_discount_rate` | risk-free + equity risk premium (default 4.83% + 3.00%) | **What is it worth?** → `blended_value` |
+| `required_return` | the **12% hurdle** (§0) | **What should I pay?** → `buy_price_at_hurdle` |
+
+Discounting distributions at a hurdle does not produce a valuation, it produces a
+**buy price** — the price at which the asset delivers the return you demand.
+Blending that into fair value averages a personal threshold with a market
+valuation and reconciles to neither.
+
+It surfaced as the DDM being a function of the discount rate rather than of the
+REIT. Across a 6–12% range on CIP: cap-rate NAV does not move at all, the DCF
+moves 22% (its terminal is anchored to an exit-cap property value), the **DDM
+moves 175%** — $5.85 to $2.13. At the 12% hurdle with 2.5% terminal growth the
+Gordon model demands a 9.5% spread from a portfolio capitalised at 5.80%, so it
+returned $2.13 and dragged the blend down roughly $0.40 while looking like a
+valuation.
+
+After the split, CIP's methods cluster **$3.50–$4.82** around a blend of $4.14,
+where before they ranged $2.13–$4.16. Fair value now moves with the bond, as it
+should; the buy trigger does not, as it should.
+
+The 12% is not weakened by this — `irr_pre_tax` already solves the actual expected
+return at the market price and is tested against it (§5.3). The hurdle is applied
+once, to the price, rather than twice and in two different senses.
+
+**`buy_price_at_hurdle` is never blended.** It sits beside fair value, and the
+pair is the decision: buy below the trigger, and read the gap to fair value as the
+market's mispricing rather than as your own threshold.
 
 #### 5.2.1 Why the implied cap rate capitalises rather than using reported NPI
 A valuer sets a WACR by capitalising **passing** income, so `portfolio value ×

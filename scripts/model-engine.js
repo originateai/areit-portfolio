@@ -117,6 +117,12 @@ function normaliseInputs(raw) {
      * field here whenever the engine learns to read a new one. */
     portfolio_value: num(raw.portfolio_value),                 // $
     wacr:            num(raw.wacr),                            // decimal
+    /* Fair value discounts at the MARKET rate; req_return above is the HURDLE and
+     * prices a buy (SPEC §5.2.2). Assumptions win over the raw request so a
+     * workbook can override the sector default per name. */
+    market_discount_rate: num(a.market_discount_rate) ?? num(raw.market_discount_rate),
+    risk_free_rate:       num(a.risk_free_rate)       ?? num(raw.risk_free_rate),
+    equity_risk_premium:  num(a.equity_risk_premium)  ?? num(raw.equity_risk_premium),
     assets:     raw.assets || [],                              // reit_assets rows, raw
     forecasts,
   };
@@ -254,25 +260,72 @@ function ntaValue(i) {
  *   terminal     = 0.19 x 1.025 / (0.085-0.025) = 3.2458  -> /1.085^3 = 2.5405
  *   V            = 3.012
  */
-function ddmValue(i) {
-  const dpus = i.forecasts.filter(f => ok(f.dpu)).map(f => f.dpu);
-  if (!dpus.length)      return skip('no forecast DPU');
-  if (!ok(i.req_return)) return skip('no required return');
+/* DISCOUNTED AT THE MARKET RATE, NOT THE HURDLE (SPEC §5.2.2).
+ *
+ * `req_return` carries the 12% hurdle on most workbooks, and discounting
+ * distributions at a hurdle answers "what would I pay to earn 12%" — a buy price,
+ * not a value. Blended into fair value it averages a personal threshold with a
+ * market valuation. Measured on CIP, the DDM swung $5.85 to $2.13 across a 6-12%
+ * range while cap-rate NAV did not move at all: the method was reporting the
+ * discount rate rather than the REIT.
+ *
+ * Fair value therefore uses risk-free + equity risk premium. The hurdle price is
+ * returned separately by ddmAtHurdle() and never enters the blend. */
+const DEFAULT_RISK_FREE = 0.0483;    // AUS 10yr; pass the live figure
+const DEFAULT_ERP       = 0.030;     // A-REIT equity over the long bond
 
-  const r = i.req_return;
-  const g = ok(i.escalation) ? Math.min(i.escalation, r - 0.005) : 0;
-  if (g >= r) return skip(`terminal growth ${g} >= discount rate ${r} — Gordon model undefined`);
+function discountRate(i) {
+  if (ok(i.market_discount_rate)) {
+    return { rate: i.market_discount_rate, source: 'market_discount_rate, set explicitly' };
+  }
+  const rf  = ok(i.risk_free_rate) ? i.risk_free_rate : DEFAULT_RISK_FREE;
+  const erp = ok(i.equity_risk_premium) ? i.equity_risk_premium : DEFAULT_ERP;
+  return { rate: rf + erp, risk_free_rate: rf, equity_risk_premium: erp,
+           source: `risk-free ${(rf*100).toFixed(2)}% + equity risk premium ${(erp*100).toFixed(2)}%` };
+}
 
+function gordon(dpus, r, g) {
   let pv = 0;
   dpus.forEach((d, k) => { pv += d / Math.pow(1 + r, k + 1); });
-
   const last = dpus[dpus.length - 1];
   const terminal = (last * (1 + g)) / (r - g);
   const pvTerminal = terminal / Math.pow(1 + r, dpus.length);
+  return { value: pv + pvTerminal, pv_explicit: pv, terminal_value: terminal, pv_terminal: pvTerminal };
+}
 
-  return val(pv + pvTerminal, {
-    dpu_stream: dpus, discount_rate: r, terminal_growth: g,
-    pv_explicit: pv, terminal_value: terminal, pv_terminal: pvTerminal,
+function ddmValue(i) {
+  const dpus = i.forecasts.filter(f => ok(f.dpu)).map(f => f.dpu);
+  if (!dpus.length) return skip('no forecast DPU');
+
+  const d = discountRate(i);
+  const r = d.rate;
+  const g = ok(i.escalation) ? Math.min(i.escalation, r - 0.005) : 0;
+  if (g >= r) return skip(`terminal growth ${g} >= discount rate ${r} — Gordon model undefined`);
+
+  const out = gordon(dpus, r, g);
+  return val(out.value, {
+    dpu_stream: dpus, discount_rate: r, discount_rate_source: d.source,
+    terminal_growth: g, pv_explicit: out.pv_explicit,
+    terminal_value: out.terminal_value, pv_terminal: out.pv_terminal,
+    hurdle_for_reference: i.req_return,
+    note: 'discounted at the MARKET rate. The price that delivers the hurdle is buy_price_at_hurdle, and is deliberately not blended in.',
+  });
+}
+
+/* The same cash flows at the HURDLE — a buy price, reported beside fair value and
+ * never inside it. Pay at or below this and the distributions alone deliver the
+ * required return. */
+function ddmAtHurdle(i) {
+  const dpus = i.forecasts.filter(f => ok(f.dpu)).map(f => f.dpu);
+  if (!dpus.length)      return skip('no forecast DPU');
+  if (!ok(i.req_return)) return skip('no hurdle rate set');
+  const r = i.req_return;
+  const g = ok(i.escalation) ? Math.min(i.escalation, r - 0.005) : 0;
+  if (g >= r) return skip(`terminal growth ${g} >= hurdle ${r} — Gordon model undefined`);
+  const out = gordon(dpus, r, g);
+  return val(out.value, {
+    hurdle_rate: r, terminal_growth: g, dpu_stream: dpus,
+    note: 'a BUY PRICE, not a valuation — excluded from the blend by design',
   });
 }
 
@@ -484,6 +537,7 @@ function valuate(raw, taxFns) {
     ffo_multiple: ffoMultipleValue(i),
   };
   const implied = impliedCapRate(i);
+  const buyAtHurdle = ddmAtHurdle(i);
   const b = blend(methods, i.subclass);
   const irrOut = computeIrr(i, b.fair_value, taxFns);
 
@@ -510,6 +564,12 @@ function valuate(raw, taxFns) {
     method_detail: methods,
     implied_cap_rate: implied.value,
     implied_cap_detail: implied,
+    // The two answers, always side by side: what it is worth, and what to pay.
+    discount_rate: discountRate(i).rate,
+    discount_rate_source: discountRate(i).source,
+    hurdle_rate: i.req_return ?? null,
+    buy_price_at_hurdle: buyAtHurdle.value,
+    buy_price_detail: buyAtHurdle,
     weights: b.weights_applied,
     blend: b,
     irr_pre_tax: irrOut.pre_tax,
@@ -565,5 +625,6 @@ function hurdleTest(v, targets = { irr: 0.12, yield: 0.07 }) {
 module.exports = {
   ENGINE_VERSION, BLEND_WEIGHTS, SUPERSEDES,
   valuate, hurdleTest, blend, computeIrr, normaliseInputs,
-  assetLevelNav, capRateNav, ntaValue, ddmValue, ffoMultipleValue, impliedCapRate,
+  assetLevelNav, capRateNav, ntaValue, ddmValue, ddmAtHurdle, discountRate,
+  ffoMultipleValue, impliedCapRate,
 };
