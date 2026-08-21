@@ -125,8 +125,12 @@ exports.handler = async (event) => {
        * nMap is ordered release_date DESC, so the first hit is the most recent. */
       const pvRow   = (nMap[tk] || []).find(r => r.portfolio_value != null);
       const wacrRow = (nMap[tk] || []).find(r => r.wacr != null);
+      const gearRow = (nMap[tk] || []).find(r => r.gearing != null);
       const portfolioValue = pvRow ? Number(pvRow.portfolio_value) : null;
       const wacr = wacrRow ? Number(wacrRow.wacr) : null;
+      // Gearing fallback for names with a pack but no workbook — the engine needs
+      // it to imply net debt, and without net debt there is no enterprise value.
+      const packGearing = gearRow ? Number(gearRow.gearing) : null;
       if (portfolioValue != null && wacr != null && pvRow !== wacrRow) {
         warnings.push(`${tk}: portfolio value is from the ${pvRow.period_end} pack but the WACR is from ${wacrRow.period_end} — ` +
           `the capitalised income mixes two balance dates. Capture both in one pack to remove the mismatch.`);
@@ -150,6 +154,7 @@ exports.handler = async (event) => {
         npi,
         portfolio_value: portfolioValue,
         wacr,
+        gearing: packGearing,
       }, taxFns);
 
       const h = ENGINE.hurdleTest(v, HURDLES);

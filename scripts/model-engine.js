@@ -95,7 +95,11 @@ function normaliseInputs(raw) {
     cap_rate:   num(a.cap_rate),
     req_return: num(a.req_return),
     exit_cap:   num(a.exit_cap),
-    gearing:    num(a.gearing_current),
+    /* Workbook first, then the results pack. A REIT with no reit_model_assumptions
+     * row still discloses its gearing in every pack, and without it net debt
+     * cannot be implied — which silently killed the implied cap rate on exactly
+     * the names that have a pack but no workbook. */
+    gearing:    num(a.gearing_current) ?? num(raw.gearing),
     payout:     num(a.payout_ratio),
     base_pe:    num(a.base_pe),
     escalation: num(a.escalation),
