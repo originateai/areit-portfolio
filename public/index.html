@@ -1192,6 +1192,9 @@ tr.vm-blend td{border-top:2px solid var(--ink);font-weight:600;background:var(--
         <div class="sl" style="margin-top:24px">Cap rate spread — where the blended rate comes from</div>
         <div style="overflow-x:auto"><table id="port-cap"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
 
+        <div class="sl" style="margin-top:24px">Revalue the book — implied NOI capitalised across the cap-rate range</div>
+        <div id="port-ladder"></div>
+
         <div style="margin-top:10px">
           <button class="btn btn-secondary" style="font-size:11px" onclick="stkOpenPropertyBook()">Open the full register to edit cap rates and income →</button>
         </div>
@@ -4516,6 +4519,7 @@ function renderReitModel() {
   rmSyncDrivers(m);
   renderStkSeries();          // the forecast columns exist only once the model builds
   renderStkBridge();
+  renderCapLadder();          // needs securities and net debt, which seeding supplies
   renderRmStatement(m);
   renderRmSensitivity(m);
   renderRmAnalysts(m);
@@ -5470,7 +5474,121 @@ function renderPortfolio(assets) {
         <strong>${caps.length?Math.round((Math.max(...caps)-Math.min(...caps))*10000):'—'}bps spread</strong>
         that the single weighted rate of ${wtdCap!=null?f.pct0(wtdCap):'—'} conceals.</td></tr></tbody>`);
 
+  renderCapLadder();
   stkSummaries();
+}
+
+/* ── THE CAP-RATE LADDER ──────────────────────────────────────────────────────
+ * The analysis a landlord REIT actually turns on:
+ *
+ *   implied NOI  = portfolio value × WACR
+ *   book at c    = implied NOI ÷ c            (hold the income, move the rate)
+ *   NAV          = book + cash − net debt
+ *   NTA          = NAV ÷ securities
+ *
+ * Holding NOI still and moving the rate is the whole point. NTA is a LEVERED
+ * residual — debt does not reprice when the book does — so a 100bp expansion
+ * takes far more than 100bp out of NTA, and raises gearing at the same time. A
+ * single NTA figure hides both effects, and they are the risk.
+ *
+ * The implied NOI is a free reconciliation on the way past: capitalising the
+ * disclosed portfolio value at the disclosed WACR should land on the passing
+ * income in the register. Where it does not, one of the three is wrong.
+ *
+ * Inverting the identity against the market price gives the cap rate the market
+ * is applying to this book — the honest answer to "is it cheap", because a
+ * discount to NTA is a statement about an accounting number while an implied cap
+ * rate is a statement about the assets. */
+function renderCapLadder() {
+  const el = document.getElementById('port-ladder');
+  if (!el) return;
+
+  const pack = stkSeries.actuals[stkSeries.actuals.length - 1] || {};
+  const rows = (assetRows || []).filter(a => !a.is_excluded);
+  const regBook = rows.reduce((s,a) => s + (Number(a.book_value_m)||0), 0);
+  const regInc  = rows.reduce((s,a) => s + (Number(a.income_override_m ?? a.passing_income_m)||0), 0);
+
+  const pv   = pack.portfolio_m ?? (regBook || null);
+  const wacr = pack.wacr ?? (regBook ? regInc/regBook : null);
+  const secs = Number(rmAssumptions.securities_m) || null;
+  const cash = Number(rmAssumptions.opening_cash_m) || 0;
+  let netDebt = Number(rmAssumptions.opening_net_debt_m);
+  if (!(netDebt > 0) && pack.nta != null && pack.gearing != null && secs) {
+    const eq = pack.nta * secs;
+    netDebt = eq/(1 - pack.gearing) - eq;
+  }
+
+  if (!pv || !wacr || !secs || !(netDebt > 0)) {
+    el.innerHTML = `<div class="empty">Needs portfolio value, WACR, securities on issue and net debt —
+      ${[!pv?'portfolio value':null,!wacr?'WACR':null,!secs?'securities':null,!(netDebt>0)?'net debt':null]
+        .filter(Boolean).join(', ')} not available for ${stkTicker}.</div>`;
+    return;
+  }
+
+  const noi = pv * wacr;
+  const price = rmContext.price;
+  const navAt = c => noi/c + cash - netDebt;
+  const impliedCap = price ? noi / (price*secs + netDebt - cash) : null;
+
+  const band = [-75,-50,-25,0,25,50,75,100].map(bp => {
+    const c = wacr + bp/10000, book = noi/c, nav = navAt(c);
+    return { bp, c, book, nav, nta: nav/secs, gearing: netDebt/(book + cash),
+             vsPrice: price ? (nav/secs - price)/price : null };
+  });
+  const at0 = band.find(b => b.bp === 0), at100 = band.find(b => b.bp === 100);
+  const recGap = regInc ? (noi - regInc)/regInc : null;
+
+  el.innerHTML = `
+    <div class="caveat" style="border-left-color:var(--teal);margin-bottom:12px">
+      <strong>$${Math.round(pv).toLocaleString()}m book × ${f.pct0(wacr)} WACR = $${noi.toFixed(1)}m implied NOI.</strong>
+      ${recGap != null
+        ? ` The register carries <strong>$${regInc.toFixed(1)}m</strong> of passing income across ${rows.length} assets —
+            ${Math.abs(recGap) < 0.02 ? 'the two reconcile' : `a ${(recGap*100).toFixed(1)}% gap`}, which checks that the
+            disclosed value, the disclosed rate and the register describe the same portfolio.`
+        : ''}
+      <br><br>That income is then held still and only the rate moved.
+      <strong>NTA is a levered residual</strong> — debt does not reprice when the book does — so
+      ${at0 && at100 ? `100bp of expansion takes NTA from <strong>${f.$(at0.nta)}</strong> to
+        <strong>${f.$(at100.nta)}</strong>, a <strong>${(((at100.nta-at0.nta)/at0.nta)*100).toFixed(0)}%</strong> fall
+        out of a ${(((at100.book-at0.book)/at0.book)*100).toFixed(0)}% fall in the book, and lifts gearing from
+        ${f.pct0(at0.gearing)} to ${f.pct0(at100.gearing)}.` : ''}
+    </div>
+
+    <div style="overflow-x:auto"><table class="wk">
+      <thead><tr><th>Cap rate</th><th class="r">Book $m</th><th class="r">Net debt</th>
+        <th class="r">NAV $m</th><th class="r">NTA / security</th>
+        ${price?'<th class="r">vs price</th>':''}<th class="r">Gearing</th><th></th></tr></thead>
+      <tbody>
+        ${band.map(b => `<tr${b.bp===0?' class="wk-t"':''}>
+          <td class="wk-v">${f.pct0(b.c)} <span class="wk-u">${b.bp?(b.bp>0?'+':'')+b.bp+'bp':'book'}</span></td>
+          <td class="r wk-v">${Math.round(b.book).toLocaleString()}</td>
+          <td class="r wk-u">(${Math.round(netDebt).toLocaleString()})</td>
+          <td class="r wk-v">${Math.round(b.nav).toLocaleString()}</td>
+          <td class="r wk-v" style="font-weight:600">${f.$(b.nta)}</td>
+          ${price?`<td class="r wk-v" style="color:${b.vsPrice>0?'var(--green)':'var(--red)'}">${f.pct(b.vsPrice,0)}</td>`:''}
+          <td class="r wk-u">${f.pct0(b.gearing)}</td>
+          <td class="wk-n">${b.bp===0?'as carried in the accounts':''}</td>
+        </tr>`).join('')}
+        ${impliedCap ? `<tr style="border-top:2px solid var(--ink)">
+          <td class="wk-v" style="font-weight:600">${f.pct0(impliedCap)}</td>
+          <td class="r wk-v">${Math.round(noi/impliedCap).toLocaleString()}</td>
+          <td class="r wk-u">(${Math.round(netDebt).toLocaleString()})</td>
+          <td class="r wk-v">${Math.round(price*secs).toLocaleString()}</td>
+          <td class="r wk-v" style="font-weight:600">${f.$(price)}</td>
+          <td class="r wk-v">0%</td>
+          <td class="r wk-u">${f.pct0(netDebt/(noi/impliedCap + cash))}</td>
+          <td class="wk-n"><strong>What the market is paying.</strong> At ${f.$(price)} the market
+            capitalises this book at <strong>${f.pct0(impliedCap)}</strong>,
+            <strong>${Math.round((impliedCap - wacr)*10000)}bp wider</strong> than the ${f.pct0(wacr)} the REIT
+            carries it at — the discount stated as a property number rather than an accounting one.</td>
+        </tr>` : ''}
+      </tbody>
+    </table></div>
+    <div class="vm-note" style="margin-top:8px">
+      Net debt is held flat down the ladder. That is right for the comparison and slightly generous at the
+      wide end: a book repricing that far usually brings covenant pressure with it, and gearing reaches
+      ${at100?f.pct0(at100.gearing):'—'} here before any of that is considered.
+    </div>`;
 }
 
 function renderStkSeries() {
