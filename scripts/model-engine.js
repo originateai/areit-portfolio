@@ -102,6 +102,17 @@ function normaliseInputs(raw) {
     base_noi:   ok(num(a.base_noi_m)) ? num(a.base_noi_m) * M : null,
     net_debt:   num(raw.net_debt),                             // $ if known
     npi:        num(raw.npi),                                  // $ ANNUALISED
+    /* Preferred inputs to the implied cap rate (SPEC §5.2.1). Both are STOCKS
+     * taken straight from the results pack, so unlike npi they are never
+     * annualised: portfolio_value is DOLLARS, wacr a decimal.
+     *
+     * THIS FUNCTION IS A WHITELIST. Anything not named here is dropped without a
+     * word, and the caller cannot tell the difference between a field it forgot
+     * to send and a field this function forgot to copy — the symptom is a method
+     * that refuses with "no input" while the input sits in the request. Add the
+     * field here whenever the engine learns to read a new one. */
+    portfolio_value: num(raw.portfolio_value),                 // $
+    wacr:            num(raw.wacr),                            // decimal
     assets:     raw.assets || [],                              // reit_assets rows, raw
     forecasts,
   };
