@@ -35,10 +35,45 @@ function subclassOf(s) {
   return 'landlord';
 }
 
+/* ── COMPLETENESS GATE ────────────────────────────────────────────────────────
+ * A stored valuation is a real-money record: it drives the hurdle test, the
+ * screens, and the morning email. A REIT missing half its inputs still produces
+ * a number — the engine renormalises the blend over whatever methods survived —
+ * and that number is indistinguishable on screen from one built on a full set.
+ * A fair value derived from book NTA alone and a fair value derived from five
+ * methods against a calibrated pack should not sit in the same column unlabelled.
+ *
+ * So by default only vehicles with the full financial set are WRITTEN. The rest
+ * are still computed and returned, with the missing pieces named, so the response
+ * doubles as the to-do list for what to ingest next. `?all=1` overrides.
+ *
+ * Guidance and an asset register are reported but NOT required: guidance is the
+ * calibration test rather than a valuation input, and the asset register only
+ * adds the SOTP lens. Everything in REQUIRED is load-bearing. */
+function completeness(ctx) {
+  const missing = [];
+  if (!ctx.securities)     missing.push('securities on issue (reit_models)');
+  if (!ctx.workbook)       missing.push('workbook assumptions (reit_model_assumptions)');
+  if (!ctx.forecasts)      missing.push('forecasts (reit_model_forecasts)');
+  if (!ctx.price)          missing.push('price (reit_prices)');
+  if (!ctx.pack)           missing.push('a 12-month results pack (reit_fundamentals)');
+  else {
+    if (!ctx.portfolioValue) missing.push('portfolio value');
+    if (!ctx.wacr)           missing.push('disclosed WACR');
+    if (!ctx.nta)            missing.push('NTA');
+    if (!ctx.gearing)        missing.push('gearing');
+    if (!ctx.ffo)            missing.push('FFO');
+    if (!ctx.dps)            missing.push('DPS');
+  }
+  return { complete: missing.length === 0, missing,
+           optional: { guidance: !!ctx.guidance, asset_register: ctx.assets || 0 } };
+}
+
 exports.handler = async (event) => {
   const db = getSupabase();
   const qs = (event && event.queryStringParameters) || {};
   const dryRun = qs.dry === '1' || qs.dry === 'true';
+  const writeAll = qs.all === '1' || qs.all === 'true';
   const only = qs.ticker ? String(qs.ticker).toUpperCase() : null;
   const asOf = new Date(Date.now() + 10 * 3600 * 1000).toISOString().slice(0, 10); // AEST day
 
@@ -90,6 +125,7 @@ exports.handler = async (event) => {
           asMap = by(assetRows.data);
 
     const results = [];
+    const incomplete = [];   // computed but deliberately not stored — see completeness()
 
     for (const model of models) {
       const tk = model.ticker;
@@ -159,6 +195,30 @@ exports.handler = async (event) => {
 
       const h = ENGINE.hurdleTest(v, HURDLES);
 
+      const packRow = (nMap[tk] || []).find(r => r.period_months === 12) || null;
+      const gate = completeness({
+        securities: model.securities_m != null,
+        workbook: !!(aMap[tk] || []).length,
+        forecasts: fc.length > 0,
+        price: px.last_price != null,
+        pack: !!packRow,
+        portfolioValue: portfolioValue != null,
+        wacr: wacr != null,
+        nta: packRow && packRow.nta != null,
+        gearing: packRow && packRow.gearing != null,
+        ffo: packRow && packRow.ffo != null,
+        dps: packRow && packRow.dps != null,
+        guidance: packRow && (packRow.guidance_ffo_low != null || packRow.guidance_dps != null),
+        assets: (asMap[tk] || []).filter(a => !a.is_excluded).length,
+      });
+      if (!gate.complete && !writeAll) {
+        incomplete.push({ ticker: tk, missing: gate.missing, optional: gate.optional,
+                          computed_fair_value: v.fair_value, price: v.price });
+        warnings.push(`${tk}: not written — missing ${gate.missing.join(', ')}. ` +
+          `Computed fair value ${v.fair_value != null ? '$'+v.fair_value.toFixed(2) : 'null'} is returned for reference only. Use ?all=1 to store it anyway.`);
+        continue;
+      }
+
       if (v.fair_value == null) warnings.push(`${tk}: ${v.blend.reason || 'no fair value'}.`);
       if (v.irr_pre_tax == null && v.price != null)
         warnings.push(`${tk}: pre-tax IRR did not converge or had no inputs — reported as null, not substituted.`);
@@ -199,7 +259,8 @@ exports.handler = async (event) => {
 
     if (dryRun) {
       return json(200, { ok: true, dry_run: true, runs: 0, as_of: asOf,
-                         computed: results.length, results, warnings });
+                         computed: results.length, results,
+                         skipped_incomplete: incomplete, warnings });
     }
 
     // Append-only (SPEC §5.5) — insert, never upsert.
@@ -207,16 +268,21 @@ exports.handler = async (event) => {
     if (wErr) throw new Error(`valuation_runs insert: ${wErr.message}`);
 
     const passing = results.filter(r => r.meets_hurdle === true).map(r => r.ticker);
-    const incomplete = results.filter(r => r.meets_hurdle === null).map(r => r.ticker);
+    /* Distinct from `incomplete`: these WERE written and have the full input set,
+     * but the hurdle could not be evaluated (usually a null IRR). Not a failure
+     * of the data, a failure of convergence. */
+    const hurdleUnknown = results.filter(r => r.meets_hurdle === null).map(r => r.ticker);
 
     return json(200, {
       ok: true, runs: results.length, as_of: asOf,
       engine: ENGINE.ENGINE_VERSION,
       meets_hurdle: passing,
-      incomplete,
+      hurdle_indeterminate: hurdleUnknown,
+      skipped_incomplete: incomplete,
       message: `${results.length} valuation run(s) written. ` +
                `${passing.length} meet both hurdles` +
-               (incomplete.length ? `, ${incomplete.length} incomplete (missing inputs, not failures)` : '') + '.',
+               (hurdleUnknown.length ? `, ${hurdleUnknown.length} could not be tested (null IRR)` : '') +
+               (incomplete.length ? `. ${incomplete.length} vehicle(s) skipped as incomplete — see skipped_incomplete` : '') + '.',
       results, warnings,
     });
 
