@@ -187,6 +187,43 @@ tfoot td{border-top:2px solid var(--ink);font-weight:600;background:var(--cream)
 .drv-src.wb{background:rgba(75,151,178,0.16);color:var(--teal)}
 .drv-src.you{background:rgba(160,90,0,0.14);color:var(--amber)}
 
+/* ── TRACK RECORD → FORECAST ──────────────────────────────────────────────────
+   Reported years and forecast years in one grid. The reported side is tinted and
+   the boundary between them is a hard rule, so the eye finds the join without a
+   legend — everything left of it happened, everything right of it is a claim. */
+.ser{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:11.5px}
+.ser th,.ser td{padding:4px 10px;white-space:nowrap}
+.ser thead th{font-size:10px;letter-spacing:0.08em;color:var(--muted);font-weight:400;
+              border-bottom:1px solid var(--ink);text-align:right}
+.ser thead tr.ser-sub th{font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;
+                         border-bottom:1px solid var(--rule);padding-top:0;padding-bottom:5px}
+.ser .ser-l{text-align:left;font-family:'DM Sans',system-ui,sans-serif;font-size:12px;
+            position:sticky;left:0;background:var(--paper);min-width:180px;z-index:1}
+.ser .ser-l small{display:block;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
+.ser td.ser-a,.ser th.ser-a{background:rgba(75,151,178,0.07)}
+.ser .ser-first{border-left:2px solid var(--ink)}
+.ser tr.ser-grp td{font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);
+                   padding-top:14px;border-bottom:1px solid var(--rule)}
+.ser tr.ser-key td{font-weight:600;font-size:12.5px}
+.ser tr.ser-g td{font-size:10px;color:var(--muted);padding-top:0;padding-bottom:6px}
+.ser tr.ser-g .ser-l{font-size:10px;padding-left:22px;color:var(--muted)}
+.ser tbody tr:hover td{background:rgba(0,0,0,0.03)}
+.ser tbody tr:hover td.ser-l{background:var(--cream)}
+
+/* The walk — a reconciliation reads as a column of numbers with the reason for
+   each beside it, so the arithmetic and the argument sit on the same line. */
+.wk{width:100%;border-collapse:collapse}
+.wk th{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+       color:var(--muted);font-weight:400;text-align:left;padding:6px 10px;border-bottom:1px solid var(--ink)}
+.wk th.r{text-align:right}
+.wk td{padding:5px 10px;border-bottom:1px solid rgba(0,0,0,0.05);vertical-align:top}
+.wk .wk-l{font-size:12px;min-width:170px}
+.wk .wk-v{font-family:'DM Mono',monospace;font-size:12px;white-space:nowrap}
+.wk .wk-u{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap}
+.wk .wk-n{font-size:11px;color:var(--muted);line-height:1.5}
+.wk tr.wk-t td{border-top:1px solid var(--ink);border-bottom:none;font-weight:600;background:var(--cream)}
+.wk tr.wk-t .wk-u{color:var(--ink)}
+
 /* The long tail. A table, not a form — you read down a column of numbers. */
 .led{width:100%;border-collapse:collapse}
 .led th{font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.1em;text-transform:uppercase;
@@ -1073,50 +1110,98 @@ tr.vm-blend td{border-top:2px solid var(--ink);font-weight:600;background:var(--
       </div>
     </div>
 
-    <!-- ── 4 · FUNDAMENTALS ──────────────────────────────────────────────── -->
-    <div class="sec" id="sec-fund">
+    <!-- ── 4 · TRACK RECORD → FORECAST ───────────────────────────────────────
+         One table, three reported years running straight into the forecast, so
+         the forecast is read as a continuation of a record rather than as a
+         number that arrived from nowhere. This replaced six stacked tables —
+         latest pack, point-in-time history, reported actuals, source workbook,
+         analysts, brokers — which between them showed everything and explained
+         nothing.
+
+         The three actual years are the last three FINANCIAL YEARS including the
+         most recently reported one, deduplicated: reit_model_actuals carries
+         each year twice (FY25 and FY25A, the same figures at two precisions) and
+         printing both is how a track record turns into noise. -->
+    <div class="sec open" id="sec-fund">
       <div class="sec-head" onclick="stkToggle('fund')">
         <span class="chev">▶</span><span class="sec-n">4</span>
-        <span class="sec-title">Fundamentals — what the packs actually reported</span>
+        <span class="sec-title">Track record, then forecast</span>
         <span class="sec-sum" id="sum-fund"></span>
       </div>
       <div class="sec-body">
-        <div class="sl">Latest results pack <span id="stk-fund-asof" style="font-weight:400;color:var(--muted);font-size:10px"></span></div>
-        <div id="stk-fund" class="mg-grid" style="margin-bottom:16px"></div>
+        <div id="stk-series-note"></div>
+        <div style="overflow-x:auto"><table id="stk-series" class="ser"><tbody><tr><td class="empty">Pick a name above.</td></tr></tbody></table></div>
 
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="sl" style="flex:1;margin:0">Point-in-time history — dated to the announcement, never the balance date</div>
-          <button class="xl" onclick="stkExport('fundamentals')">↓ Excel</button>
-        </div>
-        <div style="overflow-x:auto;margin-top:8px"><table id="stk-fund-hist"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+        <div class="sl" style="margin-top:24px">How the first forecast year is built</div>
+        <div id="stk-bridge"></div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px">
-          <div>
-            <div class="sl">Reported actuals</div>
-            <div style="overflow-x:auto"><table id="rm-actuals"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
-          </div>
-          <div>
-            <div class="sl">Source workbook</div>
+        <details style="margin-top:24px">
+          <summary style="cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.1em;
+                          text-transform:uppercase;color:var(--muted)">Coverage — brokers, documents and the source workbook</summary>
+          <div style="margin-top:14px">
+            <div class="sl">Our forecast vs the analysts</div>
+            <div style="overflow-x:auto"><table id="rm-analysts"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+            <div id="rm-analyst-note" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+
+            <div class="sl" style="margin-top:22px">Broker notes on this name</div>
+            <div style="overflow-x:auto"><table id="stk-brokers"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+            <div class="sl" style="margin-top:22px">Research &amp; documents</div>
+            <div id="sd-research"><div class="empty" style="font-size:11px">—</div></div>
+
+            <div class="sl" style="margin-top:22px">Source workbook</div>
             <div id="rm-files"><div class="empty" style="font-size:11px">—</div></div>
+
+            <div style="display:flex;align-items:center;gap:10px;margin-top:22px">
+              <div class="sl" style="flex:1;margin:0">Every pack captured, dated to the announcement</div>
+              <button class="xl" onclick="stkExport('fundamentals')">↓ Excel</button>
+            </div>
+            <div style="overflow-x:auto;margin-top:8px"><table id="stk-fund-hist"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+            <div id="stk-fund" class="mg-grid" style="margin-top:16px"></div>
+            <div id="stk-fund-asof" style="font-size:10px;color:var(--muted);margin-top:6px"></div>
           </div>
-        </div>
-
-        <div class="sl" style="margin-top:22px">Our forecast vs the analysts</div>
-        <div style="overflow-x:auto"><table id="rm-analysts"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
-        <div id="rm-analyst-note" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
-
-        <div class="sl" style="margin-top:22px">Broker notes on this name</div>
-        <div style="overflow-x:auto"><table id="stk-brokers"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
-
-        <div class="sl" style="margin-top:22px">Research &amp; documents</div>
-        <div id="sd-research"><div class="empty" style="font-size:11px">—</div></div>
+        </details>
       </div>
     </div>
 
-    <!-- ── 5 · STATEMENTS ────────────────────────────────────────────────── -->
+    <!-- ── 5 · THE PORTFOLIO ─────────────────────────────────────────────────
+         The property statistics, at the level the question is actually asked:
+         what is owned, what it yields, where it is, and how concentrated it is.
+         The register is the only place a blended cap rate can be checked against
+         the assets underneath it. -->
+    <div class="sec" id="sec-port">
+      <div class="sec-head" onclick="stkToggle('port')">
+        <span class="chev">▶</span><span class="sec-n">5</span>
+        <span class="sec-title">The portfolio — every property statistic</span>
+        <span class="sec-sum" id="sum-port"></span>
+      </div>
+      <div class="sec-body">
+        <div id="stk-port-kpi" class="kb"></div>
+        <div id="stk-port-recon"></div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:20px">
+          <div><div class="sl">By sector</div><div style="overflow-x:auto"><table id="port-sector"><tbody><tr><td class="empty">—</td></tr></tbody></table></div></div>
+          <div><div class="sl">By state</div><div style="overflow-x:auto"><table id="port-state"><tbody><tr><td class="empty">—</td></tr></tbody></table></div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:20px">
+          <div><div class="sl">Largest tenants — by passing income</div><div style="overflow-x:auto"><table id="port-tenant"><tbody><tr><td class="empty">—</td></tr></tbody></table></div></div>
+          <div><div class="sl">Largest assets — by book value</div><div style="overflow-x:auto"><table id="port-asset"><tbody><tr><td class="empty">—</td></tr></tbody></table></div></div>
+        </div>
+
+        <div class="sl" style="margin-top:24px">Cap rate spread — where the blended rate comes from</div>
+        <div style="overflow-x:auto"><table id="port-cap"><tbody><tr><td class="empty">—</td></tr></tbody></table></div>
+
+        <div style="margin-top:10px">
+          <button class="btn btn-secondary" style="font-size:11px" onclick="stkOpenPropertyBook()">Open the full register to edit cap rates and income →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 6 · STATEMENTS ────────────────────────────────────────────────── -->
     <div class="sec" id="sec-stmt">
       <div class="sec-head" onclick="stkToggle('stmt')">
-        <span class="chev">▶</span><span class="sec-n">5</span>
+        <span class="chev">▶</span><span class="sec-n">6</span>
         <span class="sec-title">Statements, debt book, property book &amp; DCF</span>
         <span class="sec-sum" id="sum-stmt"></span>
       </div>
@@ -1199,7 +1284,7 @@ tr.vm-blend td{border-top:2px solid var(--ink);font-weight:600;background:var(--
          about this REIT. This is where that gets fixed, one name at a time. -->
     <div class="sec" id="sec-tax">
       <div class="sec-head" onclick="stkToggle('tax')">
-        <span class="chev">▶</span><span class="sec-n">6</span>
+        <span class="chev">▶</span><span class="sec-n">7</span>
         <span class="sec-title">Tax — what you actually keep</span>
         <span class="sec-sum" id="sum-tax"></span>
       </div>
@@ -4429,6 +4514,8 @@ function renderReitModel() {
   document.getElementById('rm-cover-note').textContent = `ICR ${last.icr!=null?last.icr.toFixed(2)+'x':'—'} · gearing ${last.gearing!=null?f.pct0(last.gearing):'—'}`;
 
   rmSyncDrivers(m);
+  renderStkSeries();          // the forecast columns exist only once the model builds
+  renderStkBridge();
   renderRmStatement(m);
   renderRmSensitivity(m);
   renderRmAnalysts(m);
@@ -5028,6 +5115,522 @@ async function openStock(ticker) {
   loadReitModel(stkTicker);
   loadAssets(stkTicker);
   stkLoadTax(stkTicker);
+  stkLoadSeries(stkTicker);
+}
+
+/* ── 4 · TRACK RECORD → FORECAST ──────────────────────────────────────────────
+ * The three reported years and the forecast in ONE grid. A forecast shown on its
+ * own is a number you have to take on trust; shown as the fourth column after
+ * three reported ones, it either continues the record or it does not, and you can
+ * see which without doing arithmetic.
+ *
+ * UNITS — the trap this table walks straight through (SPEC §1.1):
+ *   reit_model_actuals.ffo_per_unit, .dpu     CENTS      (17.209, 16.0)
+ *   reit_fundamentals.dps, .nta               DOLLARS    (0.1680, 4.01)
+ *   reit_fundamentals.ffo, .portfolio_value   DOLLARS    (114100000)
+ *   reit_broker_forecasts.eps_fyNN, dpu_fyNN  CENTS
+ *   the model                                 DOLLARS
+ * Everything is converted to cents-per-unit and $m ONCE, here, on the way in.
+ * Nothing downstream converts again. */
+let stkSeries = { actuals: [], consensus: [], fy0: null };
+
+const FY_OF = isoDate => {
+  // Australian financial year ends 30 June: a June-2026 balance date is FY26.
+  const d = new Date(isoDate + 'T00:00:00');
+  return d.getMonth() >= 6 ? d.getFullYear() + 1 : d.getFullYear();
+};
+
+async function stkLoadSeries(ticker) {
+  stkSeries = { actuals: [], consensus: [], fy0: null };
+  const [{ data: acts }, { data: funds }, { data: fc }, { data: mdl }] = await Promise.all([
+    db.from('reit_model_actuals').select('*').eq('ticker', ticker),
+    db.from('reit_fundamentals').select('*').eq('ticker', ticker).order('period_end'),
+    db.from('reit_broker_forecasts').select('*').eq('ticker', ticker),
+    db.from('reit_models').select('securities_m').eq('ticker', ticker).eq('is_current', true).limit(1),
+  ]);
+  const secs = Number(mdl?.[0]?.securities_m) || null;
+
+  /* DEDUPE. The workbook export writes each year twice — FY25 and FY25A carry
+   * the same figures at two precisions — so a naive read shows a six-year track
+   * record made of three years. Key on the numeric year and keep the row with
+   * the most precision, which is the unsuffixed one. */
+  const byFy = new Map();
+  (acts || []).forEach(r => {
+    const y = parseInt(String(r.fy).replace(/\D/g, ''), 10);
+    if (!y) return;
+    const fy = y < 100 ? 2000 + y : y;
+    const prev = byFy.get(fy);
+    const precision = String(r.ffo_per_unit ?? '').replace(/^\d*\.?/, '').length;
+    if (!prev || precision > prev._p) byFy.set(fy, { ...r, _p: precision });
+  });
+
+  const rows = [...byFy.entries()].map(([fy, r]) => ({
+    fy, actual: true, label: `FY${String(fy).slice(2)}A`,
+    npi_m: num(r.noi_m), ffo_m: num(r.ffo_m),
+    ffo_c: num(r.ffo_per_unit), dpu_c: num(r.dpu),
+    nta: num(r.nta), gearing: num(r.gearing),
+    source: 'workbook actuals',
+  }));
+
+  /* The most recent year lives in reit_fundamentals, not in the workbook — it is
+   * the results pack ingested from the PDF. Merge it in as the same kind of row
+   * so the newest actual is not a different shape from the older ones. */
+  (funds || []).filter(x => x.period_months === 12 && x.period_end).forEach(x => {
+    const fy = FY_OF(x.period_end);
+    const existing = rows.find(r => r.fy === fy);
+    const merged = {
+      fy, actual: true, label: `FY${String(fy).slice(2)}A`,
+      npi_m: num(x.npi) != null ? num(x.npi)/1e6 : existing?.npi_m ?? null,
+      ffo_m: num(x.ffo) != null ? num(x.ffo)/1e6 : existing?.ffo_m ?? null,
+      // ffo is a DOLLAR total and securities are millions → cents per security.
+      ffo_c: (num(x.ffo) != null && secs) ? (num(x.ffo)/(secs*1e6))*100 : existing?.ffo_c ?? null,
+      dpu_c: num(x.dps) != null ? num(x.dps)*100 : existing?.dpu_c ?? null,   // dps is DOLLARS
+      nta: num(x.nta) ?? existing?.nta ?? null,
+      gearing: num(x.gearing) ?? existing?.gearing ?? null,
+      wacr: num(x.wacr), wale: num(x.wale), occupancy: num(x.occupancy), icr: num(x.icr),
+      hedge: num(x.hedge_pct),
+      portfolio_m: num(x.portfolio_value) != null ? num(x.portfolio_value)/1e6 : null,
+      source: `pack released ${x.release_date}`,
+      guidance: (x.guidance_ffo_low != null || x.guidance_dps != null) ? {
+        fy: x.guidance_fy, ffo_lo: num(x.guidance_ffo_low), ffo_hi: num(x.guidance_ffo_high),
+        dps: num(x.guidance_dps),
+      } : null,
+    };
+    if (existing) Object.assign(existing, merged); else rows.push(merged);
+  });
+
+  rows.sort((a,b) => a.fy - b.fy);
+  stkSeries.actuals = rows.slice(-3);           // last three FYs, current one included
+  stkSeries.fy0 = rows.length ? rows[rows.length-1].fy : null;
+  stkSeries.consensus = fc || [];
+  renderStkSeries();
+  stkSummaries();
+}
+
+const num = v => v == null || v === '' ? null : (isNaN(Number(v)) ? null : Number(v));
+
+/* ── THE WALK ─────────────────────────────────────────────────────────────────
+ * From the last REPORTED figure to the first FORECAST one, one line at a time,
+ * each line naming the assumption that produced it and where that assumption
+ * came from. The engine already stores a `workings` entry for every line it
+ * computes; this reads them out rather than recomputing anything, so the walk
+ * and the statements cannot disagree.
+ *
+ * The point is that no number in the forecast column should be a surprise: you
+ * start at a figure the REIT published, and every step to the forecast is an
+ * assumption you can see, source, and change. */
+function renderStkBridge() {
+  const el = document.getElementById('stk-bridge');
+  if (!el) return;
+  if (!rmModel?.ok) { el.innerHTML = '<div class="empty">No model — nothing to walk.</div>'; return; }
+
+  const y1 = rmModel.years[0];
+  const A = stkSeries.actuals, last = A[A.length-1];
+  const secs = Number(rmAssumptions.securities_m);
+  const fyE = stkSeries.fy0 ? `FY${String(stkSeries.fy0+1).slice(2)}E` : 'Year 1';
+  const fyA = last?.label || 'last reported';
+
+  const src = key => {
+    const s = rmSource[key];
+    if (!s) return '';
+    const [txt, cls] = RM_SRC_LABEL[s.tag] || ['',''];
+    return `<span class="drv-src ${cls}" style="margin-left:6px" title="${(s.note||'').replace(/"/g,'&quot;')}">${txt}</span>`;
+  };
+  const m1 = v => v == null ? '—' : (v < 0 ? '(' + Math.abs(v).toFixed(1) + ')' : v.toFixed(1));
+  const perU = v => (v != null && secs) ? (v/secs*100).toFixed(2) + 'c' : '—';
+
+  // NPI step. The prior NPI the engine grew from is in its own workings.
+  const wk = y1.workings || {};
+  const priorNpi = wk.noi_grown?.inputs?.prior_npi ?? null;
+  const lfl = y1.lfl_growth;
+  const npiStep = (priorNpi != null && y1.npi != null) ? y1.npi - priorNpi : null;
+
+  const line = (label, val, note, opts = {}) => `<tr${opts.total ? ' class="wk-t"' : ''}>
+    <td class="wk-l">${label}</td>
+    <td class="r wk-v">${m1(val)}</td>
+    <td class="r wk-u">${opts.noPer ? '' : perU(val)}</td>
+    <td class="wk-n">${note || ''}</td></tr>`;
+
+  el.innerHTML = `
+    <div style="overflow-x:auto"><table class="wk">
+      <thead><tr><th>From ${fyA} reported, to ${fyE} forecast</th>
+        <th class="r">$m</th><th class="r">per security</th><th>Why it moves</th></tr></thead>
+      <tbody>
+        ${line(`${fyA} passing NPI`, priorNpi, `The base the model grows from. ${last?.source || ''}`, { total:true })}
+        ${line('Like-for-like growth', npiStep,
+            `${lfl!=null?f.pct0(lfl,1):'—'} applied to the standing book${src('like_for_like_growth')}` +
+            (rmAssumptions.like_for_like_growth != null
+              ? ` — the reported rate, faded toward contracted escalation of ${f.pct0(rmAssumptions.escalation,1)} over ${rmAssumptions.lfl_fade_years ?? 3} years, because one strong year is an outcome and not a run rate`
+              : ` — built up from escalation ${f.pct0(rmAssumptions.escalation,1)} on the standing book and reversion ${f.pct0(rmAssumptions.reversion,1)} on the ${f.pct0(y1.expiring_share||0,1)} expiring`))}
+        ${line(`${fyE} NPI`, y1.npi, 'What the properties earn before any corporate cost', { total:true })}
+        ${y1.mgmt_fee_m ? line('Management fee', -y1.mgmt_fee_m, `${f.pct0(rmAssumptions.mgmt_fee_pct_gav||0,2)} of gross assets${src('mgmt_fee_pct_gav')}`) : ''}
+        ${line('Corporate admin', -y1.admin_m,
+            `${src('admin_cost_m')}${rmSource.admin_cost_m?.tag === 'cal'
+              ? 'Solved so the base year ties to the FFO the REIT actually reported — not a guess at head-office cost'
+              : 'Engine default — no reported figure to solve against'}`)}
+        ${line('EBIT', y1.ebit_m, 'NPI less the cost of running the vehicle', { total:true })}
+        ${line('Net finance cost', -y1.net_finance_m,
+            `Cost of debt ${f.pct0(rmAssumptions.cost_of_debt||0)}${src('cost_of_debt')} on the drawn book, ` +
+            `${rmAssumptions.hedging_enabled === false ? 'UNHEDGED' : `${f.pct0(rmAssumptions.hedge_ratio||0)} hedged`}${src('hedge_ratio')}` +
+            (y1.blended_debt_rate != null ? ` · blended ${f.pct0(y1.blended_debt_rate)} after the tranche schedule` : ''))}
+        ${line(`${fyE} FFO`, y1.ffo_m, `÷ ${secs?secs.toFixed(1):'—'}m securities on issue`, { total:true })}
+        ${line('Distributions', -y1.distributions_m,
+            `${f.pct0(rmAssumptions.payout_ratio||0,1)} payout of ${String(rmAssumptions.payout_basis||'affo').toUpperCase()}${src('payout_ratio')}` +
+            (rmSource.payout_ratio?.tag === 'cal' ? ' — the ratio the company itself guided for this year' : ''))}
+        ${line('Retained', y1.ffo_m != null && y1.distributions_m != null ? y1.ffo_m - y1.distributions_m : null,
+            'What stays in the vehicle to fund capex and reduce gearing', { total:true })}
+      </tbody>
+    </table></div>
+
+    <div class="sl" style="margin-top:24px">And how the methods reconcile to one fair value</div>
+    <div style="overflow-x:auto"><table class="wk">
+      <thead><tr><th>Method</th><th class="r">Value</th><th class="r">Weight</th>
+        <th class="r">Contribution</th><th>What it rests on</th></tr></thead>
+      <tbody>${(() => {
+        const v = rmModel.valuation, W = v.weights || {};
+        const named = { cap_rate_nav:'Cap-rate NAV', dcf:'Levered DCF', ddm:'Dividend discount',
+                        exit_cap_nav:'Exit-cap NAV', ffo_multiple:'FFO multiple' };
+        const valOf = k => k === 'ffo_multiple' ? v.ffo_multiple_value : v[k];
+        const used = Object.keys(named).filter(k => W[k] > 0 && valOf(k) != null);
+        return used.map(k => `<tr>
+            <td class="wk-l">${named[k]}</td>
+            <td class="r wk-v">${f.$(valOf(k))}</td>
+            <td class="r wk-u">${f.pct0(W[k],0)}</td>
+            <td class="r wk-v">${f.$(valOf(k) * W[k])}</td>
+            <td class="wk-n">${STK_METHOD_NOTES[k] || ''}</td></tr>`).join('') +
+          `<tr class="wk-t"><td class="wk-l">Blended fair value</td>
+            <td class="r wk-v"></td>
+            <td class="r wk-u">${f.pct0(used.reduce((s,k)=>s+W[k],0),0)}</td>
+            <td class="r wk-v">${f.$(v.blended_value)}</td>
+            <td class="wk-n">The sum of the contributions — nothing else is added.</td></tr>` +
+          (rmContext.price ? `<tr><td class="wk-l">Price today</td><td class="r wk-v"></td><td></td>
+            <td class="r wk-v">${f.$(rmContext.price)}</td>
+            <td class="wk-n">Gap of <strong style="color:${v.blended_value>rmContext.price?'var(--green)':'var(--red)'}">${
+              f.pct((v.blended_value-rmContext.price)/rmContext.price,1)}</strong>.</td></tr>` : '');
+      })()}</tbody>
+    </table></div>
+    <div class="vm-note" style="margin-top:8px">
+      Weights are renormalised over the methods that produced a value, which is why they sum to 100%
+      even when a method is missing. Broker consensus, book NTA and the SOTP roll-up appear in section 2
+      at a deliberate <strong>0%</strong> — they are evidence to check the answer against, not inputs to it.
+    </div>`;
+}
+
+/* ── 5 · THE PORTFOLIO ────────────────────────────────────────────────────────
+ * Every cut is computed from the SAME register the valuation capitalises, so a
+ * number here and a number in the model cannot disagree. Cap rates are always
+ * VALUE-WEIGHTED (income ÷ book), never averaged: the naive average of 83 cap
+ * rates is not the portfolio's cap rate, and the gap between the two is exactly
+ * the thing a blended figure hides.
+ *
+ * The register is also the only place the disclosed blended rate can be checked,
+ * so the reconciliation against the pack is printed rather than assumed. */
+function renderPortfolio(assets) {
+  const rows = (assets || []).filter(a => !a.is_excluded);
+  const kpi = document.getElementById('stk-port-kpi');
+  if (!kpi) return;
+  const setT = (id, html) => { const e = document.getElementById(id); if (e) e.innerHTML = html; };
+
+  if (!rows.length) {
+    kpi.innerHTML = '';
+    setT('stk-port-recon', `<div class="empty">No asset register for ${stkTicker}. Load a property compendium and every cut below fills in.</div>`);
+    ['port-sector','port-state','port-tenant','port-asset','port-cap']
+      .forEach(id => setT(id, '<tbody><tr><td class="empty">—</td></tr></tbody>'));
+    stkSummaries();
+    return;
+  }
+
+  const inc = a => num(a.income_override_m) ?? num(a.passing_income_m);
+  const cap = a => num(a.cap_rate_override) ?? num(a.cap_rate);
+  const bv  = a => num(a.book_value_m);
+
+  const priced   = rows.filter(a => bv(a) && inc(a));
+  const book     = rows.reduce((s,a) => s + (bv(a) || 0), 0);
+  const income   = rows.reduce((s,a) => s + (inc(a) || 0), 0);
+  const wtdCap   = book ? income/book : null;
+  const caps     = priced.map(cap).filter(x => x != null);
+  const naiveCap = caps.length ? caps.reduce((a,c)=>a+c,0)/caps.length : null;
+  const area     = rows.reduce((s,a) => s + (num(a.area_sqm) || 0), 0);
+
+  // WALE and occupancy are income-weighted; a simple average would let a $4m
+  // asset move the portfolio figure as much as a $200m one.
+  const wAvg = (pick) => {
+    let n = 0, d = 0;
+    rows.forEach(a => { const v = num(pick(a)), w = inc(a);
+      if (v != null && w && !a.wale_occupancy_suspect) { n += v*w; d += w; } });
+    return d ? n/d : null;
+  };
+  const wale = wAvg(a => a.wale_years), occ = wAvg(a => a.occupancy);
+  const suspect = rows.filter(a => a.wale_occupancy_suspect).length;
+
+  const pack = stkSeries.actuals[stkSeries.actuals.length - 1] || {};
+
+  kpi.innerHTML = `
+    <div class="kc dk"><div class="kl">Assets</div><div class="kv">${rows.length}</div>
+      <div class="kn">${priced.length} priced${rows.length>priced.length?` · ${rows.length-priced.length} without income or cap rate`:''}</div></div>
+    <div class="kc"><div class="kl">Book value</div><div class="kv">$${Math.round(book).toLocaleString()}m</div>
+      <div class="kn">${area ? Math.round(area).toLocaleString()+' sqm' : 'area not captured'}</div></div>
+    <div class="kc"><div class="kl">Passing income</div><div class="kv">$${income.toFixed(1)}m</div>
+      <div class="kn">sum of the register</div></div>
+    <div class="kc"><div class="kl">Weighted cap rate</div><div class="kv teal">${wtdCap!=null?f.pct0(wtdCap):'--'}</div>
+      <div class="kn">${naiveCap!=null?`naive average ${f.pct0(naiveCap)}`:'income ÷ book'}</div></div>`;
+
+  /* RECONCILE TO THE PACK. A register that does not tie to the disclosed
+   * portfolio value is missing assets, and a valuation built on it is understated
+   * by whatever is missing. Saying so beats a tidy number that is quietly wrong. */
+  const gap = (pack.portfolio_m != null && book) ? (book - pack.portfolio_m)/pack.portfolio_m : null;
+  const capGap = (pack.wacr != null && wtdCap != null) ? (wtdCap - pack.wacr)*10000 : null;
+  setT('stk-port-recon', `
+    <div class="caveat" style="border-left-color:${gap==null?'var(--rule)':Math.abs(gap)<0.03?'var(--green)':'var(--amber)'}">
+      <strong>Register vs the pack.</strong>
+      ${pack.portfolio_m != null
+        ? `The register totals <strong>$${Math.round(book).toLocaleString()}m</strong> against
+           <strong>$${Math.round(pack.portfolio_m).toLocaleString()}m</strong> disclosed —
+           ${Math.abs(gap) < 0.005 ? 'a match' : `a ${(gap*100).toFixed(1)}% difference`}.`
+        : 'The pack disclosed no portfolio value to check against.'}
+      ${capGap != null
+        ? ` The weighted cap rate is <strong>${f.pct0(wtdCap)}</strong> against a disclosed WACR of
+            <strong>${f.pct0(pack.wacr)}</strong>${Math.abs(capGap) < 5 ? ' — reconciles exactly' : `, ${Math.round(capGap)}bps apart`}.`
+        : ''}
+      ${suspect ? `<br><strong style="color:var(--red)">${suspect} asset(s)</strong> carry WALE/occupancy flagged as suspect in the source scrape and are excluded from those two averages.` : ''}
+    </div>`);
+
+  // ── cuts ──────────────────────────────────────────────────────────────────
+  const cut = (keyFn, label) => {
+    const map = new Map();
+    rows.forEach(a => {
+      const k = keyFn(a) || 'Not stated';
+      const g = map.get(k) || { k, n:0, book:0, income:0 };
+      g.n++; g.book += bv(a) || 0; g.income += inc(a) || 0;
+      map.set(k, g);
+    });
+    return [...map.values()].sort((a,b) => b.book - a.book);
+  };
+  const cutTable = (groups, head) => `
+    <thead><tr><th>${head}</th><th class="r">Assets</th><th class="r">Book $m</th>
+      <th class="r">% of book</th><th class="r">Cap rate</th></tr></thead>
+    <tbody>${groups.map(g => `<tr>
+      <td>${g.k}</td><td class="r">${g.n}</td>
+      <td class="r">${Math.round(g.book).toLocaleString()}</td>
+      <td class="r">${book?f.pct0(g.book/book,1):'—'}</td>
+      <td class="r">${g.book?f.pct0(g.income/g.book):'—'}</td>
+    </tr>`).join('')}
+    <tr style="border-top:2px solid var(--ink);font-weight:600">
+      <td>Total</td><td class="r">${rows.length}</td>
+      <td class="r">${Math.round(book).toLocaleString()}</td><td class="r">100%</td>
+      <td class="r">${wtdCap!=null?f.pct0(wtdCap):'—'}</td></tr></tbody>`;
+
+  setT('port-sector', cutTable(cut(a => a.sector, 'Sector'), 'Sector'));
+  setT('port-state',  cutTable(cut(a => a.state,  'State'),  'State'));
+
+  // Tenants ranked by INCOME — concentration is an income risk, not a book one.
+  const tenants = cut(a => a.major_tenant, 'Tenant').sort((a,b) => b.income - a.income).slice(0, 10);
+  setT('port-tenant', `
+    <thead><tr><th>Tenant</th><th class="r">Assets</th><th class="r">Income $m</th><th class="r">% of income</th></tr></thead>
+    <tbody>${tenants.map(g => `<tr>
+      <td>${g.k}</td><td class="r">${g.n}</td><td class="r">${g.income.toFixed(1)}</td>
+      <td class="r">${income?f.pct0(g.income/income,1):'—'}</td></tr>`).join('')}
+    <tr style="border-top:1px solid var(--rule);color:var(--muted)">
+      <td colspan="3" style="font-size:11px">Top 10 of ${new Set(rows.map(a=>a.major_tenant).filter(Boolean)).size} named tenants</td>
+      <td class="r">${income?f.pct0(tenants.reduce((s,g)=>s+g.income,0)/income,1):'—'}</td></tr></tbody>`);
+
+  const top = [...rows].sort((a,b) => (bv(b)||0) - (bv(a)||0)).slice(0, 10);
+  setT('port-asset', `
+    <thead><tr><th>Asset</th><th>State</th><th class="r">Book $m</th><th class="r">% of book</th><th class="r">Cap</th></tr></thead>
+    <tbody>${top.map(a => `<tr>
+      <td title="${(a.address||'').replace(/"/g,'&quot;')}">${a.asset_name || '—'}</td>
+      <td style="font-size:11px;color:var(--muted)">${a.state || '—'}</td>
+      <td class="r">${bv(a)!=null?bv(a).toFixed(1):'—'}</td>
+      <td class="r">${book&&bv(a)?f.pct0(bv(a)/book,1):'—'}</td>
+      <td class="r">${cap(a)!=null?f.pct0(cap(a)):'—'}</td></tr>`).join('')}
+    <tr style="border-top:1px solid var(--rule);color:var(--muted)">
+      <td colspan="3" style="font-size:11px">Top 10 of ${rows.length} assets</td>
+      <td class="r">${book?f.pct0(top.reduce((s,a)=>s+(bv(a)||0),0)/book,1):'—'}</td><td></td></tr></tbody>`);
+
+  /* THE SPREAD IS THE POINT. A single blended cap rate is a summary of a
+   * distribution, and on an 83-asset register that distribution runs 250bps
+   * wide. Banding it shows how much of the book actually sits at the blended
+   * rate — usually much less than you would guess. */
+  const bands = [[0,0.055,'under 5.5%'],[0.055,0.06,'5.5–6.0%'],[0.06,0.065,'6.0–6.5%'],
+                 [0.065,0.07,'6.5–7.0%'],[0.07,1,'over 7.0%']];
+  setT('port-cap', `
+    <thead><tr><th>Band</th><th class="r">Assets</th><th class="r">Book $m</th><th class="r">% of book</th><th style="width:180px">Share</th></tr></thead>
+    <tbody>${bands.map(([lo,hi,label]) => {
+      const inB = priced.filter(a => cap(a) >= lo && cap(a) < hi);
+      const b = inB.reduce((s,a) => s + (bv(a)||0), 0);
+      const share = book ? b/book : 0;
+      return `<tr><td>${label}</td><td class="r">${inB.length}</td>
+        <td class="r">${Math.round(b).toLocaleString()}</td>
+        <td class="r">${f.pct0(share,1)}</td>
+        <td><div class="vm-bar"><span style="width:${Math.round(share*100)}%"></span></div></td></tr>`;
+    }).join('')}
+    <tr style="border-top:2px solid var(--ink)">
+      <td colspan="5" class="vm-note">Range ${caps.length?f.pct0(Math.min(...caps)):'—'} to
+        ${caps.length?f.pct0(Math.max(...caps)):'—'} — a
+        <strong>${caps.length?Math.round((Math.max(...caps)-Math.min(...caps))*10000):'—'}bps spread</strong>
+        that the single weighted rate of ${wtdCap!=null?f.pct0(wtdCap):'—'} conceals.</td></tr></tbody>`);
+
+  stkSummaries();
+}
+
+function renderStkSeries() {
+  const el = document.getElementById('stk-series');
+  if (!el) return;
+  const A = stkSeries.actuals;
+  const F = (rmModel?.ok ? rmModel.years : []) || [];
+  if (!A.length && !F.length) {
+    el.innerHTML = '<tbody><tr><td class="empty">No reported years and no model for this name.</td></tr></tbody>';
+    return;
+  }
+
+  /* Forecast years are numbered from the model's base. The base is the last
+   * reported year, so forecast year 1 is the FY after it — stated rather than
+   * assumed, because getting this off by one silently compares our FY27 against
+   * a broker's FY26. */
+  const fy0 = stkSeries.fy0;
+  const fcols = F.slice(0, 5).map((y, i) => ({
+    ...y, actual: false,
+    fy: fy0 ? fy0 + 1 + i : null,
+    label: fy0 ? `FY${String(fy0 + 1 + i).slice(2)}E` : `Yr ${i+1}E`,
+  }));
+  const cols = [...A, ...fcols];
+  const nA = A.length;
+
+  // Consensus, keyed by the same FY numbers the columns carry.
+  const mean = arr => { const v = arr.filter(x => x != null); return v.length ? v.reduce((a,c)=>a+c,0)/v.length : null; };
+  const cons = fy => {
+    const k = String(fy).slice(2);
+    return { eps: mean(stkSeries.consensus.map(r => num(r['eps_fy'+k]))),
+             dpu: mean(stkSeries.consensus.map(r => num(r['dpu_fy'+k]))) };
+  };
+  const nBrokers = stkSeries.consensus.length;
+
+  const price = rmContext.price;
+  const c1 = v => v == null ? '—' : v.toFixed(1) + 'c';
+  const m0 = v => v == null ? '—' : Math.round(v).toLocaleString();
+  const p1 = v => v == null ? '—' : (v*100).toFixed(1) + '%';
+  const d2 = v => v == null ? '—' : '$' + v.toFixed(2);
+  const gr = (cur, prev) => (cur == null || prev == null || !prev) ? '—' :
+    `<span style="color:${cur>=prev?'var(--green)':'var(--red)'}">${cur>=prev?'+':''}${(((cur-prev)/Math.abs(prev))*100).toFixed(1)}%</span>`;
+
+  const get = {
+    portfolio_m: c => c.actual ? c.portfolio_m : (c.investment_properties_m ?? null),
+    npi_m:       c => c.actual ? c.npi_m       : (c.npi ?? null),
+    ffo_m:       c => c.actual ? c.ffo_m       : (c.ffo_m ?? null),
+    ffo_c:       c => c.actual ? c.ffo_c       : (c.ffo_per_unit != null ? c.ffo_per_unit*100 : null),
+    dpu_c:       c => c.actual ? c.dpu_c       : (c.dpu != null ? c.dpu*100 : null),
+    nta:         c => c.actual ? c.nta         : (c.nta ?? null),
+    gearing:     c => c.actual ? c.gearing     : (c.gearing ?? null),
+    icr:         c => c.actual ? c.icr         : (c.icr ?? null),
+  };
+
+  const row = (label, fmt, pick, opts = {}) => {
+    const vals = cols.map(pick);
+    return `<tr${opts.strong ? ' class="ser-key"' : ''}>
+      <td class="ser-l">${label}${opts.note ? `<small>${opts.note}</small>` : ''}</td>
+      ${vals.map((v,i) => `<td class="r${i < nA ? ' ser-a' : ''}${i === nA ? ' ser-first' : ''}">${fmt(v)}</td>`).join('')}
+    </tr>`;
+  };
+  const growthRow = (label, pick) => {
+    const vals = cols.map(pick);
+    return `<tr class="ser-g">
+      <td class="ser-l">${label}</td>
+      ${vals.map((v,i) => `<td class="r${i < nA ? ' ser-a' : ''}${i === nA ? ' ser-first' : ''}">${i===0?'—':gr(v, vals[i-1])}</td>`).join('')}
+    </tr>`;
+  };
+  const grp = t => `<tr class="ser-grp"><td colspan="${cols.length+1}">${t}</td></tr>`;
+
+  el.innerHTML = `
+    <thead><tr>
+      <th class="ser-l"></th>
+      ${cols.map((c,i) => `<th class="r${i < nA ? ' ser-a' : ''}${i === nA ? ' ser-first' : ''}">${c.label}</th>`).join('')}
+    </tr>
+    <tr class="ser-sub">
+      <th class="ser-l"></th>
+      ${cols.map((c,i) => `<th class="r${i < nA ? ' ser-a' : ''}${i === nA ? ' ser-first' : ''}">${
+        i < nA ? 'reported' : (i === nA ? 'forecast →' : '')}</th>`).join('')}
+    </tr></thead>
+    <tbody>
+      ${grp('Property')}
+      ${row('Portfolio value', m0, get.portfolio_m, { note:'$m' })}
+      ${row('Passing NPI', v => v==null?'—':v.toFixed(1), get.npi_m, { note:'$m' })}
+      ${growthRow('NPI growth', get.npi_m)}
+
+      ${grp('Earnings')}
+      ${row('FFO', v => v==null?'—':v.toFixed(1), get.ffo_m, { note:'$m' })}
+      ${row('FFO per security', c1, get.ffo_c, { strong:true })}
+      ${growthRow('growth', get.ffo_c)}
+      ${nBrokers ? row('Broker consensus EPS', c1, c => c.fy ? cons(c.fy).eps : null,
+                       { note:`mean of ${nBrokers}` }) : ''}
+      ${nBrokers ? row('us vs consensus', v => v==null?'—':(v>0?'+':'')+v.toFixed(1)+'c',
+          c => { if (!c.fy) return null; const o = get.ffo_c(c), k = cons(c.fy).eps;
+                 return (o!=null && k!=null) ? o-k : null; }) : ''}
+
+      ${grp('Distribution')}
+      ${row('DPU', c1, get.dpu_c, { strong:true })}
+      ${growthRow('growth', get.dpu_c)}
+      ${row('Payout of FFO', p1, c => { const d = get.dpu_c(c), ff = get.ffo_c(c);
+              return (d!=null && ff) ? d/ff : null; })}
+      ${price ? row('Yield on today\'s price', p1, c => { const d = get.dpu_c(c);
+              return d != null ? (d/100)/price : null; }, { note:d2(price) }) : ''}
+      ${nBrokers ? row('Broker consensus DPU', c1, c => c.fy ? cons(c.fy).dpu : null,
+                       { note:`mean of ${nBrokers}` }) : ''}
+
+      ${grp('Balance sheet')}
+      ${row('NTA per security', d2, get.nta, { strong:true })}
+      ${growthRow('growth', get.nta)}
+      ${row('Gearing', p1, get.gearing)}
+      ${row('Interest cover', v => v==null?'—':v.toFixed(2)+'x', get.icr)}
+    </tbody>`;
+
+  renderSeriesNote();
+}
+
+/* The guidance test, printed where the actual and the forecast meet — the only
+ * out-of-sample check a forward model has. */
+function renderSeriesNote() {
+  const el = document.getElementById('stk-series-note');
+  if (!el) return;
+  const last = stkSeries.actuals[stkSeries.actuals.length - 1];
+  const g = last?.guidance;
+  if (!g || !rmModel?.ok) {
+    el.innerHTML = last
+      ? `<div class="caveat">Reported years to <strong>${last.label}</strong>, ${last.source}. The company published no ${g?'':'FY'} guidance in that pack, so the forecast has no out-of-sample test.</div>`
+      : '';
+    return;
+  }
+  const y1 = rmModel.years[0];
+  const gMid = g.ffo_lo != null ? ((g.ffo_lo + (g.ffo_hi ?? g.ffo_lo))/2) : null;
+  const mFfo = y1?.ffo_per_unit, mDpu = y1?.dpu;
+  const err = (mine, theirs) => (mine != null && theirs) ? (mine - theirs)/theirs : null;
+  const eF = err(mFfo, gMid), eD = err(mDpu, g.dps);
+  const worst = Math.max(Math.abs(eF ?? 0), Math.abs(eD ?? 0));
+  const verdict = worst <= 0.05 ? ['CALIBRATED','var(--green)'] : worst <= 0.15 ? ['LOOSE','var(--amber)'] : ['MISCALIBRATED','var(--red)'];
+  const c = v => v == null ? '—' : (v*100).toFixed(1)+'c';
+  const pc = v => v == null ? '—' : ((v>0?'+':'')+(v*100).toFixed(1)+'%');
+
+  el.innerHTML = `
+    <div class="caveat" style="border-left-color:${verdict[1]}">
+      <strong>Reported through ${last.label}</strong> (${last.source}). CIP-style test — the company
+      guided <strong>${g.fy || 'next year'}</strong> in that same pack, so our first forecast year can be
+      marked against it before you trust anything further out.
+      <table style="margin-top:8px">
+        <thead><tr><th>Test</th><th class="r">Company guides</th><th class="r">Our model</th><th class="r">Gap</th></tr></thead>
+        <tbody>
+          <tr><td>FFO per security</td>
+            <td class="r">${g.ffo_lo!=null?`${c(g.ffo_lo)}–${c(g.ffo_hi ?? g.ffo_lo)}`:'—'}</td>
+            <td class="r" style="font-weight:600">${c(mFfo)}</td>
+            <td class="r" style="color:${Math.abs(eF??0)<=0.05?'var(--green)':'var(--red)'}">${pc(eF)}</td></tr>
+          <tr><td>Distribution per security</td>
+            <td class="r">${c(g.dps)}</td>
+            <td class="r" style="font-weight:600">${c(mDpu)}</td>
+            <td class="r" style="color:${Math.abs(eD??0)<=0.05?'var(--green)':'var(--red)'}">${pc(eD)}</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:6px"><strong style="color:${verdict[1]}">${verdict[0]}</strong> —
+        within 5% is calibrated, within 15% is loose, worse than that means the forecast columns
+        are not trustworthy and the assumptions in section 2 need work before they are read.</div>
+    </div>`;
 }
 
 /* ── 6 · TAX ──────────────────────────────────────────────────────────────────
@@ -5327,10 +5930,18 @@ function stkSummaries() {
                    stkSignal ? `${stkSignal.conv} ${stkSignal.score}/7` : null].filter(Boolean).join(' · '));
   set('sum-val', v ? `${f.$(v.blended_value)} blended${disc!=null?` · ${f.pct(disc,1)} vs price`:''}` : 'not modelled');
   set('sum-px', stkSignal ? `signal ${stkSignal.score}/7` : '');
-  const lf = stkFundRows[0];
-  set('sum-fund', lf ? [lf.nta!=null?`NTA ${f.$(lf.nta)}`:null, lf.wale!=null?`WALE ${Number(lf.wale).toFixed(1)}y`:null,
-                        lf.occupancy!=null?`${f.pct0(lf.occupancy,1)} occ`:null].filter(Boolean).join(' · ')
-                    : 'no pack captured');
+  const A = stkSeries.actuals, lastA = A[A.length-1];
+  set('sum-fund', lastA
+    ? `${A.length} reported year${A.length===1?'':'s'} to ${lastA.label}` +
+      (lastA.ffo_c != null ? ` · FFO ${lastA.ffo_c.toFixed(1)}c` : '') +
+      (lastA.dpu_c != null ? ` · DPU ${lastA.dpu_c.toFixed(1)}c` : '')
+    : 'no reported years');
+  const pr = assetRows.filter(a => !a.is_excluded);
+  const pBook = pr.reduce((s,a) => s + (Number(a.book_value_m)||0), 0);
+  const pInc  = pr.reduce((s,a) => s + (Number(a._inc ?? a.passing_income_m)||0), 0);
+  set('sum-port', pr.length
+    ? `${pr.length} assets · $${Math.round(pBook).toLocaleString()}m · ${pBook?f.pct0(pInc/pBook):'—'} cap`
+    : 'no register');
   const last = rmModel?.years?.[rmModel.years.length-1];
   set('sum-stmt', last ? `${rmModel.years.length}yr forecast · cover ${last.affo_cover!=null?last.affo_cover.toFixed(2)+'x':'—'}` : '');
   const pt = txHolding?.post_tax_yield_on_cost;
@@ -5704,6 +6315,7 @@ async function loadAssets(ticker) {
     price: px?.[0]?.last_price ?? null,
   };
   renderAssets();
+  renderPortfolio(rows || []);
 }
 
 function renderAssets() {

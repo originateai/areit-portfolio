@@ -259,10 +259,57 @@ function drivers(tk) {
     });
 }
 
+/* ── WALK ───────────────────────────────────────────────────────────────────
+ * The same reconciliation the stock page prints: last reported NPI to first
+ * forecast DPU, one line at a time. Run it here to confirm the engine's own
+ * workings carry the line the page reads — a bridge that silently loses a step
+ * still adds up, and looks finished. */
+function walk(tk) {
+  const asm = seedFixed(tk);
+  const m = RM.buildModel(asm, { subclass:'landlord' });
+  if (!m.ok) { console.log(`${tk}: ${m.errors.join('; ')}`); return; }
+  const y = m.years[0], wk = y.workings || {}, secs = asm.securities_m;
+  const prior = wk.noi_grown?.inputs?.prior_npi;
+  const pu = v => v == null || !secs ? '     —' : ((v/secs)*100).toFixed(2).padStart(6) + 'c';
+  const $m = v => v == null ? '      —' : v.toFixed(1).padStart(7);
+  const L = (l, v) => console.log(`  ${l.padEnd(26)}${$m(v)}  ${pu(v)}`);
+
+  console.log(`\n${tk} — last reported NPI to first forecast distribution`);
+  if (prior == null) console.log('  !! workings.noi_grown.inputs.prior_npi MISSING — the page cannot show the base');
+  L('Prior NPI (reported)', prior);
+  L(`LFL growth ${(y.lfl_growth*100).toFixed(2)}%`, prior != null ? y.npi - prior : null);
+  L('= Forecast NPI', y.npi);
+  L('less management fee', y.mgmt_fee_m ? -y.mgmt_fee_m : 0);
+  L('less corporate admin', -y.admin_m);
+  L('= EBIT', y.ebit_m);
+  L('less net finance cost', -y.net_finance_m);
+  L('= FFO', y.ffo_m);
+  L('less distributions', -y.distributions_m);
+  L('= Retained', y.ffo_m - y.distributions_m);
+
+  const v = m.valuation, W = v.weights || {};
+  const valOf = k => k === 'ffo_multiple' ? v.ffo_multiple_value : v[k];
+  console.log('\n  Methods reconciling to the blend:');
+  let sum = 0;
+  Object.keys(W).filter(k => W[k] > 0 && valOf(k) != null).forEach(k => {
+    const c = valOf(k) * W[k]; sum += c;
+    console.log(`    ${k.padEnd(16)} $${valOf(k).toFixed(2).padStart(6)} x ${(W[k]*100).toFixed(0).padStart(3)}%  = $${c.toFixed(3)}`);
+  });
+  console.log(`    ${'blended'.padEnd(16)} ${' '.repeat(9)}${' '.repeat(6)}  = $${sum.toFixed(3)}  (engine says $${v.blended_value.toFixed(3)})`);
+  if (Math.abs(sum - v.blended_value) > 0.005) console.log('    !! contributions do NOT sum to the blended value — the page would show an unreconciled total');
+}
+
 // ── MAIN ────────────────────────────────────────────────────────────────────
 const arg = process.argv[2];
 const only = arg && !arg.startsWith('--') ? arg.toUpperCase() : null;
 const tickers = only ? [only] : ['CIP','DXI','DXC'];
+
+if (process.argv.includes('--walk')) {
+  console.log('\nTHE WALK — reported to forecast, line by line\n' + '='.repeat(70));
+  tickers.forEach(walk);
+  console.log('');
+  process.exit(0);
+}
 
 if (process.argv.includes('--drivers')) {
   console.log('\nDRIVER SENSITIVITY — fair-value swing per one step, model rebuilt each side\n' + '='.repeat(70));
